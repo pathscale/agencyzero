@@ -639,8 +639,12 @@ export function InlineText(props: { id: string; text: string }): JSX.Element {
 /** Splits on `**bold**` and `` `code` `` while keeping the delimiters' order. */
 const ITEM_REFERENCE_SPLIT =
   /(item-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/gi;
+const ITEM_REFERENCE_PREFIX = /item-/i;
 
 function renderItemReferences(text: string, id: string): JSX.Element {
+  // The overwhelming case is ordinary prose. Avoid a regex split, array
+  // filter/map and fragment construction when no item id can be present.
+  if (!ITEM_REFERENCE_PREFIX.test(text)) return text;
   return text
     .split(ITEM_REFERENCE_SPLIT)
     .filter(Boolean)
@@ -663,6 +667,12 @@ function renderItemReferences(text: string, id: string): JSX.Element {
 }
 
 function renderInline(text: string, id: string): JSX.Element[] {
+  // One text node is the correct rendered structure for plain prose. The old
+  // path still built two mapped arrays and nested fragments for it, multiplying
+  // Solid/Blitz clone work across every visible paragraph on every tab mount.
+  if (!text.includes("**") && !text.includes("`") && !ITEM_REFERENCE_PREFIX.test(text)) {
+    return [text];
+  }
   const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
 
   return parts.filter(Boolean).map((part, index) => {

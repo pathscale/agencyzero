@@ -612,6 +612,7 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
         <Show when={!forkInfo()}>
           <ProjectPanelToggle
             id={`project-${props.project.id}-panel-toggle`}
+            controls={`project-${props.project.id}-panel`}
             visible={prefs.projectPanelVisible}
             onToggle={() =>
               setPrefs((d) => {
@@ -629,15 +630,10 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
   );
 }
 
-/**
- * The sidebar handle starts at the conversation boundary and occupies the
- * whole gap on its right. When that sidebar is closed, the conversation grows
- * to the window edge, so an outside-positioned handle would be clipped; the
- * restore control moves inside that edge instead. The arrow points toward the
- * action: right closes the visible sidebar, left restores the hidden one.
- */
+/** A narrow rectangular gutter tab that stays on the conversation boundary. */
 export function ProjectPanelToggle(props: {
   id: string;
+  controls: string;
   visible: boolean;
   onToggle: () => void;
 }): JSX.Element {
@@ -652,16 +648,15 @@ export function ProjectPanelToggle(props: {
   const label = () =>
     props.visible ? tx("Hide the project sidebar") : tx("Show the project sidebar");
   return (
-    <Button
+    <button
       id={props.id}
       type="button"
       onClick={props.onToggle}
-      aria-pressed={props.visible ? "true" : "false"}
+      aria-controls={props.controls}
+      aria-expanded={props.visible ? "true" : "false"}
       aria-label={label()}
       title={label()}
-      class={`absolute top-1/2 z-20 flex h-12 w-6 -translate-y-1/2 items-center justify-center border border-primary/45 bg-az-chip-strong text-primary shadow-sm transition-colors duration-200 hover:border-primary/70 hover:bg-az-hover motion-reduce:transition-none ${
-        props.visible ? "left-full rounded-r-lg border-l-0" : "right-2 rounded-lg"
-      }`}
+      class="absolute top-1/2 left-full z-20 flex h-12 w-2 -translate-y-1/2 items-center justify-center rounded-l-none rounded-r-lg border border-primary/40 border-l-0 bg-primary/20 p-0 text-primary transition-[color,background-color,border-color] duration-200 hover:border-primary/60 hover:bg-primary/30 motion-reduce:transition-none"
     >
       <Icon
         name="chevron-right"
@@ -670,7 +665,7 @@ export function ProjectPanelToggle(props: {
           props.visible ? "rotate-0" : "rotate-180"
         }`}
       />
-    </Button>
+    </button>
   );
 }
 

@@ -154,9 +154,29 @@ export { prefs, setPrefs };
 
 /** Snapshot only durable choices; drafts and staged replies are live owner content. */
 export function portablePrefsSnapshot(): PortableUiPrefs {
-  const snapshot = JSON.parse(JSON.stringify(prefs)) as UiPrefs;
-  const { composerDrafts: _drafts, replyQuestionIds: _replies, ...portable } = snapshot;
-  return portable;
+  return JSON.parse(
+    JSON.stringify({
+      lastModel: prefs.lastModel,
+      lastPermission: prefs.lastPermission,
+      uiSize: prefs.uiSize,
+      colorMode: prefs.colorMode,
+      projectPanelVisible: prefs.projectPanelVisible,
+      itemSortBy: prefs.itemSortBy,
+      itemSortDirection: prefs.itemSortDirection,
+      homeSortBy: prefs.homeSortBy,
+      homeSortDirection: prefs.homeSortDirection,
+      lastExtraThinking: prefs.lastExtraThinking,
+      panelSections: prefs.panelSections,
+      collapsedGroups: prefs.collapsedGroups,
+      advancedComposerKeys: prefs.advancedComposerKeys,
+      expandedComposerKeys: prefs.expandedComposerKeys,
+      taskPlacement: prefs.taskPlacement,
+      seenSections: prefs.seenSections,
+      costWarningsDisabled: prefs.costWarningsDisabled,
+      costWarningSnoozedUntil: prefs.costWarningSnoozedUntil,
+      costWarningDismissals: prefs.costWarningDismissals,
+    } satisfies PortableUiPrefs),
+  ) as PortableUiPrefs;
 }
 
 /**

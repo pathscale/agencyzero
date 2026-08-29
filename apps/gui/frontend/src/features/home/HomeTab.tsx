@@ -214,32 +214,34 @@ export function HomeTab(): JSX.Element {
             onToggle={() => togglePanelSection("pinned")}
             class="flex-none"
           >
-            <div class="flex flex-col gap-2 px-3 pt-3 pb-3">
-              <For each={pinned()}>
-                {(project) => (
-                  <Button
-                    id={`home-pinned-project-${project.id}`}
-                    type="button"
-                    onClick={() => actions.openProject(project.id)}
-                    aria-label={tx("Open project {name}", { name: project.name })}
-                    class="flex items-center gap-2.5 rounded-[11px] border border-primary/22 bg-base-300 px-3 py-2.5 text-left transition-colors hover:border-primary/50"
-                  >
-                    <StatusDot status={tabStatus(project.id)} />
-                    <span class="min-w-0 flex-1 truncate font-semibold text-base-content text-ui-label-lg">
-                      {project.name}
-                    </span>
-                    <span class="shrink-0 text-az-muted text-ui-caption">
-                      {
-                        itemsFor(project.id).filter(
-                          (item) => item.status !== "finished" && item.status !== "canceled",
-                        ).length
-                      }{" "}
-                      {tx("open")}
-                    </span>
-                  </Button>
-                )}
-              </For>
-            </div>
+            {() => (
+              <div class="flex flex-col gap-2 px-3 pt-3 pb-3">
+                <For each={pinned()}>
+                  {(project) => (
+                    <Button
+                      id={`home-pinned-project-${project.id}`}
+                      type="button"
+                      onClick={() => actions.openProject(project.id)}
+                      aria-label={tx("Open project {name}", { name: project.name })}
+                      class="flex items-center gap-2.5 rounded-[11px] border border-primary/22 bg-base-300 px-3 py-2.5 text-left transition-colors hover:border-primary/50"
+                    >
+                      <StatusDot status={tabStatus(project.id)} />
+                      <span class="min-w-0 flex-1 truncate font-semibold text-base-content text-ui-label-lg">
+                        {project.name}
+                      </span>
+                      <span class="shrink-0 text-az-muted text-ui-caption">
+                        {
+                          itemsFor(project.id).filter(
+                            (item) => item.status !== "finished" && item.status !== "canceled",
+                          ).length
+                        }{" "}
+                        {tx("open")}
+                      </span>
+                    </Button>
+                  )}
+                </For>
+              </div>
+            )}
           </SectionPanel>
         </Show>
 
@@ -252,49 +254,57 @@ export function HomeTab(): JSX.Element {
           onToggle={() => togglePanelSection("recent")}
           class={prefs.panelSections.recent ? "flex min-h-0 flex-1 flex-col" : "flex-none"}
         >
-          <div class="az-scroll flex min-h-0 flex-1 flex-col gap-2 px-3 pt-3 pb-3">
-            <For each={visibleRecent()}>
-              {(project) => (
+          {() => (
+            <div class="az-scroll flex min-h-0 flex-1 flex-col gap-2 px-3 pt-3 pb-3">
+              <For each={visibleRecent()}>
+                {(project) => (
+                  <Button
+                    id={`home-recent-project-${project.id}`}
+                    type="button"
+                    onClick={() => actions.openProject(project.id)}
+                    aria-label={tx("Open recent project {name}", { name: project.name })}
+                    class="flex items-center gap-3 rounded-[11px] border border-az-hairline bg-base-300 px-3 py-2.5 text-left transition-colors hover:border-primary/40"
+                  >
+                    <Icon name="folder-git-2" class="shrink-0 text-primary text-ui-lead" />
+                    <div class="flex min-w-0 flex-1 flex-col gap-0.5">
+                      <span class="truncate font-semibold text-base-content text-ui-label-lg">
+                        {project.name}
+                      </span>
+                      <span class="truncate font-mono text-az-muted text-ui-caption">
+                        {project.dirs[0] ?? tx("no working directory")}
+                      </span>
+                    </div>
+                    <span class="ml-auto shrink-0 text-az-faint text-ui-caption">
+                      {state.running[project.id]?.length
+                        ? tx("running now")
+                        : relativeTime(project.lastActivityAt)}
+                    </span>
+                  </Button>
+                )}
+              </For>
+              <Show when={recentGrid.hasMore()}>
                 <Button
-                  id={`home-recent-project-${project.id}`}
+                  id="home-recent-more"
                   type="button"
-                  onClick={() => actions.openProject(project.id)}
-                  aria-label={tx("Open recent project {name}", { name: project.name })}
-                  class="flex items-center gap-3 rounded-[11px] border border-az-hairline bg-base-300 px-3 py-2.5 text-left transition-colors hover:border-primary/40"
+                  onClick={recentGrid.revealMore}
+                  aria-label={tx("Show {count} more recent projects", {
+                    count: Math.min(
+                      HOME_RECENT_PAGE_SIZE,
+                      recent().length - visibleRecent().length,
+                    ),
+                  })}
+                  class="rounded-[11px] border border-primary/24 bg-az-chip px-3 py-2 font-semibold text-primary text-ui-detail transition-colors hover:bg-az-chip"
                 >
-                  <Icon name="folder-git-2" class="shrink-0 text-primary text-ui-lead" />
-                  <div class="flex min-w-0 flex-1 flex-col gap-0.5">
-                    <span class="truncate font-semibold text-base-content text-ui-label-lg">
-                      {project.name}
-                    </span>
-                    <span class="truncate font-mono text-az-muted text-ui-caption">
-                      {project.dirs[0] ?? tx("no working directory")}
-                    </span>
-                  </div>
-                  <span class="ml-auto shrink-0 text-az-faint text-ui-caption">
-                    {state.running[project.id]?.length
-                      ? tx("running now")
-                      : relativeTime(project.lastActivityAt)}
-                  </span>
+                  {tx("Show {count} more projects", {
+                    count: Math.min(
+                      HOME_RECENT_PAGE_SIZE,
+                      recent().length - visibleRecent().length,
+                    ),
+                  })}
                 </Button>
-              )}
-            </For>
-            <Show when={recentGrid.hasMore()}>
-              <Button
-                id="home-recent-more"
-                type="button"
-                onClick={recentGrid.revealMore}
-                aria-label={tx("Show {count} more recent projects", {
-                  count: Math.min(HOME_RECENT_PAGE_SIZE, recent().length - visibleRecent().length),
-                })}
-                class="rounded-[11px] border border-primary/24 bg-az-chip px-3 py-2 font-semibold text-primary text-ui-detail transition-colors hover:bg-az-chip"
-              >
-                {tx("Show {count} more projects", {
-                  count: Math.min(HOME_RECENT_PAGE_SIZE, recent().length - visibleRecent().length),
-                })}
-              </Button>
-            </Show>
-          </div>
+              </Show>
+            </div>
+          )}
         </SectionPanel>
 
         {/*
@@ -315,7 +325,7 @@ export function HomeTab(): JSX.Element {
               prefs.panelSections.homeIo ? "flex max-h-[300px] flex-none flex-col" : "flex-none"
             }
           >
-            <AgentIoList projectId={TASK_MANAGER_ID} />
+            {() => <AgentIoList projectId={TASK_MANAGER_ID} />}
           </SectionPanel>
         </Show>
       </div>

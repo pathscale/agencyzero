@@ -4,6 +4,33 @@
 // status group, independent of whichever status existing fixture rows carry.
 [
     (
+        id: "items-default-page",
+        group: "items",
+        what: "the item list opens with twelve rows rather than a tiny manual page",
+        open: Some("theta theta north indi"),
+        prepare: Some("Collapse Items"),
+        prepare_unless: Some("Expand Items"),
+        hover: None,
+        click: Some("Expand Items"),
+        subject: "listitem:",
+        expect_count: Some(12),
+        outcome_timeout_ms: 2000,
+        expect: Count,
+    ),
+    (
+        id: "items-scroll-expands",
+        group: "items",
+        what: "scrolling near the item-list edge automatically mounts the next page",
+        open: Some("theta theta north indi"),
+        hover: None,
+        click: None,
+        scroll_over: Some("kappa eta north cobalt epsilon north delta east eta zeta beta"),
+        scroll_ticks: 4,
+        scroll_delta: -300.0,
+        subject: "listitem:",
+        expect: Grows,
+    ),
+    (
         id: "items-description-enables-save",
         group: "items",
         what: "editing an item description enables its Save action",

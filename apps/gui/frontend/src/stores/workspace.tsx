@@ -47,6 +47,7 @@ import type {
   PricingTable,
   Project,
   ProjectItem,
+  ProjectPanelData,
   ProjectStatus,
   PullRequest,
   Question,
@@ -137,6 +138,8 @@ export function shortModelName(name: string): string {
 
 type WorkspaceState = {
   projects: Project[];
+  /** Low-churn project-panel state, loaded once per project and shared by its controls. */
+  projectPanelData: Record<string, ProjectPanelData | undefined>;
   items: Record<string, ProjectItem[]>;
   /** Latest chat item-link request; ProjectPanel consumes it after mounting. */
   itemReveal: { id: string; revision: number } | null;
@@ -451,6 +454,7 @@ function compatiblePermission(
 export function createWorkspace() {
   const [state, setState] = createStore<WorkspaceState>({
     projects: [],
+    projectPanelData: {},
     items: {},
     itemReveal: null,
     messages: {},
@@ -578,6 +582,7 @@ export function createWorkspace() {
   let isHydrating = true;
   const hydratedProjects = new Set<string>();
   const projectLoads = new Map<string, Promise<void>>();
+  const projectPanelLoads = new Map<string, Promise<ProjectPanelData>>();
 
   function drainEventBuffer(): void {
     isHydrating = false;
@@ -616,6 +621,42 @@ export function createWorkspace() {
    * owner triggers keeps `client()` and its error.
    */
   const clientIfReady = (): AgencyZeroApi | null => api();
+
+  /**
+   * The one load boundary for the project side panel.
+   *
+   * A cached snapshot paints synchronously when a project is revisited. A
+   * first read and an explicit refresh are single-flight, so rapid tab changes
+   * cannot queue duplicate work for the same project.
+   */
+  function loadProjectPanelData(projectId: string, refresh = false): Promise<ProjectPanelData> {
+    const pending = projectPanelLoads.get(projectId);
+    if (pending) return pending;
+    const cached = state.projectPanelData[projectId];
+    if (cached && !refresh) return Promise.resolve(cached);
+
+    const request = client()
+      .getProjectPanelData(projectId)
+      .then((data) => {
+        setState((d) => {
+          d.projectPanelData[projectId] = data;
+        });
+        return data;
+      })
+      .finally(() => {
+        if (projectPanelLoads.get(projectId) === request) projectPanelLoads.delete(projectId);
+      });
+    projectPanelLoads.set(projectId, request);
+    return request;
+  }
+
+  /** Keep a loaded project snapshot coherent after one of its controls writes. */
+  function patchProjectPanelData(projectId: string, patch: Partial<ProjectPanelData>): void {
+    if (!state.projectPanelData[projectId]) return;
+    setState((d) => {
+      Object.assign(d.projectPanelData[projectId]!, patch);
+    });
+  }
 
   /** Refuse locally before creating a project or handing a prompt to IPC. */
   async function requireReadyAgent(agent: Agent): Promise<void> {
@@ -773,7 +814,15 @@ export function createWorkspace() {
     if (!state.settings) return;
     const workspaceTabs = portableWorkspaceTabs();
     if (sameWorkspaceTabs(state.settings.workspaceTabs, workspaceTabs)) return;
-    await saveSettings({ workspaceTabs });
+    const request = settingsWriteTail.then(() => client().setSettings({ workspaceTabs }));
+    settingsWriteTail = request.then(
+      () => undefined,
+      () => undefined,
+    );
+    const next = await request;
+    setState((d) => {
+      if (d.settings) d.settings.workspaceTabs = next.workspaceTabs ?? workspaceTabs;
+    });
   }
 
   /*
@@ -804,10 +853,10 @@ export function createWorkspace() {
       workspaceTabsWriteTimer = setTimeout(() => {
         workspaceTabsWriteTimer = undefined;
         const workspaceTabs = portableWorkspaceTabs();
-        // Legacy webview preferences and durable settings are persistence, not
-        // selection state. Rewriting them in the active-key reaction made
-        // every preference consumer participate in the click's microtask
-        // flush before the newly selected pane could paint.
+        // Keep the legacy fallback in memory for settings rows written before
+        // `workspaceTabs` existed. Only `workspaceTabs` is persisted now;
+        // serialising these fields into uiPreferences as well issued a second
+        // settings write for every tab change.
         setPrefs((d) => {
           d.openTabKeys = workspaceTabs.openProjectKeys;
           d.lastTabKey = workspaceTabs.activeProjectKey;
@@ -1290,28 +1339,6 @@ export function createWorkspace() {
       });
     projectLoads.set(projectId, load);
     return load;
-  }
-
-  /** Project-backed surfaces immediately beside one tab in strip order. */
-  function neighboringProjectIds(key: string, tabs: readonly Tab[] = state.tabs): string[] {
-    const index = tabs.findIndex((tab) => tab.key === key);
-    if (index < 0) return [];
-    const ids = [tabs[index - 1], tabs[index + 1]]
-      .flatMap((tab) => {
-        if (!tab) return [];
-        if (tab.key === "home") return [TASK_MANAGER_ID];
-        return tab.projectId ? [tab.projectId] : [];
-      })
-      .filter((projectId, at, all) => all.indexOf(projectId) === at);
-    return ids;
-  }
-
-  /** Warm only likely next switches; distant restored tabs remain cold. */
-  function warmNeighbors(key: string): Promise<void> {
-    const neighbors = neighboringProjectIds(key);
-    if (neighbors.length === 0) return Promise.resolve();
-    log.debug(`warming ${neighbors.length} tab neighbor(s) around ${key}`);
-    return Promise.all(neighbors.map(loadProject)).then(() => undefined);
   }
 
   /**
@@ -2110,6 +2137,12 @@ export function createWorkspace() {
         const status = d.runStatus;
         delete status[projectId];
       });
+      // Compaction may have replaced the notes shown in the side panel.
+      if (state.projectPanelData[projectId]) {
+        void loadProjectPanelData(projectId, true).catch((cause) =>
+          log.warn(`could not refresh project panel after compaction: ${describeError(cause)}`),
+        );
+      }
 
       // Same cue as `run:stopped`, and the same beat of delay: the slot is
       // released as this run unwinds, a moment after the event goes out.
@@ -2309,12 +2342,15 @@ export function createWorkspace() {
     const projectId =
       key === "home" ? TASK_MANAGER_ID : state.tabs.find((tab) => tab.key === key)?.projectId;
     if (projectId) {
-      void loadProject(projectId)
-        .then(afterRenderedFrame)
-        .then(() => warmNeighbors(key))
-        .catch((cause) =>
-          log.error(`could not load focused project ${projectId}: ${describeError(cause)}`),
-        );
+      const startLoad = () => loadProject(projectId).then(afterRenderedFrame);
+      // Home's task-manager transcript is diagnostic content below its primary
+      // project list. On the first Home visit it used to launch seven IPC reads
+      // inside the tab click and compete with the page's feedback frame.
+      const load =
+        projectId === TASK_MANAGER_ID ? afterRenderedFrame().then(startLoad) : startLoad();
+      void load.catch((cause) =>
+        log.error(`could not load focused project ${projectId}: ${describeError(cause)}`),
+      );
     }
     /*
      * A tab switch is one signal write, so everything it costs happens after
@@ -3208,6 +3244,7 @@ export function createWorkspace() {
     moveTab,
     commitTabOrder,
     openProject,
+    loadProjectPanelData,
     revealItem,
     loadOlderMessages,
     loadOlderTaskLog,
@@ -3233,9 +3270,11 @@ export function createWorkspace() {
     },
     deleteProject: (id: string) => client().deleteProject(id),
     renameProject: (id: string, name: string) => client().renameProject(id, name),
-    getIoPersist: (projectId: string) => client().getIoPersist(projectId),
-    setIoPersist: (projectId: string, enabled: boolean) =>
-      client().setIoPersist(projectId, enabled),
+    async setIoPersist(projectId: string, enabled: boolean) {
+      const kept = await client().setIoPersist(projectId, enabled);
+      patchProjectPanelData(projectId, { ioPersist: kept });
+      return kept;
+    },
     refreshQuota,
     refreshClaudeUsage,
     purgeProject,
@@ -3397,10 +3436,21 @@ export function createWorkspace() {
     },
     resolveModeration: (messageId: string, approve: boolean) =>
       client().resolveModeration(messageId, approve),
-    resolveApproval: (projectId: string, approvalId: string, allow: boolean, remember?: boolean) =>
-      client().resolveApproval(projectId, approvalId, allow, remember),
-    listApprovalRules: (projectId: string) => client().listApprovalRules(projectId),
-    clearApprovalRules: (projectId: string) => client().clearApprovalRules(projectId),
+    async resolveApproval(
+      projectId: string,
+      approvalId: string,
+      allow: boolean,
+      remember?: boolean,
+    ) {
+      await client().resolveApproval(projectId, approvalId, allow, remember);
+      if (allow && remember && state.projectPanelData[projectId]) {
+        await loadProjectPanelData(projectId, true);
+      }
+    },
+    async clearApprovalRules(projectId: string) {
+      await client().clearApprovalRules(projectId);
+      patchProjectPanelData(projectId, { approvalRules: [] });
+    },
     getCostSummary: () => client().getCostSummary(),
     getUsageAnalytics: () => client().getUsageAnalytics(),
     discoverChatImports: () => client().discoverChatImports(),
@@ -3454,15 +3504,24 @@ export function createWorkspace() {
      * asks for them. Keeping a copy in state would mean another thing to
      * invalidate for no reader.
      */
-    getCheckpoints: (projectId: string) => client().getCheckpoints(projectId),
-    setCheckpoints: (projectId: string, enabled: boolean) =>
-      client().setCheckpoints(projectId, enabled),
-    getProjectConcise: (projectId: string) => client().getProjectConcise(projectId),
-    setProjectConcise: (projectId: string, enabled: string) =>
-      client().setProjectConcise(projectId, enabled),
-    getProjectVerbosity: (projectId: string) => client().getProjectVerbosity(projectId),
-    setProjectVerbosity: (projectId: string, verbosity: string) =>
-      client().setProjectVerbosity(projectId, verbosity),
+    async setCheckpoints(projectId: string, enabled: boolean) {
+      const kept = await client().setCheckpoints(projectId, enabled);
+      patchProjectPanelData(projectId, { checkpoints: kept });
+      return kept;
+    },
+    async setProjectConcise(projectId: string, enabled: string) {
+      const kept = await client().setProjectConcise(projectId, enabled);
+      patchProjectPanelData(projectId, {
+        responseVerbosity: kept as ProjectPanelData["responseVerbosity"],
+      });
+      return kept;
+    },
+    async setProjectVerbosity(projectId: string, verbosity: string) {
+      await client().setProjectVerbosity(projectId, verbosity);
+      patchProjectPanelData(projectId, {
+        contextDetail: verbosity as ProjectPanelData["contextDetail"],
+      });
+    },
     resetProjectSession: (projectId: string, agent: string, force?: boolean) =>
       client().resetProjectSession(projectId, agent, force),
     adoptSession: async (projectId: string, agent: Agent, sessionId: string): Promise<void> => {
@@ -3482,9 +3541,11 @@ export function createWorkspace() {
         throw cause;
       }
     },
-    getProjectNotes: (projectId: string) => client().getProjectNotes(projectId),
-    setProjectNotes: (projectId: string, notes: string) =>
-      client().setProjectNotes(projectId, notes),
+    async setProjectNotes(projectId: string, notes: string) {
+      const kept = await client().setProjectNotes(projectId, notes);
+      patchProjectPanelData(projectId, { notes: kept });
+      return kept;
+    },
     async clearTaskLog(projectId: string) {
       await client().clearTaskLog(projectId);
       setState((d) => {

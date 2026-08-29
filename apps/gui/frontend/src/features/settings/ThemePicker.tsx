@@ -220,7 +220,7 @@ export function ThemePicker(props: {
             aria-label={t("appearance.resetButton")}
             disabled={props.isDefault}
             onClick={props.onReset}
-            class="rounded-lg border border-az-hairline-strong px-2.5 py-1 text-az-muted text-ui-caption transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
+            class="rounded-lg border border-az-hairline-strong px-2.5 py-1 text-az-body text-ui-caption transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
           >
             {t("appearance.resetButton")}
           </Button>

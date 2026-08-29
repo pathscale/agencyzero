@@ -116,6 +116,8 @@ describe("workspace layout", () => {
     expect(snapshot.expandedComposerKeys).toEqual(["project:abc"]);
     expect(snapshot).not.toHaveProperty("composerDrafts");
     expect(snapshot).not.toHaveProperty("replyQuestionIds");
+    expect(snapshot).not.toHaveProperty("lastTabKey");
+    expect(snapshot).not.toHaveProperty("openTabKeys");
 
     preparePortablePrefsRestore();
     restorePortablePrefs({ uiSize: "normal", expandedComposerKeys: [] }, "backup-1");

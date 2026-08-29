@@ -20,6 +20,7 @@ import type {
   PricingTable,
   Project,
   ProjectItem,
+  ProjectPanelData,
   ProjectStatus,
   PullRequest,
   Question,
@@ -280,6 +281,9 @@ export interface AgencyZeroApi {
    * short to summarise is the common one, and is an answer rather than a fault.
    */
   compactProject(projectId: string, agent: Agent): Promise<void>;
+
+  /** One cached-load boundary for every low-churn project-panel control. */
+  getProjectPanelData(projectId: string): Promise<ProjectPanelData>;
 
   /**
    * What this project's agent keeps across compactions.

@@ -96,6 +96,7 @@ const COMMAND_FOR: Record<CommandMethod, string> = {
   createWorkspaceRoot: "create_workspace_root",
   cancelRun: "cancel_run",
   compactProject: "compact_project",
+  getProjectPanelData: "get_project_panel_data",
   getCheckpoints: "get_checkpoints",
   setCheckpoints: "set_checkpoints",
   getProjectConcise: "get_project_concise",
