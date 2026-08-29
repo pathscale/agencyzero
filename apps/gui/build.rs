@@ -203,13 +203,7 @@ fn write_resolved_manifest() {
     // as its source, which is the thing that must never ship unnoticed.
     let tree = std::process::Command::new("cargo")
         .args([
-            "tree",
-            "--locked",
-            "--edges",
-            "normal",
-            "--prefix",
-            "none",
-            "--quiet",
+            "tree", "--locked", "--edges", "normal", "--prefix", "none", "--quiet",
         ])
         .output()
         .ok()
