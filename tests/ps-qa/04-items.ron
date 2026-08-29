@@ -12,7 +12,7 @@
         prepare_unless: Some("Expand Items"),
         hover: None,
         click: Some("Expand Items"),
-        subject: "listitem:",
+        subject: "@project-item",
         expect_count: Some(12),
         outcome_timeout_ms: 2000,
         expect: Count,
@@ -27,7 +27,7 @@
         scroll_over: Some("kappa eta north cobalt epsilon north delta east eta zeta beta"),
         scroll_ticks: 4,
         scroll_delta: -300.0,
-        subject: "listitem:",
+        subject: "@project-item",
         expect: Grows,
     ),
     (

@@ -54,7 +54,7 @@
         // Keep the row hovered so the check drives the same control a person
         // can actually see. Expanding first replaces the hovered affordance
         // and needlessly races the per-entry copy action against that remount.
-        hover: Some("Show the whole command"),
+        hover: Some("@task-log-entry"),
         click: Some("Copy this task-log entry"),
         subject: "Copied task-log entry",
         expect: Paints,

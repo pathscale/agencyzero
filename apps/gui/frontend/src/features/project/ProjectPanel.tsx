@@ -1477,6 +1477,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
               <div class="rounded-[9px]">
                 {/* biome-ignore lint/a11y/useSemanticElements: this expandable composite row owns sibling editors, so native li nesting would be invalid */}
                 <div
+                  data-slot="project-item"
                   data-item-id={item.id}
                   role="listitem"
                   aria-label={item.title}
@@ -2260,6 +2261,7 @@ function TaskLogList(props: { projectId: string }): JSX.Element {
              * said so.
              */
             <li
+              data-slot="task-log-entry"
               aria-label={entry.label}
               tabindex={-1}
               onPointerEnter={() => setActiveEntryId(entry.id)}

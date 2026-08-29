@@ -1047,6 +1047,12 @@ export function SettingsTab(): JSX.Element {
             icon="list-checks"
             title={tx("Task Manager")}
             hint={tx("the Home conversation that keeps the lists in order")}
+            searchTerms={[
+              tx("Task manager agent"),
+              tx("Task manager model"),
+              tx("Task manager effort"),
+              tx("Task manager permission"),
+            ]}
           >
             <Row label={tx("Agent")}>
               <PillMenu<Agent>
@@ -2134,6 +2140,12 @@ function StudySettings(): JSX.Element {
       icon="gauge"
       title={tx("Research")}
       hint={tx("local, opt-in PromptSyntax deployment study")}
+      searchTerms={[
+        tx("PS deployment study"),
+        tx("Stored events"),
+        tx("Export JSONL"),
+        tx("Delete data"),
+      ]}
       pending={available() ? undefined : tx("needs the study event backend")}
     >
       <div class="border-az-hairline-soft border-b px-3.5 py-3 text-az-muted text-ui-detail leading-[1.55]">
