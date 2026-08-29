@@ -523,7 +523,7 @@ function HeadlineRow(props: {
                 footnote that can only be read by hovering is not a footnote.
               */}
               <Show when={tile.detail}>
-                <div class="mt-0.5 text-[9px] text-az-faint leading-[1.35]" title={tile.detail}>
+                <div class="mt-0.5 text-[10px] text-az-body leading-[1.4]" title={tile.detail}>
                   {tile.detail}
                 </div>
               </Show>

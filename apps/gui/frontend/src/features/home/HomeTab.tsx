@@ -1365,7 +1365,7 @@ function ProjectGroup(props: {
           onClick={() => void actions.setProjectPinned(props.project.id, !props.project.pinned)}
           aria-pressed={props.project.pinned ? "true" : "false"}
           aria-label={props.project.pinned ? tx("Unpin project") : tx("Pin project")}
-          class={`shrink-0 transition-colors ${props.project.pinned ? "text-primary" : "text-az-ghost hover:text-az-strong"}`}
+          class={`shrink-0 transition-colors ${props.project.pinned ? "text-primary" : "text-az-muted hover:text-az-strong"}`}
         >
           <Icon name="pin" class="text-[14px]" />
         </Button>
@@ -1384,7 +1384,7 @@ function ProjectGroup(props: {
               type="button"
               onClick={() => setConfirming(true)}
               aria-label={tx("Delete project {name}", { name: props.project.name })}
-              class="shrink-0 text-az-ghost transition-colors hover:text-error"
+              class="shrink-0 text-az-muted transition-colors hover:text-error"
             >
               <Icon name="x" class="text-[14px]" />
             </Button>
@@ -1425,7 +1425,7 @@ function ProjectGroup(props: {
           aria-label={tx(collapsed() ? "Expand project {name}" : "Collapse project {name}", {
             name: props.project.name,
           })}
-          class="shrink-0 text-az-dim transition-colors hover:text-az-body"
+          class="shrink-0 text-az-muted transition-colors hover:text-az-body"
         >
           <Icon name={collapsed() ? "chevron-right" : "chevron-down"} class="text-[14px]" />
         </Button>

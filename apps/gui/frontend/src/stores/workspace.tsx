@@ -1066,6 +1066,12 @@ export function createWorkspace() {
       timed("items", backend.listItems(projectId)),
       timed("messages", backend.listMessages(projectId, MESSAGE_PAGE)),
     ]);
+    if (!state.projects.some((project) => project.id === projectId)) {
+      // The secondary reads were already started. Observe their rejection, but
+      // never let a deleted project's late snapshot rebuild purged records.
+      await secondary.catch(() => undefined);
+      return;
+    }
     const fetched = performance.now();
     const messages = messagePage.messages;
     const project = state.projects.find((candidate) => candidate.id === projectId);
@@ -1087,6 +1093,7 @@ export function createWorkspace() {
     // The transcript and header are in the store now, so the frame below is
     // free to go out. Everything from here fills panels rather than the pane.
     const [running, taskLog, io, prs, questions] = await secondary;
+    if (!state.projects.some((project) => project.id === projectId)) return;
     setState((d) => {
       d.running[projectId] ??= [];
       reconcile(running)(d.running[projectId]);
@@ -1191,6 +1198,7 @@ export function createWorkspace() {
         fullyLoaded.delete(projectId);
         throw cause;
       });
+    if (!state.projects.some((project) => project.id === projectId)) return;
     setState((d) => {
       d.messages[projectId] ??= [];
       reconcile(page.messages)(d.messages[projectId]);
@@ -1224,6 +1232,7 @@ export function createWorkspace() {
     taskLogPaging.add(projectId);
     try {
       const page = await client().listTaskLog(projectId, TASK_LOG_PAGE, before);
+      if (!state.projects.some((project) => project.id === projectId)) return;
       if (page.entries.length === 0) return;
       setState((d) => {
         const current = d.taskLog[projectId] ?? [];
@@ -1252,7 +1261,9 @@ export function createWorkspace() {
 
     const load = fetchProject(projectId)
       .then(() => {
-        hydratedProjects.add(projectId);
+        if (state.projects.some((project) => project.id === projectId)) {
+          hydratedProjects.add(projectId);
+        }
       })
       .finally(() => {
         projectLoads.delete(projectId);
@@ -2517,6 +2528,13 @@ export function createWorkspace() {
    * the delete.
    */
   function purgeProject(projectId: string): void {
+    // Non-reactive load ownership is project state too. These sets used to keep
+    // every deleted id for the life of the window, and an in-flight load could
+    // write the deleted project's arrays back after the reactive purge below.
+    hydratedProjects.delete(projectId);
+    fullyLoaded.delete(projectId);
+    taskLogPaging.delete(projectId);
+    projectLoads.delete(projectId);
     setState((d) => {
       d.projects = ((projects) => projects.filter((project) => project.id !== projectId))(
         d.projects,

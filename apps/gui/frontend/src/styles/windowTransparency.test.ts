@@ -28,7 +28,13 @@ import { describe, expect, it } from "vitest";
 // fails the production type check.
 const SRC = join(process.cwd(), "src");
 const THEME_CSS = readFileSync(join(SRC, "styles/theme.css"), "utf8");
-const TAURI_CONF = readFileSync(join(process.cwd(), "..", "tauri.conf.json"), "utf8");
+const GUI = join(process.cwd(), "..");
+const WINDOW_CONFIGS = [
+  "tauri.conf.json",
+  "tauri.experimental.conf.json",
+  "tauri.dev.conf.json",
+  "tauri.blitz.conf.json",
+] as const;
 
 /** The declaration block for one selector, as written in the stylesheet. */
 function ruleFor(selector: string): string {
@@ -43,10 +49,17 @@ describe("the window can be seen through", () => {
    * the webview, so the page cannot be transparent however it is styled. This
    * is the one that made every CSS fix look like it had failed.
    */
-  it("does not give the native window an opaque background colour", () => {
-    const window = JSON.parse(TAURI_CONF).app.windows[0];
+  it.each(WINDOW_CONFIGS)("keeps %s compatible with the transparent base window", (file) => {
+    const window = JSON.parse(readFileSync(join(GUI, file), "utf8")).app.windows[0];
     expect(window.backgroundColor).toBeUndefined();
-    expect(window.transparent).toBe(true);
+    if (file === "tauri.conf.json") {
+      expect(window.transparent).toBe(true);
+    } else {
+      // Variant configs merge over the base. An explicit false here silently
+      // turns only that profile opaque while the frontend still attaches the
+      // native glass backdrop, which washes a dark theme white at opacity 0.
+      expect(window.transparent).not.toBe(false);
+    }
   });
 
   /*

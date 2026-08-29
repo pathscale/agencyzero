@@ -987,14 +987,9 @@ export function windowChrome(
     : DEFAULT_GLASS_OPACITY;
   const tintAlpha = Math.round((Math.min(Math.max(filmOpacity, 0), 100) / 100) * 255);
   /*
-   * Off unless the window is actually glass, and it is not: the transparent
-   * flag was removed from the window config, so there is nothing behind the
-   * page to show through.
-   *
-   * Enabling it anyway put a tinted `NSGlassEffectView` over an opaque window
-   * and washed the entire app out — every surface flattened under one colour.
-   * The tint is still computed, so the frame is ready the moment glass is real;
-   * it just is not attached to an opaque window.
+   * Every shipped profile inherits the transparent base window. Attaching this
+   * view to an opaque profile washes a dark theme white at opacity zero, so the
+   * config-stack test guards the native precondition alongside this calculation.
    */
   if (!rgb || !WINDOW_GLASS_ENABLED) return { enabled: false };
   return {

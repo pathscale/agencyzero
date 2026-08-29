@@ -996,7 +996,8 @@ struct WorkspaceRoot {
     is_default: bool,
 }
 
-/// Resolve the workspace root: the stored value, else `$HOME/AgencyZero`.
+/// Resolve the workspace root: the stored value, an explicit disposable QA
+/// override, or `$HOME/AgencyZero`.
 fn resolve_workspace_root(app: &AppHandle, state: &AppState) -> WorkspaceRoot {
     let stored = state
         .tables
@@ -1005,11 +1006,18 @@ fn resolve_workspace_root(app: &AppHandle, state: &AppState) -> WorkspaceRoot {
         .map(|settings| settings.workspace_root)
         .unwrap_or_default();
 
-    let (path, is_default) = if stored.trim().is_empty() {
+    let qa_root = std::env::var_os("AZ_QA_WORKSPACE_ROOT")
+        .filter(|value| !value.is_empty())
+        .map(std::path::PathBuf::from);
+    let (path, is_default) = if !stored.trim().is_empty() {
+        (std::path::PathBuf::from(&stored), false)
+    } else if let Some(path) = qa_root {
+        // Native QA must never discover or create the owner's real default
+        // workspace while it drives the setup dialog.
+        (path, true)
+    } else {
         let home = app.path().home_dir().unwrap_or_else(|_| ".".into());
         (home.join("AgencyZero"), true)
-    } else {
-        (std::path::PathBuf::from(&stored), false)
     };
 
     WorkspaceRoot {
@@ -2121,6 +2129,20 @@ fn migrate_forward(location: &mut location::DataLocation, found: &str) -> Result
 }
 
 fn main() {
+    // This binary has two diagnostic flags and otherwise launches a GUI. Handle
+    // the conventional read-only CLI exits before Tauri setup opens the store or
+    // starts AgencyProxy; `az-gui --help` previously launched a six-hour hidden
+    // app and daemon because the unknown argument was simply ignored.
+    if std::env::args().any(|arg| matches!(arg.as_str(), "-h" | "--help")) {
+        println!(
+            "AgencyZero GUI\n\nUsage: az-gui [--blitz-control] [--blitz-deep-profiling]\n\n  --blitz-control          enable local inspection and agent control\n  --blitz-deep-profiling   enable intrusive renderer profiling"
+        );
+        return;
+    }
+    if std::env::args().any(|arg| matches!(arg.as_str(), "-V" | "--version")) {
+        println!("AgencyZero {}", env!("CARGO_PKG_VERSION"));
+        return;
+    }
     /*
      * Building the QA profile takes over the process, like the restart angel
      * above: it needs this crate's private `db` module and its real schema, and
@@ -2723,14 +2745,25 @@ fn main() {
                     "boot",
                     "{which} received; draining the tables and exiting"
                 );
-                if let Some(state) = signal_handle.try_state::<AppState>()
-                    && let Err(error) = state.drain_tables_once().await
-                {
-                    crate::log!(
-                        log::Level::Error,
-                        "boot",
-                        "{which} drain reported a persistence failure: {error}"
-                    );
+                if let Some(state) = signal_handle.try_state::<AppState>() {
+                    // A Unix signal is process supervision, not the ordinary
+                    // owner choice to leave a daemon carrying live runs across a
+                    // GUI restart. Terminate the child here so disposable QA and
+                    // dev processes cannot orphan one daemon per invocation.
+                    if let Err(error) = state.proxy.terminate().await {
+                        crate::log!(
+                            log::Level::Warn,
+                            "proxy",
+                            "{which} could not terminate AgencyProxy: {error}"
+                        );
+                    }
+                    if let Err(error) = state.drain_tables_once().await {
+                        crate::log!(
+                            log::Level::Error,
+                            "boot",
+                            "{which} drain reported a persistence failure: {error}"
+                        );
+                    }
                 }
                 signal_handle.exit(0);
             });
