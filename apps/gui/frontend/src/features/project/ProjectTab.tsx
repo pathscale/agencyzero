@@ -648,7 +648,7 @@ export function ProjectPanelToggle(props: {
   const label = () =>
     props.visible ? tx("Hide the project sidebar") : tx("Show the project sidebar");
   return (
-    <button
+    <Button
       id={props.id}
       type="button"
       onClick={props.onToggle}
@@ -656,7 +656,7 @@ export function ProjectPanelToggle(props: {
       aria-expanded={props.visible ? "true" : "false"}
       aria-label={label()}
       title={label()}
-      class="absolute top-1/2 left-full z-20 flex h-12 w-2 -translate-y-1/2 items-center justify-center rounded-l-none rounded-r-lg border border-primary/40 border-l-0 bg-primary/20 p-0 text-primary transition-[color,background-color,border-color] duration-200 hover:border-primary/60 hover:bg-primary/30 motion-reduce:transition-none"
+      class="absolute top-1/2 left-full z-20 flex h-12 w-2 -translate-y-1/2 items-center justify-center rounded-r-lg rounded-l-none border border-primary/40 border-l-0 bg-primary/20 p-0 text-primary transition-[color,background-color,border-color] duration-200 hover:border-primary/60 hover:bg-primary/30 motion-reduce:transition-none"
     >
       <Icon
         name="chevron-right"
@@ -665,7 +665,7 @@ export function ProjectPanelToggle(props: {
           props.visible ? "rotate-0" : "rotate-180"
         }`}
       />
-    </button>
+    </Button>
   );
 }
 
