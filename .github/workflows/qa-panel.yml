@@ -21,6 +21,7 @@ on:
       - 'apps/gui/frontend/src/**'
       - 'ps-qa.ron'
       - 'scripts/qa-profile-restore.sh'
+      - 'scripts/qa-memory-navigation.sh'
       - 'scripts/qa-run-groups.sh'
       - 'tests/ps-qa/**'
   workflow_dispatch:
@@ -72,7 +73,7 @@ jobs:
       # harness release.
       - name: Install ps-qa
         # Compatible 0.4 releases preserve the reviewed QA profile contract.
-        run: cargo install ps-qa --version '^0.4.14'
+        run: cargo install ps-qa --version '^0.4.15'
 
       - name: Validate the QA profile and outcome manifest
         run: ps-qa --app ps-qa.ron list --checks tests/ps-qa
@@ -120,6 +121,7 @@ jobs:
         run: |
           launch_app() {
             HOME=/tmp/qa-home AZ_DATA_DIR=/tmp/qa-profile-db \
+              AZ_QA_WORKSPACE_ROOT=/tmp/qa-profile-db-workspace \
               ./target/release/az-gui --blitz-control > /tmp/az-qa.log 2>&1 &
             echo $! > /tmp/az-qa.pid
           }
@@ -217,7 +219,7 @@ jobs:
         timeout-minutes: 3
         run: |
           set -o pipefail
-          ps-qa inventory 2>&1 | tee /tmp/cover.txt
+          ps-qa inventory --require-outcomes 2>&1 | tee /tmp/cover.txt
           components="$(awk '/^components:/ { print $2; exit }' /tmp/cover.txt)"
           unverified="$(awk '/^unverified:/ { print $2; exit }' /tmp/cover.txt)"
           isolated="$(awk '/^isolated:/ { print $2; exit }' /tmp/cover.txt)"
@@ -237,6 +239,11 @@ jobs:
           # duplicate instances of the same row component.
           ps-qa reconcile /tmp/cover.txt --checks tests/ps-qa \
             2>&1 | tee /tmp/sweep.txt
+
+      - name: Verify native navigation memory plateaus
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.group == '' && inputs.suite == 'exhaustive' && steps.full.outcome == 'success' }}
+        timeout-minutes: 2
+        run: scripts/qa-memory-navigation.sh
 
       - name: Verify the inspection toggle disconnects control
         id: isolated

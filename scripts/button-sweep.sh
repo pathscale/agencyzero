@@ -44,7 +44,8 @@ fi
 # failed, and if it was stale the run measured a profile no longer in the tree.
 "$ROOT/scripts/qa-profile-restore.sh" "$LIVE"
 
-AZ_DATA_DIR="$LIVE" ./target/release/az-gui --blitz-control > /tmp/az-sweep.log 2>&1 &
+HOME="${LIVE}-home" AZ_DATA_DIR="$LIVE" AZ_QA_WORKSPACE_ROOT="${LIVE}-workspace" \
+  ./target/release/az-gui --blitz-control > /tmp/az-sweep.log 2>&1 &
 readonly APP=$!
 
 # Only this child belongs to the sweep. TERM gets a bounded grace period so
