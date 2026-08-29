@@ -2,11 +2,11 @@
 // gives chat discovery two disposable provider sessions so the real component
 // always has choices and its change/restore behavior cannot silently disappear.
 //
-// Selection is asserted on the option because its `aria-selected` state is
-// derived from the root Select's controlled `value`. AgencyZero must accept
-// the change and pass that value back before this state can change. The
-// trigger has a fixed descriptive aria-label, so its accessible name is not
-// the visible selected value and must not be used as a value assertion.
+// Closed Select options are deliberately unmounted: retaining every option in
+// every closed picker was a major node leak. Selection is therefore asserted
+// against the persistent trigger's rendered pixels. Its accessible name stays
+// descriptive while its visible session label must change after the exact
+// option is clicked.
 [
     (
         id: "select-session-displays",
@@ -30,8 +30,8 @@
         prepare: Some("Choose a session from Codex CLI / IDE"),
         prepare_key: Some("ArrowDown"),
         click: Some("option:ps-qa older select fixture"),
-        subject: "option:ps-qa older select fixture",
-        expect: SelectionChanges,
+        subject: "button:Choose a session from Codex CLI / IDE",
+        expect: PixelsChange,
     ),
     (
         id: "select-session-restores",
@@ -42,8 +42,8 @@
         prepare: Some("Choose a session from Codex CLI / IDE"),
         prepare_key: Some("ArrowDown"),
         click: Some("option:ps-qa newer select fixture"),
-        subject: "option:ps-qa newer select fixture",
-        expect: SelectionChanges,
+        subject: "button:Choose a session from Codex CLI / IDE",
+        expect: PixelsChange,
     ),
     (
         id: "select-session-imports-one",
