@@ -75,6 +75,7 @@ AppProfile(
     ],
     row_action_prefixes: ["Rename "],
     fold_prefixes: ["Collapse ", "Hide "],
+    expand_prefixes: ["Expand "],
     deferred_controls: [
         "New project",
     ],
