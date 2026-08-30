@@ -248,17 +248,12 @@ jobs:
 
       - name: Verify the inspection toggle disconnects control
         id: isolated
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.group == '' && inputs.suite == 'exhaustive' && steps.full.outcome == 'success' }}
+        if: ${{ (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.group == '' && inputs.suite == 'exhaustive')) && steps.full.outcome == 'success' }}
         continue-on-error: true
         run: |
-          ps-qa click Settings
-          sleep 2
-          ps-qa click "Enable inspection and agent control" \
+          ps-qa click '#tabs-settings'
+          ps-qa click '#settings-inspection-control' \
             > /tmp/isolated.txt 2>&1 || true
-          if ps-qa nodes > /tmp/isolated-probe.txt 2>&1; then
-            ps-qa click "Enable inspection and agent control" \
-              >> /tmp/isolated.txt 2>&1 || true
-          fi
           disconnected=0
           for _ in $(seq 1 20); do
             if ! ps-qa nodes > /tmp/isolated-probe.txt 2>&1; then
@@ -300,6 +295,7 @@ jobs:
           require_gate 'tree integrity' "$INTEGRITY_OUTCOME"
           if [[ "$EVENT_NAME" == pull_request ]]; then
             require_gate 'complete behavior audit' "$FULL_OUTCOME"
+            require_gate 'inspection toggle' "$ISOLATED_OUTCOME"
           elif [[ -n "$REQUESTED_GROUP" || "$REQUESTED_SUITE" == focused ]]; then
             require_gate 'focused input checks' "$FOCUSED_OUTCOME"
           else

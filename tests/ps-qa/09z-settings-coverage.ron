@@ -44,7 +44,7 @@
         open: Some("Settings"),
         hover: None,
         click: None,
-        subject: "Task manager model",
+        subject: "#settings-task-manager-model--trigger",
         expect: Disabled,
     ),
     (
@@ -63,10 +63,10 @@
         group: "settings",
         what: "choosing Edit changes the task-manager permission trigger's accessible value",
         open: Some("Settings"),
-        prepare: Some("Task manager permission"),
+        prepare: Some("#settings-task-manager-permission--trigger"),
         hover: None,
         click: Some("menuitem:Edit"),
-        subject: "Task manager permission",
+        subject: "#settings-task-manager-permission--trigger",
         expect: NameChanges,
     ),
     (

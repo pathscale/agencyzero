@@ -46,8 +46,9 @@ Always remove measurement blockers before interpreting component failures:
 2. Run `find --hidden --painted` and `ghost`.
 3. If inactive surfaces still own painted boxes, fix the application and start
    again. Do not compensate with selector heuristics.
-4. Run the complete manifest. As of this update it is 290 checks in 33 groups;
-   `ps-qa --app ps-qa.ron list --checks tests/ps-qa` is the authoritative count.
+4. Run the complete manifest. Never copy its count into documentation:
+   `ps-qa --app ps-qa.ron list --checks tests/ps-qa` is the authoritative
+   inventory, and CI derives its expected total from that same manifest.
 5. Run `audit` and `cover` only after the tree is trustworthy.
 6. Record every failure, unreachable surface and manual-only control in
    `tests/ps-qa/issues.md`.

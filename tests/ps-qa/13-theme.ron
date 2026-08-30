@@ -304,7 +304,7 @@
         prepare: Some("Theme color #AE3270"),
         hover: None,
         click: Some("Theme color #AE7032"),
-        covers: ["radio:Theme color "],
+        covers: ["radio:Theme color ", "#settings-theme-surface-flower-petal-30"],
         subject: "Theme color #AE7032",
         expect: SelectionChanges,
     ),
