@@ -1401,7 +1401,20 @@ function AgentBubble(props: {
        * different places and the eye had to go looking. A timestamp is what
        * the message turned out to be, not an announcement before it.
        */}
-      <Flex align="center" gap="sm">
+      {/*
+       * The metadata is one turn bar, not prose. Give the bubble its intrinsic
+       * one-line width before allowing the bubble's 88% cap to intervene;
+       * otherwise XL typography can make this row taller while spare width is
+       * still available beside the reply.
+       */}
+      <Flex
+        id={`message-${props.message.id}-turn-bar`}
+        data-slot="turn-bar"
+        align="center"
+        wrap="nowrap"
+        gap="sm"
+        class="min-w-max whitespace-nowrap"
+      >
         <Show when={props.turn}>
           {(turn) => (
             <span class="shrink-0 text-az-faint text-ui-caption-sm">

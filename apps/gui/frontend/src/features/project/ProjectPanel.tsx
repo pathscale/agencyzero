@@ -2263,7 +2263,7 @@ function TaskLogList(props: { projectId: string }): JSX.Element {
             <li
               data-slot="task-log-entry"
               aria-label={entry.label}
-              tabindex={-1}
+              tabindex={0}
               onPointerEnter={() => setActiveEntryId(entry.id)}
               onPointerLeave={() => {
                 if (activeEntryId() === entry.id) setActiveEntryId(null);

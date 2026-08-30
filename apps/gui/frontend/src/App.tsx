@@ -1,6 +1,6 @@
 import { Flex } from "@pathscale/ui";
 import type { JSX } from "@solidjs/web";
-import { For, Match, onCleanup, onSettled, Show, Switch } from "solid-js";
+import { Match, onCleanup, onSettled, Show, Switch } from "solid-js";
 import { Button } from "~/components/Button";
 import { Icon } from "~/components/Icon";
 import { DraftTab } from "~/features/draft/DraftTab";
@@ -11,7 +11,7 @@ import { TabStrip } from "~/features/tabs/TabStrip";
 import { WorkspacePanes } from "~/features/tabs/WorkspacePanes";
 import { installSelectionCopy } from "~/lib/clipboard";
 import { log } from "~/lib/log";
-import { i18n, tx } from "~/stores/i18n";
+import { tx } from "~/stores/i18n";
 import { type BootState, useWorkspace, WorkspaceProvider } from "~/stores/workspace";
 
 /**
@@ -247,17 +247,7 @@ export default function App(): JSX.Element {
 
   return (
     <WorkspaceProvider>
-      {/*
-        Translation helpers are ordinary function calls used throughout the
-        component tree. Some renderer/compiler paths evaluate an attribute
-        expression only when its owner mounts, which left a language change
-        with a new selector value but stale labels elsewhere in the window.
-
-        Keep the long-lived data owner and its subscriptions intact, but key
-        the visible workspace by locale so every text and accessibility
-        attribute is rebuilt from one catalogue.
-      */}
-      <For each={[i18n.locale]}>{() => <Workspace />}</For>
+      <Workspace />
     </WorkspaceProvider>
   );
 }

@@ -65,13 +65,22 @@ const relative = (path: string) => path.slice(ROOT.length + 1);
 
 describe("selectors that reach into a component's internals", () => {
   it("only names data-slot values the library renders", () => {
+    const authored = new Set(
+      CODE.flatMap((path) =>
+        [...code(path).matchAll(/\bdata-slot\s*=\s*["']([a-z0-9-]+)["']/g)].map(
+          ([, slot]) => slot,
+        ),
+      ),
+    );
     const dead: string[] = [];
     for (const path of CODE) {
       const text = code(path);
-      for (const [, slot] of text.matchAll(/data-slot=["']?([a-z0-9-]+)["']?/g)) {
-        // The library writes them as `data-slot="name"`; a value it never emits
-        // cannot be matched by anything.
-        if (LIBRARY.includes(`data-slot="${slot}"`)) continue;
+      for (const [, slot] of text.matchAll(
+        /\[data-slot\s*=\s*["']?([a-z0-9-]+)["']?\]/g,
+      )) {
+        // A selector may target a slot the app authors on its own DOM or one
+        // the component library emits. A value neither side renders is dead.
+        if (authored.has(slot) || LIBRARY.includes(`data-slot="${slot}"`)) continue;
         dead.push(`${relative(path)} → data-slot=${slot}`);
       }
     }
