@@ -9,11 +9,11 @@
     (
         id: "icons-paint",
         group: "icons",
-        what: "icon nodes occupy a box on screen",
+        what: "an icon produces visible raster ink rather than an empty SVG box",
         open: Some("theta theta north indi"),
         hover: None,
         click: None,
-        subject: "presentation",
-        expect: Paints,
+        subject: "presentation:*",
+        expect: VisibleInk,
     ),
 ]
