@@ -19,6 +19,7 @@ import { PERMISSION_ORDER } from "~/lib/labels";
 import { describeError, installGlobalErrorLogging, log } from "~/lib/log";
 import { record as recordPerf } from "~/lib/perf";
 import { usageTotals } from "~/lib/stats";
+import { installSubscriptions, type SubscriptionFactory } from "~/lib/subscriptions";
 import { applyTheme, windowChromeForTheme } from "~/lib/theme";
 import { i18n } from "~/stores/i18n";
 import {
@@ -1820,12 +1821,13 @@ export function createWorkspace() {
      * While hydrating, an event is queued instead of applied — the snapshot
      * that lands next would overwrite it. Queued events are replayed after.
      */
-    const bind = async <E extends keyof AppEvents>(
+    const pendingSubscriptions: SubscriptionFactory<Unlisten>[] = [];
+    const bind = <E extends keyof AppEvents>(
       event: E,
       handler: (payload: AppEvents[E]) => void,
-    ) => {
-      unlisteners.push(
-        await backend.on(event, (payload) => {
+    ): void => {
+      pendingSubscriptions.push(() =>
+        backend.on(event, (payload) => {
           if (isHydrating) buffered.push(() => handler(payload));
           else handler(payload);
         }),
@@ -1850,14 +1852,14 @@ export function createWorkspace() {
     // No tab is opened here. The agent creates projects too, and a new tab
     // appearing in the strip mid-sentence would be the agent taking the window
     // from you. It lands in Home; opening it is a click.
-    await bind("project:created", (project) => {
+    bind("project:created", (project) => {
       upsertProject(project);
       void loadProject(project.id);
     });
 
-    await bind("project:updated", upsertProject);
+    bind("project:updated", upsertProject);
 
-    await bind("settings:updated", (settings) => {
+    bind("settings:updated", (settings) => {
       setState((d) => {
         reconcile(settings)(d.settings);
       });
@@ -1866,16 +1868,16 @@ export function createWorkspace() {
       syncWindowChrome(settings.theme);
     });
 
-    await bind("project:deleted", ({ id }) => purgeProject(id));
+    bind("project:deleted", ({ id }) => purgeProject(id));
 
     // Both event types upsert. A create buffered during hydration can already
     // be present in the snapshot when replay runs, while an update may be the
     // first event seen after reconnecting. Append/map made the former duplicate
     // and the latter disappear.
-    await bind("item:created", upsertItem);
-    await bind("item:updated", upsertItem);
+    bind("item:created", upsertItem);
+    bind("item:updated", upsertItem);
 
-    await bind("item:deleted", ({ id, projectId }) => {
+    bind("item:deleted", ({ id, projectId }) => {
       setState((d) => {
         d.items[projectId] = ((list = []) => list.filter((item) => item.id !== id))(
           d.items[projectId],
@@ -1883,7 +1885,7 @@ export function createWorkspace() {
       });
     });
 
-    await bind("pr:updated", (pr) => {
+    bind("pr:updated", (pr) => {
       setState((d) => {
         d.pullRequests[pr.projectId] = ((list = []) => {
           const index = list.findIndex((existing) => existing.id === pr.id);
@@ -1895,7 +1897,7 @@ export function createWorkspace() {
       });
     });
 
-    await bind("question:updated", (question) => {
+    bind("question:updated", (question) => {
       setState((d) => {
         d.questions[question.projectId] = ((list = []) => {
           const index = list.findIndex((existing) => existing.id === question.id);
@@ -1923,7 +1925,7 @@ export function createWorkspace() {
         })(d.messages[message.projectId]);
       });
     };
-    await bind("message:appended", (message) => {
+    bind("message:appended", (message) => {
       if (message.author === "agent")
         setState((d) => {
           d.streaming[message.projectId] = "";
@@ -1940,7 +1942,7 @@ export function createWorkspace() {
         });
       }
     });
-    await bind("message:receipt", ({ projectId, messageId, status }) => {
+    bind("message:receipt", ({ projectId, messageId, status }) => {
       // A path setter cannot descend through a missing project record. Replace
       // that record instead, creating it when the first receipt arrives.
       setState((d) => {
@@ -1950,7 +1952,7 @@ export function createWorkspace() {
         }))(d.messageReceipts[projectId]);
       });
     });
-    await bind("moderation:blocked", appendMessage);
+    bind("moderation:blocked", appendMessage);
 
     const upsertTask = (task: RunningTask) => {
       setState((d) => {
@@ -1963,13 +1965,13 @@ export function createWorkspace() {
         })(d.running[task.projectId]);
       });
     };
-    await bind("task:started", (task) => {
+    bind("task:started", (task) => {
       upsertTask(task);
       touchRunStatus(task.projectId, `running ${task.name}…`);
     });
-    await bind("task:progress", upsertTask);
+    bind("task:progress", upsertTask);
 
-    await bind("task:finished", (entry) => {
+    bind("task:finished", (entry) => {
       /*
        * Matched on identity, never on label. Two shell commands, two reads of
        * the same file or two calls to the same MCP tool share a label, and
@@ -2000,7 +2002,7 @@ export function createWorkspace() {
      * grow the store without bound. The newest line is the one worth keeping,
      * so the oldest goes first.
      */
-    await bind("agent:io", (entry) => {
+    bind("agent:io", (entry) => {
       setState((d) => {
         d.agentIo[entry.projectId] = [...(d.agentIo[entry.projectId] ?? []), entry].slice(
           -AGENT_IO_LIMIT,
@@ -2008,7 +2010,7 @@ export function createWorkspace() {
       });
     });
 
-    await bind("run:rate_limit", (limit) => {
+    bind("run:rate_limit", (limit) => {
       // A limit replayed from the buffer, or delivered late, can already be
       // spent by the time it lands.
       if (!isLimitLive(limit)) return;
@@ -2020,7 +2022,7 @@ export function createWorkspace() {
       });
     });
 
-    await bind("run:rate_limit_cleared", ({ projectId, agent }) => {
+    bind("run:rate_limit_cleared", ({ projectId, agent }) => {
       /*
        * Reassign the inner record whole rather than `produce`-deleting the
        * nested agent node. Deleting a *nested* store proxy node (unlike a
@@ -2050,7 +2052,7 @@ export function createWorkspace() {
       }
     });
 
-    await bind("run:approval", ({ projectId, approvalId, tool, input }) => {
+    bind("run:approval", ({ projectId, approvalId, tool, input }) => {
       // Normalize a possibly-missing tool at the boundary: a Codex escalation
       // can omit it, and a bare `undefined` reaching the card crashed the
       // render, hiding the very question the run is blocked on.
@@ -2060,7 +2062,7 @@ export function createWorkspace() {
       touchRunStatus(projectId, "waiting for your approval");
     });
 
-    await bind("run:approval_resolved", ({ projectId }) => {
+    bind("run:approval_resolved", ({ projectId }) => {
       setState((d) => {
         const pending = d.pendingApprovals;
         delete pending[projectId];
@@ -2068,12 +2070,12 @@ export function createWorkspace() {
       touchRunStatus(projectId, "working…");
     });
 
-    await bind("run:accepted", ({ projectId, agent, model, permission }) => {
+    bind("run:accepted", ({ projectId, agent, model, permission }) => {
       touchRunStatus(projectId, "waiting for the agent…", { agent, model, permission });
       refreshProxyAfterLifecycleEvent();
     });
 
-    await bind("run:ready", ({ projectId }) => {
+    bind("run:ready", ({ projectId }) => {
       // Drain anything retained from an older build or a transient refusal as
       // soon as the live channel is ready. New Codex messages are accepted by
       // the backend during startup and wait on its ordered steer channel.
@@ -2082,7 +2084,7 @@ export function createWorkspace() {
       }
     });
 
-    await bind("run:inject_failed", ({ projectId, messageId, body, replyQuestionId }) => {
+    bind("run:inject_failed", ({ projectId, messageId, body, replyQuestionId }) => {
       // The turn settled before the interruption reached it. The transcript
       // already shows the words; queue that exact row so a fresh turn hears it
       // without appending the same user message a second time.
@@ -2098,7 +2100,7 @@ export function createWorkspace() {
      * status line away to say "compacting" would leave it with nothing when the
      * compaction finished and the answer carried on.
      */
-    await bind("run:compaction", ({ projectId, agent, driver, phase }) => {
+    bind("run:compaction", ({ projectId, agent, driver, phase }) => {
       if (driver !== "command") return;
       if (phase !== "finished") {
         /*
@@ -2151,18 +2153,18 @@ export function createWorkspace() {
       }
     });
 
-    await bind("run:text", ({ projectId, delta }) => {
+    bind("run:text", ({ projectId, delta }) => {
       setState((d) => {
         d.streaming[projectId] = ((current = "") => current + delta)(d.streaming[projectId]);
       });
       touchRunStatus(projectId, "writing…");
     });
 
-    await bind("run:thinking", ({ projectId }) => {
+    bind("run:thinking", ({ projectId }) => {
       touchRunStatus(projectId, "thinking…");
     });
 
-    await bind("run:persisted", ({ projectId, chars }) => {
+    bind("run:persisted", ({ projectId, chars }) => {
       setState((d) => {
         d.runStatus[projectId] = ((current) => ({
           ...runIdentity(projectId, current),
@@ -2177,7 +2179,7 @@ export function createWorkspace() {
       });
     });
 
-    await bind("run:commands", ({ projectId, agent, all, skills }) => {
+    bind("run:commands", ({ projectId, agent, all, skills }) => {
       // Same missing-parent case as the first receipt above.
       setState((d) => {
         d.commands[projectId] = ((commands = {}) => ({
@@ -2187,31 +2189,28 @@ export function createWorkspace() {
       });
     });
 
-    await bind(
-      "run:usage",
-      ({ projectId, tokens, contextTokens, contextWindow, estimatedCostUsd }) => {
-        setState((d) => {
-          d.runStatus[projectId] = ((current) => ({
-            ...runIdentity(projectId, current),
-            startedAt: current?.startedAt ?? Date.now(),
-            activity: current?.activity ?? "working…",
-            persistedChars: current?.persistedChars ?? 0,
-            // A provider can begin a new accounting snapshot after compacting.
-            // Processed traffic and its cost are cumulative for this run, so a
-            // lower snapshot must not erase work already shown. Context below is
-            // latest-wins on purpose: compacting is expected to shrink it.
-            liveTokens: monotonicUsage(current?.liveTokens, tokens),
-            liveCostUsd: monotonicUsage(current?.liveCostUsd, estimatedCostUsd),
-            // Held rather than overwritten with a null: an agent that reports the
-            // window once and the tokens thereafter would otherwise blank it.
-            contextTokens: contextTokens ?? current?.contextTokens ?? null,
-            contextWindow: contextWindow ?? current?.contextWindow ?? null,
-          }))(d.runStatus[projectId]);
-        });
-      },
-    );
+    bind("run:usage", ({ projectId, tokens, contextTokens, contextWindow, estimatedCostUsd }) => {
+      setState((d) => {
+        d.runStatus[projectId] = ((current) => ({
+          ...runIdentity(projectId, current),
+          startedAt: current?.startedAt ?? Date.now(),
+          activity: current?.activity ?? "working…",
+          persistedChars: current?.persistedChars ?? 0,
+          // A provider can begin a new accounting snapshot after compacting.
+          // Processed traffic and its cost are cumulative for this run, so a
+          // lower snapshot must not erase work already shown. Context below is
+          // latest-wins on purpose: compacting is expected to shrink it.
+          liveTokens: monotonicUsage(current?.liveTokens, tokens),
+          liveCostUsd: monotonicUsage(current?.liveCostUsd, estimatedCostUsd),
+          // Held rather than overwritten with a null: an agent that reports the
+          // window once and the tokens thereafter would otherwise blank it.
+          contextTokens: contextTokens ?? current?.contextTokens ?? null,
+          contextWindow: contextWindow ?? current?.contextWindow ?? null,
+        }))(d.runStatus[projectId]);
+      });
+    });
 
-    await bind("run:stopped", ({ projectId, agent, model, permission, stop, exitCode }) => {
+    bind("run:stopped", ({ projectId, agent, model, permission, stop, exitCode }) => {
       const lastMessage = (state.messages[projectId] ?? []).at(-1);
       const failureAlreadyPersisted = lastMessage?.author === "agent" && lastMessage.stop === stop;
       /*
@@ -2296,6 +2295,8 @@ export function createWorkspace() {
       }
       refreshProxyAfterLifecycleEvent();
     });
+
+    unlisteners.push(...(await installSubscriptions(pendingSubscriptions)));
   }
 
   function upsertProject(project: Project): void {
