@@ -1534,6 +1534,7 @@ export function SettingsTab(): JSX.Element {
             <Show when={state.workspaceRoot}>
               {(root) => (
                 <Row
+                  id="settings-workspace"
                   label={tx("Workspace")}
                   searchTerms={[tx("Create it")]}
                   hint={
@@ -1542,8 +1543,8 @@ export function SettingsTab(): JSX.Element {
                       : tx("recommended, and not created yet")
                   }
                 >
-                  <Flex align="center" gap="sm">
-                    <span class="max-w-[280px] truncate font-mono text-az-body text-ui-detail">
+                  <Flex align="center" gap="sm" minWidth="zero" class="max-w-[23rem]">
+                    <span class="min-w-0 max-w-[17.5rem] truncate font-mono text-az-body text-ui-detail">
                       {root().path}
                     </span>
                     <Show when={!root().exists}>
@@ -3394,6 +3395,8 @@ function Section(props: {
 }
 
 function Row(props: {
+  /** Stable row identity; the label receives `${id}-label` for rendered-layout QA. */
+  id?: string;
   label: string;
   hint?: string;
   /** Accessible child names that should reveal this row through Settings search. */
@@ -3440,12 +3443,16 @@ function Row(props: {
 
   return (
     <div
+      id={props.id}
       ref={shell}
       class={`px-3.5 py-2.5 ${visible() ? "" : "hidden"} ${props.isLast ? "" : "border-az-hairline-soft border-b"} ${
         props.stack ? "flex flex-col gap-2" : "flex items-center gap-3"
       }`}
     >
-      <span class={`text-az-body text-ui-label-lg ${props.stack ? "" : "min-w-0 flex-1"}`}>
+      <span
+        id={props.id ? `${props.id}-label` : undefined}
+        class={`text-az-body text-ui-label-lg ${props.stack ? "" : "min-w-0 flex-1"}`}
+      >
         {props.label}
         <Show when={props.hint}>
           <span class="mt-0.5 block break-words text-az-muted text-ui-detail">{props.hint}</span>

@@ -1256,6 +1256,18 @@
   }
 
   /*
+   * The exact zero endpoint must survive both CSS compilation and Blitz's
+   * relative-colour parser. Keep the rest of the opacity range continuous,
+   * but make zero an explicit transparent paint command for both layers that
+   * cover the native window. Content panels deliberately remain painted so
+   * the opacity controls are always recoverable.
+   */
+  html.az-glass-zero body,
+  html.az-glass-zero .az-desk {
+    background-color: transparent;
+  }
+
+  /*
    * Cards inside a glass panel take the panel's alpha.
    *
    * `bg-base-300` is the card tier: item rows, chips, the section bodies in the

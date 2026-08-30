@@ -628,6 +628,18 @@ function writeGlassTuning(theme: ThemeSettings, root: HTMLElement): void {
   const tuning = glassTuning(theme, root);
   root.classList.toggle("az-no-blur", !(tuning.blur > 0));
 
+  /*
+   * Zero is a semantic edge, not just another percentage.
+   *
+   * Blitz currently resolves the relative-colour declaration exposed through
+   * JavaScript as transparent while its paint path retains the source colour
+   * as an opaque root fill. Give the renderer an unambiguous CSS keyword at
+   * the endpoint. This class reaches only the two full-window films; panels,
+   * the opacity slider and Reset remain painted so zero cannot strand someone
+   * inside an invisible settings screen.
+   */
+  root.classList.toggle("az-glass-zero", Number.isFinite(opacity) && Number(opacity) <= 0);
+
   if (Number.isFinite(opacity)) {
     setToken(root, "--glass-background-opacity", `${Number(opacity)}%`);
 

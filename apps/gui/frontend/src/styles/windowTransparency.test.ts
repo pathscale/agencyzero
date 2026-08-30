@@ -28,6 +28,7 @@ import { describe, expect, it } from "vitest";
 // fails the production type check.
 const SRC = join(process.cwd(), "src");
 const THEME_CSS = readFileSync(join(SRC, "styles/theme.css"), "utf8");
+const THEME_SOURCE = readFileSync(join(SRC, "lib/theme.ts"), "utf8");
 const GUI = join(process.cwd(), "..");
 const WINDOW_CONFIGS = [
   "tauri.conf.json",
@@ -87,5 +88,14 @@ describe("the window can be seen through", () => {
     const rule = ruleFor(selector.trim() === "body" ? "  body" : selector);
     expect(rule).toContain("--az-glass-alpha");
     expect(rule).toContain("transparent");
+  });
+
+  it("gives the exact zero endpoint an unambiguous transparent paint command", () => {
+    expect(THEME_SOURCE).toContain(
+      'root.classList.toggle("az-glass-zero", Number.isFinite(opacity) && Number(opacity) <= 0)',
+    );
+    expect(THEME_CSS).toContain("html.az-glass-zero body,");
+    expect(THEME_CSS).toContain("html.az-glass-zero .az-desk {");
+    expect(THEME_CSS).toContain("background-color: transparent;");
   });
 });
