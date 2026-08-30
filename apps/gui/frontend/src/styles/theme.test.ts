@@ -390,6 +390,11 @@ describe("the neutral Button reset", () => {
     expect(CSS).not.toContain(":where(.button.az-ui-button-neutral:active)");
   });
 
+  it("does not fade every child of a disabled neutral button", () => {
+    expect(CSS).toContain(".button.az-ui-button-neutral:disabled {");
+    expect(CSS).toContain("opacity: 1;");
+  });
+
   it("does not override existing call-site hover paint", () => {
     expect(CSS).not.toContain(".button.az-ui-button-neutral:hover");
     expect(CSS).not.toContain('.button.az-ui-button-neutral[data-hovered="true"]');

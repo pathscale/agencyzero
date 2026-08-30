@@ -1164,6 +1164,17 @@
     --button-bg-pressed: transparent;
   }
 
+  /*
+   * The library dims its complete disabled Button, including child SVGs.
+   * Neutral application buttons own disabled paint at the call site: resetting
+   * opacity here keeps icon content solid unless an explicit
+   * `disabled:opacity-*` utility asks otherwise. Utilities are in the later
+   * layer, so those intentional per-control values still win.
+   */
+  .button.az-ui-button-neutral:disabled {
+    opacity: 1;
+  }
+
   .button.az-ui-button-neutral:active,
   .button.az-ui-button-neutral[data-pressed="true"] {
     transform: none;
