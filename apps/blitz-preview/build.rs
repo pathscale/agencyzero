@@ -38,9 +38,6 @@ fn compress_asset(path: &Path, output: &Path, quality: u32) -> usize {
     input.len()
 }
 
-
-
-
 /// Drop framework load commands that nothing in this binary references.
 ///
 /// On macOS `tauri` and `tauri-runtime` depend on `objc2-web-kit`
