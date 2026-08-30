@@ -1,6 +1,7 @@
-// Reset invalidates the attached provider session, so it runs in its own clean
-// profile group. The first check proves the guard; the second proves Confirm
-// reset performs the advertised destructive action rather than merely closing.
+// Reset terminates a stuck turn but deliberately retains the provider session,
+// so it runs in its own clean profile group. The first check proves the guard;
+// the second waits for the backend-confirmed Reset action to return; the third
+// guards the advertised conversation-retention contract.
 [
     (
         id: "session-reset-isolated-confirms",
@@ -14,14 +15,25 @@
         expect: Paints,
     ),
     (
-        id: "session-reset-isolated-clears-attachment",
+        id: "session-reset-isolated-completes",
         group: "session-reset",
         destructive: true,
-        what: "Confirm reset clears the rendered attached-session status",
+        what: "Confirm reset completes the backend reset and restores its action",
         open: None,
         hover: None,
         click: Some("Confirm reset"),
-        subject: "Attached:",
-        expect: Vanishes,
+        subject: "button:Reset",
+        expect: PaintsNamed,
+    ),
+    (
+        id: "session-reset-isolated-retains-attachment",
+        group: "session-reset",
+        destructive: true,
+        what: "reset keeps the provider session attached for the next prompt",
+        open: None,
+        hover: None,
+        click: None,
+        subject: "generic:Attached:",
+        expect: PaintsNamed,
     ),
 ]
