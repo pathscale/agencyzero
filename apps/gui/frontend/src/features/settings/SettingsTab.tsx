@@ -436,16 +436,6 @@ export function SettingsTab(): JSX.Element {
     moderatorModels().find((model) => model.value === state.settings?.moderator.model)?.label ??
     state.settings?.moderator.model ??
     "";
-  const moveModeratorModel = (offset: number): void => {
-    const models = moderatorModels();
-    const currentIndex = models.findIndex(
-      (model) => model.value === state.settings?.moderator.model,
-    );
-    const next = models[Math.max(0, Math.min(models.length - 1, currentIndex + offset))];
-    if (next && next.value !== state.settings?.moderator.model) {
-      void actions.saveSettings({ moderator: { model: next.value } });
-    }
-  };
 
   /*
    * Opening Settings puts focus on the page itself, so Page Up and Page Down
@@ -1697,30 +1687,35 @@ export function SettingsTab(): JSX.Element {
               />
             </Row>
             <Row label={tx("Moderator model")}>
-              {/*
-               * This stays a real native select. UI's compound Select uses a
-               * custom popover; it cannot provide the operating-system option
-               * semantics this small single-choice control promises.
-               */}
-              <select
+              <Select
                 id="settings-moderator-model"
-                aria-label={`${tx("Moderator model")}: ${moderatorModelLabel()}`}
                 value={current().moderator.model}
-                onChange={(event) =>
-                  void actions.saveSettings({ moderator: { model: event.currentTarget.value } })
+                disabled={moderatorModels().length === 0}
+                onChange={(value) =>
+                  typeof value === "string" &&
+                  void actions.saveSettings({ moderator: { model: value } })
                 }
-                onKeyDown={(event) => {
-                  if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-                    event.preventDefault();
-                    moveModeratorModel(event.key === "ArrowDown" ? 1 : -1);
-                  }
-                }}
-                class="h-9 min-w-[220px] rounded-lg border border-az-hairline bg-az-inset px-2.5 text-az-body text-ui-label outline-none"
+                class="min-w-[13.75rem]"
               >
-                <For each={moderatorModels()}>
-                  {(model) => <option value={model.value}>{model.label}</option>}
-                </For>
-              </select>
+                <Select.Trigger
+                  aria-label={`${tx("Moderator model")}: ${moderatorModelLabel()}`}
+                  class="h-9 w-full rounded-lg border border-az-hairline bg-az-inset px-2.5 text-az-body text-ui-label outline-none"
+                >
+                  <Select.Value />
+                  <Select.Indicator endIcon={<Icon name="chevron-down" />} />
+                </Select.Trigger>
+                <Select.Popover>
+                  <Select.Listbox>
+                    <For each={moderatorModels()}>
+                      {(model) => (
+                        <Select.Option value={model.value} textValue={model.label}>
+                          {model.label}
+                        </Select.Option>
+                      )}
+                    </For>
+                  </Select.Listbox>
+                </Select.Popover>
+              </Select>
             </Row>
             <Row label={tx("Confine tool calls to the working directories")}>
               <SettingToggle

@@ -5,7 +5,6 @@ import ts from "typescript";
 const sourceRoot = join(import.meta.dir, "..", "src");
 const repositoryRoot = join(import.meta.dir, "..", "..", "..", "..");
 const qaRoot = join(repositoryRoot, "tests", "ps-qa");
-const nativeSelectOwner = join(sourceRoot, "features", "settings", "SettingsTab.tsx");
 
 /**
  * Components whose rendered output contains the control QA addresses.
@@ -94,9 +93,7 @@ const violations = tsxFiles(sourceRoot).flatMap((file) => {
   const source = readFileSync(file, "utf8");
   return source.split("\n").flatMap((line, index) => {
     const matches = line.match(/<(?:button|input|select|textarea)\b/g) ?? [];
-    return matches
-      .filter((tag) => tag !== "<select" || file !== nativeSelectOwner)
-      .map((tag) => `${file}:${index + 1}: ${tag}`);
+    return matches.map((tag) => `${file}:${index + 1}: ${tag}`);
   });
 });
 
@@ -206,5 +203,5 @@ if (violations.length > 0) {
 }
 
 process.stdout.write(
-  `UI control ownership: application JSX uses @pathscale/ui; ${importedInputs.size} imported input primitives have paired ps-qa outcomes; moderator model uses the one native semantic select\n`,
+  `UI control ownership: application JSX uses @pathscale/ui; ${importedInputs.size} imported input primitives have paired ps-qa outcomes; no raw interactive controls\n`,
 );
