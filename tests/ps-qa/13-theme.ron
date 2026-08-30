@@ -224,6 +224,8 @@
         group: "theme",
         what: "the standard colour wheel changes surface strength",
         open: Some("Settings"),
+        setup_type_into: Some("Search settings"),
+        setup_text: Some("Appearance"),
         hover: None,
         click: Some("Colour strength 20%"),
         covers: ["button:Colour strength "],
@@ -235,6 +237,8 @@
         group: "theme",
         what: "surface strength can be put back, leaving the theme as it was",
         open: Some("Settings"),
+        setup_type_into: Some("Search settings"),
+        setup_text: Some("Appearance"),
         hover: None,
         // The stop the fixture ships. The check before this one moves it to
         // 20%, so the group leaves the theme where it found it and can be run
