@@ -1573,7 +1573,7 @@ export function Composer(props: ComposerProps): JSX.Element {
                             : tx("Queued until the running turn finishes")
                           : undefined
                   }
-                  class="flex size-[24px] items-center justify-center rounded-full bg-primary text-primary-content transition-colors hover:bg-az-primary-hover disabled:cursor-not-allowed disabled:opacity-40"
+                  class="flex size-[24px] items-center justify-center rounded-full bg-primary text-primary-content transition-colors hover:bg-az-primary-hover disabled:cursor-not-allowed disabled:bg-primary/40 disabled:text-primary-content"
                 >
                   <Icon
                     id={`${props.id}-send-icon`}

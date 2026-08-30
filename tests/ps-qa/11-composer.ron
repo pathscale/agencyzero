@@ -262,6 +262,16 @@
         expect: InteriorInk,
     ),
     (
+        id: "composer-disabled-send-keeps-content-solid",
+        group: "composer",
+        what: "the disabled Send control mutes its fill without fading the arrow with whole-control opacity",
+        open: Some("New project"),
+        hover: None,
+        click: None,
+        subject: "#draft-composer-send",
+        expect: FullOpacity,
+    ),
+    (
         id: "composer-draft-enables-send-without-spending",
         group: "composer",
         what: "a valid draft enables Send without activating the paid-provider action",
