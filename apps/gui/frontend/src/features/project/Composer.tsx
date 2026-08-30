@@ -1367,6 +1367,7 @@ export function Composer(props: ComposerProps): JSX.Element {
           model pill on the left after Attach; recorded in the frontend README.
         */}
           <div
+            id={`${props.id}-controls`}
             data-composer-controls
             /*
               The row may wrap: on a narrow window the model and effort controls
@@ -1379,7 +1380,11 @@ export function Composer(props: ComposerProps): JSX.Element {
             */
             class="flex min-h-[24px] flex-wrap items-center gap-2.5"
           >
-            <div data-composer-primary-controls class="flex shrink-0 items-center gap-2.5">
+            <div
+              id={`${props.id}-primary-controls`}
+              data-composer-primary-controls
+              class="flex shrink-0 items-center gap-2.5"
+            >
               <Button
                 id={`${props.id}-advanced`}
                 type="button"
@@ -1440,6 +1445,7 @@ export function Composer(props: ComposerProps): JSX.Element {
             </div>
 
             <div
+              id={`${props.id}-secondary-controls`}
               data-composer-secondary-controls
               /*
                 One line, always, and no `min-w-0`.
@@ -1569,7 +1575,11 @@ export function Composer(props: ComposerProps): JSX.Element {
                   }
                   class="flex size-[24px] items-center justify-center rounded-full bg-primary text-primary-content transition-colors hover:bg-az-primary-hover disabled:cursor-not-allowed disabled:opacity-40"
                 >
-                  <Icon name="arrow-up" class="text-ui-title-lg" />
+                  <Icon
+                    id={`${props.id}-send-icon`}
+                    name="arrow-up"
+                    class="az-icon-inherit text-ui-title-lg"
+                  />
                 </Button>
                 {/*
                 The slot stays mounted so the send button does not move, while
