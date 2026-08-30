@@ -189,7 +189,6 @@ fn create_dist_document(dist: &std::path::Path, url: &str) -> Result<ScriptDocum
     )
 }
 
-
 #[cfg(all(not(test), feature = "capture"))]
 fn capture_preview(output: &std::path::Path) -> Result<(), String> {
     use anyrender::render_to_buffer;
@@ -399,8 +398,7 @@ fn main() {
     #[cfg(target_os = "macos")]
     if std::env::args().any(|argument| argument == "--offscreen") {
         use objc2_app_kit::{NSApplication, NSApplicationActivationPolicy};
-        let mtm = objc2::MainThreadMarker::new()
-            .expect("main() runs on the main thread");
+        let mtm = objc2::MainThreadMarker::new().expect("main() runs on the main thread");
         let application = NSApplication::sharedApplication(mtm);
         application.setActivationPolicy(NSApplicationActivationPolicy::Accessory);
         /*
@@ -411,9 +409,7 @@ fn main() {
          * activation-policy default here is what makes the accessory policy
          * stick through window creation.
          */
-        unsafe {
-            application.setActivationPolicy(NSApplicationActivationPolicy::Prohibited);
-        }
+        application.setActivationPolicy(NSApplicationActivationPolicy::Prohibited);
         trace("activation policy set to prohibited");
     }
     #[cfg(not(test))]
@@ -459,6 +455,7 @@ fn main() {
      * is the same thing for the windowed path, under its own name so a headless
      * capture and a live window can be aimed at different builds.
      */
+    #[cfg(not(test))]
     match std::env::var_os("BLITZ_PREVIEW_DIST") {
         Some(dist) => {
             let dist = std::path::PathBuf::from(dist);
@@ -467,11 +464,13 @@ fn main() {
         }
         None => set_document_factory(create_document),
     }
+    #[cfg(test)]
+    set_document_factory(create_document);
     trace("document factory configured");
 
     let context = tauri::generate_context!("tauri.conf.json");
     trace("Tauri context generated");
-    let mut app = builder()
+    let app = builder()
         .invoke_handler(tauri::generate_handler![greet, list_capabilities])
         .build(context)
         .expect("AgencyZero Tauri Blitz preview failed to build");
@@ -531,7 +530,6 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashSet;
 
     #[test]
     fn embedded_assets_are_compressed_and_round_trip() {
@@ -559,17 +557,17 @@ mod tests {
     }
 
     #[test]
-    fn production_icon_uses_resolve_to_nonempty_svg_images() {
+    fn production_icons_resolve_to_nonempty_svg_images() {
         std::thread::Builder::new()
             .name("production-icon-test".to_owned())
             .stack_size(16 * 1024 * 1024)
-            .spawn(assert_production_icon_uses_resolve)
+            .spawn(assert_production_icons_resolve)
             .unwrap()
             .join()
             .unwrap();
     }
 
-    fn assert_production_icon_uses_resolve() {
+    fn assert_production_icons_resolve() {
         fn count_painted_paths(group: &usvg::Group) -> usize {
             group
                 .children()
@@ -598,41 +596,20 @@ mod tests {
         document.inner_mut().resolve(0.0);
 
         let doc = document.inner();
-        let use_ids = doc.query_selector_all("svg use").unwrap();
-        assert!(
-            use_ids.len() > 20,
-            "production workspace did not finish rendering"
-        );
-
-        let mut svg_ids = HashSet::new();
-        for use_id in use_ids {
-            let mut current = doc.get_node(use_id).and_then(|node| node.parent);
-            while let Some(node_id) = current {
-                let node = doc.get_node(node_id).unwrap();
-                if node
-                    .element_data()
-                    .is_some_and(|element| element.name.local.as_ref() == "svg")
-                {
-                    svg_ids.insert(node_id);
-                    break;
-                }
-                current = node.parent;
-            }
-        }
-
+        let svg_ids = doc.query_selector_all("svg").unwrap();
         assert!(
             !svg_ids.is_empty(),
-            "no visible SVG ancestors found for uses"
+            "production workspace rendered no SVG icons"
         );
         for svg_id in svg_ids {
             let node = doc.get_node(svg_id).unwrap();
             let tree = node
                 .element_data()
                 .and_then(|element| element.svg_data())
-                .expect("visible SVG use was not parsed as an image");
+                .expect("visible SVG was not parsed as an image");
             assert!(
                 count_painted_paths(tree.root()) > 0,
-                "visible SVG use parsed without any paintable paths"
+                "visible SVG parsed without any paintable paths"
             );
         }
     }

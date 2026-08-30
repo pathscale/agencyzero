@@ -21,7 +21,7 @@ blitz-traits = { package = "ps-blitz-traits", version = "^0.3.0-beta.11" }
 brotli = { version = "^8.0.4", default-features = false, features = ["std"] }
 png = { version = "^0.18.1", optional = true }
 tauri = { version = "^2.11.5", default-features = false, features = ["compression"] }
-tauri-runtime-blitz = "^0.1.0"
+tauri-runtime-blitz = "^0.3"
 url = "^2.5.8"
 
 # For `--offscreen`: the activation policy has to be set before any window
@@ -36,7 +36,9 @@ brotli = { version = "^8.0.4", default-features = false, features = ["std"] }
 tauri-build = { version = "^2.6.3", features = [] }
 
 [dev-dependencies]
-usvg = "^0.46.0"
+# Use the renderer's SVG fork so geometry assertions inspect the exact tree
+# type produced by Blitz instead of compiling a second, incompatible `usvg`.
+usvg = { package = "ps-usvg", version = "^0.48.1" }
 
 [features]
 capture = ["dep:anyrender_vello_cpu", "dep:png"]

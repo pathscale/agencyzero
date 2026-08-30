@@ -21,8 +21,8 @@ az-core = { path = "crates/core" }
 # time rather than at build time. Both are declared here so the pair cannot
 # drift: the crates inherit these, and sidecar staging asks cargo for the
 # resolved version instead of re-parsing the manifest to check they match.
-agency-proxy-client = "0.1.7"
-agency-proxy-protocol = "0.1.7"
+agency-proxy-client = "^0.1.8"
+agency-proxy-protocol = "^0.1.8"
 # The GUI and both storage tools compile the same schema against one resolved
 # WorkTable package. A workspace dependency prevents their compatible ranges
 # from drifting into separate copies without freezing the selected patch.
