@@ -252,6 +252,16 @@
         expect: Disabled,
     ),
     (
+        id: "composer-send-icon-paints",
+        group: "composer",
+        what: "the shared composer Send control paints its arrow inside the filled button",
+        open: Some("New project"),
+        hover: None,
+        click: None,
+        subject: "#draft-composer-send",
+        expect: InteriorInk,
+    ),
+    (
         id: "composer-draft-enables-send-without-spending",
         group: "composer",
         what: "a valid draft enables Send without activating the paid-provider action",

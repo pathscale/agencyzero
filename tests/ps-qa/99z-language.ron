@@ -13,6 +13,16 @@
         expect: PaintsNamed,
     ),
     (
+        id: "language-selected-value-is-visible",
+        group: "language",
+        what: "the shared language selector paints the selected language value",
+        open: Some("#tabs-settings"),
+        hover: None,
+        click: None,
+        subject: "combobox:Current language: English",
+        expect: InteriorInk,
+    ),
+    (
         id: "language-selects-chinese",
         group: "language",
         what: "selecting the next language replaces the old-language control tree",

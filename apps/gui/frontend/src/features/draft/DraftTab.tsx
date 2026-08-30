@@ -27,7 +27,7 @@ export function DraftTab(props: { tab: Tab }): JSX.Element {
         effort controls a long way from the posture controls they sit beside
         in every other prompt area and left a large empty span between them.
       */}
-      <div class="w-full max-w-[720px]">
+      <div class="w-full max-w-[45rem]">
         <Composer
           id="draft-composer"
           draftKey={props.tab.key}

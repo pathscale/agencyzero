@@ -367,13 +367,14 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
             */}
             <span
               data-turn-totals
+              data-slot="turn-totals"
               aria-hidden={headerTurns() <= 0 ? "true" : "false"}
-              class={`absolute top-full right-3 z-20 flex w-[270px] max-w-[calc(100%-1.5rem)] items-center gap-1.5 overflow-hidden rounded-b-lg border border-primary/38 border-t-0 bg-base-200 px-3 py-1 font-mono text-az-muted text-ui-caption shadow-[0_7px_18px_rgba(0,0,0,0.38)] ${headerTurns() <= 0 ? "invisible" : ""}`}
+              class={`absolute top-full right-3 z-20 flex w-[16.875rem] max-w-[calc(100%-1.5rem)] items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-b-lg border border-primary/38 border-t-0 bg-base-200 px-3 py-1 font-mono text-az-muted text-ui-caption shadow-[0_7px_18px_rgba(0,0,0,0.38)] ${headerTurns() <= 0 ? "invisible" : ""}`}
             >
               {/* No leading agent label: the 7-day readout at the end already says
                 "Claude 7d …", so a "Claude ·" prefix here was the same word
                 twice. The turn count leads instead. */}
-              <span class="w-[58px] shrink-0 font-semibold text-az-body">
+              <span class="w-[3.625rem] shrink-0 font-semibold text-az-body">
                 {tx("Turn")} {headerTurns()}
               </span>
               <span class="text-az-faint">·</span>
@@ -383,7 +384,7 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
                   accent, not flat grey: these are the numbers worth reading. */}
               <span
                 title={costTitle()}
-                class="w-[82px] shrink-0 text-right font-semibold text-accent"
+                class="w-[5.125rem] shrink-0 text-right font-semibold text-accent"
               >
                 {hydratedMessages() === undefined ? "—" : compactCount(totals().tokens)} {tx("tok")}
               </span>
@@ -397,7 +398,7 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
                     ? tx("Some turns reported no usage")
                     : costTitle()
                 }
-                class="w-[62px] shrink-0 text-right font-semibold text-accent"
+                class="w-[3.875rem] shrink-0 text-right font-semibold text-accent"
               >
                 <Show when={hydratedMessages() !== undefined} fallback="—">
                   {costs().missing > 0 || costs().estimated ? "~" : ""}
