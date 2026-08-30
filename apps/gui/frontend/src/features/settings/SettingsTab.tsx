@@ -17,7 +17,6 @@ import {
   createContext,
   createEffect,
   createMemo,
-  createRoot,
   createSignal,
   For,
   onCleanup,
@@ -44,7 +43,7 @@ import {
   normalizeWash,
   writePanelAxes,
 } from "~/lib/theme";
-import { t, tx, type UiMessage } from "~/stores/i18n";
+import { i18n, t, tx, type UiMessage } from "~/stores/i18n";
 import { prefs, setPrefs } from "~/stores/prefs";
 import { useNow, useWorkspace } from "~/stores/workspace";
 import type {
@@ -103,28 +102,37 @@ const AGENT_USE = {
  * which is the same coupling written out longhand.
  */
 const [settingsQuery, setSettingsQuery] = createSignal("");
-let searchRevealFrame: number | undefined;
-
-createRoot(() => {
-  createEffect(
-    // Tracked: the query being typed.
-    () => settingsQuery(),
-    // Untracked: revealing sections writes state, which would re-arm the
-    // computation on its own write if it ran in the compute.
-    (query) => {
-      if (searchRevealFrame !== undefined) {
-        cancelAnimationFrame(searchRevealFrame);
-        searchRevealFrame = undefined;
-      }
-      if (query.trim() !== "") revealSearchSections();
-    },
-  );
-});
+/** Descendant semantic text learned once per section and interface language. */
+const settingsSearchCorpus = new Map<string, string>();
 
 /** Whether some label or hint answers what is being searched for. */
 function matchesSearch(text: string): boolean {
   const needle = settingsQuery().trim().toLowerCase();
   return needle === "" || text.toLowerCase().includes(needle);
+}
+
+/** Searchable words exposed by controls after a lazy settings body mounts. */
+function renderedSearchText(root: HTMLElement | undefined): string[] {
+  if (!root) return [];
+  return [
+    root.textContent ?? "",
+    ...Array.from(
+      root.querySelectorAll<HTMLElement>("[aria-label], [title], [placeholder]"),
+    ).flatMap((element) => [
+      element.getAttribute("aria-label") ?? "",
+      element.getAttribute("title") ?? "",
+      element.getAttribute("placeholder") ?? "",
+    ]),
+  ];
+}
+
+/** Capture a newly mounted section after all of its rows have reconciled. */
+function SettingsSearchIndexer(props: {
+  root: () => HTMLElement | undefined;
+  onIndex: (corpus: string) => void;
+}): JSX.Element {
+  onSettled(() => props.onIndex(renderedSearchText(props.root()).join(" ")));
+  return <span aria-hidden="true" class="hidden" />;
 }
 
 /**
@@ -1047,12 +1055,6 @@ export function SettingsTab(): JSX.Element {
             icon="list-checks"
             title={tx("Task Manager")}
             hint={tx("the Home conversation that keeps the lists in order")}
-            searchTerms={[
-              tx("Task manager agent"),
-              tx("Task manager model"),
-              tx("Task manager effort"),
-              tx("Task manager permission"),
-            ]}
           >
             <Row label={tx("Agent")}>
               <PillMenu<Agent>
@@ -2140,12 +2142,6 @@ function StudySettings(): JSX.Element {
       icon="gauge"
       title={tx("Research")}
       hint={tx("local, opt-in PromptSyntax deployment study")}
-      searchTerms={[
-        tx("PS deployment study"),
-        tx("Stored events"),
-        tx("Export JSONL"),
-        tx("Delete data"),
-      ]}
       pending={available() ? undefined : tx("needs the study event backend")}
     >
       <div class="border-az-hairline-soft border-b px-3.5 py-3 text-az-muted text-ui-detail leading-[1.55]">
@@ -3075,23 +3071,6 @@ function beginSettingsMount(): void {
   setSettingsBudget(SETTINGS_FIRST_PAINT);
 }
 
-/** Reveal every deferred search candidate in small frame-sized batches. */
-function revealSearchSections(): void {
-  if (searchRevealFrame !== undefined) return;
-  searchRevealFrame = requestAnimationFrame(() => {
-    searchRevealFrame = undefined;
-    if (settingsQuery().trim() === "" || settingsBudget() >= settingsMounted) {
-      return;
-    }
-    // A prior retained Settings tree can report a match before the active tree
-    // reaches the same row. Never stop on that global report: admit all
-    // candidates quickly enough for an interactive search, without rebuilding
-    // the full page in one frame.
-    setSettingsBudget((budget) => Math.min(settingsMounted, budget + 4));
-    revealSearchSections();
-  });
-}
-
 /** Admit sections up to and including `ordinal`. Never gives one back. */
 function admitSection(ordinal: number): void {
   setSettingsBudget((budget) => (ordinal < budget ? budget : ordinal + 1));
@@ -3290,15 +3269,43 @@ function Section(props: {
     ),
   );
   const [mounted, setMounted] = createSignal(ordinal < settingsBudget());
+  const [searchRetained, setSearchRetained] = createSignal(false);
+  const corpusKey = () => `${i18n.locale}:${props.id}`;
+  const [indexedCorpus, setIndexedCorpus] = createSignal(settingsSearchCorpus.get(corpusKey()));
   createEffect(
-    () => ordinal < settingsBudget() || (settingsQuery().trim() !== "" && titleMatches()),
-    (admitted) => {
-      if (admitted) setMounted(true);
+    () => corpusKey(),
+    (key) => {
+      setIndexedCorpus(settingsSearchCorpus.get(key));
+    },
+  );
+  createEffect(
+    () => ({
+      query: settingsQuery().trim(),
+      indexed: indexedCorpus(),
+      admitted: ordinal < settingsBudget(),
+      titleMatched: titleMatches(),
+    }),
+    ({ query, indexed, admitted, titleMatched }) => {
+      if (query === "") {
+        setMounted(admitted || searchRetained());
+        return;
+      }
+      if (indexed === undefined) {
+        // The first search teaches the section its descendant accessible names.
+        // Once the nested indexer settles, non-matches immediately unmount.
+        setSearchRetained(false);
+        setMounted(true);
+        return;
+      }
+      const matched = titleMatched || matchesSearch(indexed);
+      setSearchRetained(matched);
+      setMounted(admitted || matched);
     },
   );
   onSettled(() => {
-    if (!shell) return;
-    const scroller = shell.closest(".az-scroll");
+    const root = shell;
+    if (!root) return;
+    const scroller = root.closest(".az-scroll");
     if (!scroller) {
       // No scroll container to measure against, so build rather than risk a
       // section that can never appear.
@@ -3306,8 +3313,8 @@ function Section(props: {
       return;
     }
     const check = (): void => {
-      if (mounted() || !shell) return;
-      const top = shell.getBoundingClientRect().top;
+      if (mounted()) return;
+      const top = root.getBoundingClientRect().top;
       const limit = scroller.getBoundingClientRect().bottom + SETTINGS_PREBUILD_PX;
       if (top <= limit) admitSection(ordinal);
     };
@@ -3316,6 +3323,15 @@ function Section(props: {
     // Returned, not `onCleanup`: Solid 2 forbids it inside `onSettled`.
     return () => scroller.removeEventListener("scroll", check);
   });
+  createEffect(
+    () => settingsQuery().trim() !== "" && (titleMatches() || hits().size > 0),
+    (matched) => {
+      // Sticky only until the next query. Clearing the discovery field must
+      // leave the action target mounted, without permanently retaining every
+      // unrelated section that search briefly admitted.
+      if (matched) setSearchRetained(true);
+    },
+  );
   const visible = () => settingsQuery().trim() === "" || titleMatches() || hits().size > 0;
   const report = (label: string, hit: boolean): void => {
     setHits((prev) => {
@@ -3355,6 +3371,22 @@ function Section(props: {
             dead control tree that slows every global theme/language update.
           */}
           <Show when={mounted() && !props.pending}>{props.children}</Show>
+          <Show
+            when={
+              mounted() &&
+              !props.pending &&
+              settingsQuery().trim() !== "" &&
+              indexedCorpus() === undefined
+            }
+          >
+            <SettingsSearchIndexer
+              root={() => shell}
+              onIndex={(corpus) => {
+                settingsSearchCorpus.set(corpusKey(), corpus);
+                setIndexedCorpus(corpus);
+              }}
+            />
+          </Show>
         </div>
       </Panel>
     </SearchScope>
@@ -3376,9 +3408,22 @@ function Row(props: {
   children: JSX.Element;
 }): JSX.Element {
   const scope = useContext(SearchScope);
-  const hit = createMemo(() =>
-    matchesSearch([props.label, props.hint ?? "", ...(props.searchTerms ?? [])].join(" ")),
-  );
+  let shell: HTMLDivElement | undefined;
+  const [domReady, setDomReady] = createSignal(false);
+  onSettled(() => {
+    setDomReady(true);
+  });
+  const hit = createMemo(() => {
+    domReady();
+    return matchesSearch(
+      [
+        props.label,
+        props.hint ?? "",
+        ...(props.searchTerms ?? []),
+        ...renderedSearchText(shell),
+      ].join(" "),
+    );
+  });
   // Reported rather than read: only the row knows its own words, and the
   // section needs to know whether any of them answered the search.
   createEffect(
@@ -3395,6 +3440,7 @@ function Row(props: {
 
   return (
     <div
+      ref={shell}
       class={`px-3.5 py-2.5 ${visible() ? "" : "hidden"} ${props.isLast ? "" : "border-az-hairline-soft border-b"} ${
         props.stack ? "flex flex-col gap-2" : "flex items-center gap-3"
       }`}
