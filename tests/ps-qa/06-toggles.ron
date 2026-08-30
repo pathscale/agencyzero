@@ -82,6 +82,16 @@
         expect: ValueChanges,
     ),
     (
+        id: "toggles-agent-settings-updates",
+        group: "toggles",
+        what: "agent permission to update application settings changes on its exact switch",
+        open: Some("Settings"),
+        hover: None,
+        click: Some("#settings-agent-settings-updates"),
+        subject: "#settings-agent-settings-updates",
+        expect: ValueChanges,
+    ),
+    (
         id: "toggles-profiling-restores",
         group: "toggles",
         what: "deep profiling permission returns to the fixture value",
@@ -109,6 +119,16 @@
         hover: None,
         click: Some("Inject AgencyZero and Prompt Syntax per turn"),
         subject: "Inject AgencyZero and Prompt Syntax per turn",
+        expect: ValueChanges,
+    ),
+    (
+        id: "toggles-agent-settings-updates-restores",
+        group: "toggles",
+        what: "agent settings permission returns to the fixture value",
+        open: Some("Settings"),
+        hover: None,
+        click: Some("#settings-agent-settings-updates"),
+        subject: "#settings-agent-settings-updates",
         expect: ValueChanges,
     ),
 ]
