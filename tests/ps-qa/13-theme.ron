@@ -408,6 +408,18 @@
         expect: TransparentBackground,
     ),
     (
+        id: "theme-glass-opacity-zero-clears-native-tint",
+        group: "theme",
+        what: "zero glass opacity clears the tint installed on the native transparent window",
+        open: Some("Settings"),
+        prepare: Some("Glass opacity"),
+        prepare_key: Some("Home"),
+        hover: None,
+        click: None,
+        subject: "#application-surface",
+        expect: TransparentWindowTint,
+    ),
+    (
         id: "theme-glass-opacity-solid-restores",
         group: "theme",
         what: "the glass opacity surface can return to a fully solid film",
