@@ -9,7 +9,7 @@
         open: Some("Settings"),
         hover: None,
         click: None,
-        subject: "button:Current language: English",
+        subject: "#settings-language--trigger",
         expect: PaintsNamed,
     ),
     (
@@ -22,8 +22,8 @@
         // Earlier Settings checks deliberately scroll deep into Appearance.
         // Judge the selected value where a person can actually see it, not
         // from the retained offscreen box above the scrollport.
-        reveal_before_capture: Some("button:Current language: English"),
-        subject: "button:Current language: English",
+        reveal_before_capture: Some("#settings-language--trigger"),
+        subject: "#settings-language--trigger",
         expect: InteriorInk,
     ),
     (
@@ -32,7 +32,7 @@
         what: "the shared language selector opens its standard dropdown menu",
         open: Some("Settings"),
         hover: None,
-        prepare: Some("button:Current language: English"),
+        prepare: Some("#settings-language--trigger"),
         prepare_unless: Some("menuitem:中文"),
         click: None,
         subject: "menuitem:中文",
@@ -44,7 +44,7 @@
         what: "Escape closes the language menu without changing the language",
         open: Some("Settings"),
         hover: None,
-        prepare: Some("button:Current language: English"),
+        prepare: Some("#settings-language--trigger"),
         prepare_unless: Some("menuitem:中文"),
         click: None,
         key: Some("Escape"),
@@ -58,10 +58,10 @@
         what: "choosing Chinese replaces the old-language control tree",
         open: Some("Settings"),
         hover: None,
-        prepare: Some("button:Current language: English"),
+        prepare: Some("#settings-language--trigger"),
         prepare_unless: Some("menuitem:中文"),
         click: Some("menuitem:中文"),
-        subject: "button:Current language: English",
+        subject: "Current language: English",
         expect: Vanishes,
     ),
     (
@@ -80,10 +80,10 @@
         what: "choosing English replaces the Chinese control tree",
         open: None,
         hover: None,
-        prepare: Some("button:当前语言: 中文"),
+        prepare: Some("#settings-language--trigger"),
         prepare_unless: Some("menuitem:English"),
         click: Some("menuitem:English"),
-        subject: "button:当前语言: 中文",
+        subject: "当前语言: 中文",
         expect: Vanishes,
     ),
     (
