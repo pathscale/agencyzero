@@ -80,13 +80,14 @@ const AGENT_IO_LIMIT = 500;
 
 const FALLBACK_EFFORT = "high";
 
-// Optimistic item and session mutations paint first; durable writes follow once
-// the renderer and semantic inspector have had a complete response window.
-// This is not the action's latency: the store is already updated when this
-// timer starts. Keeping it here gives every optimistic editor one contract.
-const OPTIMISTIC_PERSIST_AFTER_PAINT_MS = 900;
-const afterOptimisticPaint = () =>
-  new Promise<void>((resolve) => globalThis.setTimeout(resolve, OPTIMISTIC_PERSIST_AFTER_PAINT_MS));
+// Optimistic item and session mutations paint first; durable writes begin on
+// the next renderer frame. A fixed delay here made every write artificially
+// slow and left temporary IDs interactive for almost a second.
+const afterOptimisticPaint = (): Promise<void> =>
+  new Promise((resolve) => {
+    if (typeof requestAnimationFrame === "undefined") queueMicrotask(resolve);
+    else requestAnimationFrame(() => resolve());
+  });
 
 /** Schedule paint instrumentation only where a renderer owns a frame clock. */
 const afterFrame = (measure: () => void): void => {

@@ -1081,7 +1081,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
   const { state, actions } = useWorkspace();
   const [adding, setAdding] = createSignal(false);
   const [title, setTitle] = createSignal("");
-  const [lastCreatedTitle, setLastCreatedTitle] = createSignal<string | null>(null);
+  const [lastCreatedId, setLastCreatedId] = createSignal<string | null>(null);
   const [forkingId, setForkingId] = createSignal<string | null>(null);
   const alive = whileMounted();
   // Where the control that opened the dialog was, so it lands beside the row
@@ -1227,18 +1227,20 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
     setTitle("");
     setAdding(false);
     if (value) {
-      setLastCreatedTitle(value);
+      setLastCreatedId(null);
       void actions
         .createItem(props.projectId, value)
         .then(
           alive((item) => {
-            setFocusedRowId(item.id);
-            setLastCreatedTitle(null);
+            // Replacing the temporary row can clear its hover state. Retain
+            // the persisted row by its unique backend ID so its actions do
+            // not disappear between reveal and click.
+            setLastCreatedId(item.id);
           }),
         )
         .catch(
           alive((cause) => {
-            setLastCreatedTitle(null);
+            setLastCreatedId(null);
             log.error(`could not create the item: ${describeError(cause)}`);
           }),
         );
@@ -1551,6 +1553,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                       id={`project-${props.projectId}-item-${item.id}-status`}
                       type="button"
                       onClick={() => advance(item)}
+                      disabled={item.id.startsWith("optimistic-item-")}
                       aria-label={tx("Change the status of {name}", { name: item.title })}
                       title={`${statusSuffix(item.status)} — click for ${statusLabel(nextStatus(item.status))}`}
                       class="ml-1.5 flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-full transition-colors hover:bg-az-chip focus-visible:bg-az-chip"
@@ -1689,7 +1692,12 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                    * keeps the icons legible where they overlap a long title. These
                    * act on the row, they are not part of reading it.
                    */}
-                  <Show when={activeRowId() === item.id || lastCreatedTitle() === item.title}>
+                  <Show
+                    when={
+                      !item.id.startsWith("optimistic-item-") &&
+                      (activeRowId() === item.id || lastCreatedId() === item.id)
+                    }
+                  >
                     <div
                       class={`absolute inset-y-0 flex items-center justify-end gap-1 rounded-r-[9px] bg-gradient-to-l from-60% from-base-300 to-transparent pr-2 pl-6 ${
                         item.status === "questions" ? "right-[26px]" : "right-0"
