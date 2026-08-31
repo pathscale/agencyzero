@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/zsh
 #
 # Measure an az-gui build's idle CPU as CPU time consumed, not as a percentage.
 #
@@ -64,7 +64,7 @@ sample() {
         'BEGIN { printf "%-40s %6.2fs CPU over %ss wall  (%5.1f%% of a core, rss %dMB)\n", l, b - a, w, (b - a) * 100 / w, r / 1024 }'
 }
 
-bench() { (cd "$repo" && "${PS_QA:-$(dirname "$0")/../../ps-qa/target/release/ps-qa}" "$@" >/dev/null 2>&1); }
+bench() { (cd "$repo" && "${PS_QA:-$(dirname "$0")/../../ps-observability/target/release/ps-qa}" "$@" >/dev/null 2>&1); }
 
 log=$(mktemp -t azidle)
 # Performance instrumentation remains environment-driven; inspector control

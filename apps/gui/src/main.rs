@@ -291,6 +291,8 @@ const IMPLEMENTED: &[&str] = &[
     "get_study_summary",
     "export_study_events",
     "clear_study_events",
+    "frontend_subscriptions_ready",
+    "confirm_agent_restart",
     "list_agent_status",
     "list_models",
     "pricing_table",
@@ -361,6 +363,13 @@ pub(crate) struct AppState {
     /// run to finish. This is process-local on purpose: a crash must not leave
     /// a stale restart command to execute on the next launch.
     agent_restart_scheduled: std::sync::atomic::AtomicBool,
+    /// One frontend queue barrier for the scheduled agent restart. The token
+    /// prevents a stale window event from confirming a newer request.
+    agent_restart_confirmation: tokio::sync::Mutex<Option<AgentRestartConfirmation>>,
+    /// Becomes true once the frontend has installed every backend event
+    /// subscription. Restart-resume waits on this exact handshake instead of
+    /// guessing how long the window needs to boot.
+    frontend_subscriptions_ready: tokio::sync::watch::Sender<bool>,
     /// Kept so `set_data_location` can write the pointer beside the settings.
     config_dir: std::path::PathBuf,
     /// Kept so `get_data_location` can re-resolve the pointer against the same
@@ -388,6 +397,11 @@ struct RestartResume {
     permission: String,
     effort: String,
     prompt: String,
+}
+
+struct AgentRestartConfirmation {
+    token: String,
+    confirmed: tokio::sync::oneshot::Sender<()>,
 }
 
 fn restart_resume_path(config_dir: &std::path::Path) -> PathBuf {
@@ -482,10 +496,13 @@ fn take_restart_resume(config_dir: &std::path::Path) -> Option<RestartResume> {
 }
 
 async fn resume_after_restart(app: AppHandle, marker: RestartResume) {
-    // Let the webview subscribe before the resumed run begins emitting. The
-    // user message itself is durable, so a slower window still catches up.
-    tokio::time::sleep(std::time::Duration::from_millis(1_500)).await;
     let state = app.state::<AppState>();
+    let mut frontend_ready = state.frontend_subscriptions_ready.subscribe();
+    while !*frontend_ready.borrow_and_update() {
+        if frontend_ready.changed().await.is_err() {
+            return;
+        }
+    }
     let project_id = if marker.project_id.is_empty() {
         state
             .tables
@@ -536,6 +553,28 @@ async fn resume_after_restart(app: AppHandle, marker: RestartResume) {
     }
 }
 
+/// Acknowledge that the frontend can no longer miss a backend lifecycle event.
+#[tauri::command]
+fn frontend_subscriptions_ready(state: State<'_, AppState>) {
+    state.frontend_subscriptions_ready.send_replace(true);
+}
+
+/// Confirm that frontend-owned queued work has had first claim on the free slot.
+#[tauri::command]
+async fn confirm_agent_restart(token: String, state: State<'_, AppState>) -> Result<(), String> {
+    let confirmation = {
+        let mut pending = state.agent_restart_confirmation.lock().await;
+        if pending.as_ref().map(|pending| pending.token.as_str()) != Some(token.as_str()) {
+            return Err("the agent restart confirmation is stale".into());
+        }
+        pending.take().expect("matching confirmation exists")
+    };
+    confirmation
+        .confirmed
+        .send(())
+        .map_err(|_| "the scheduled agent restart is no longer waiting".to_string())
+}
+
 impl AppState {
     pub(crate) fn live_run_count(&self) -> usize {
         self.active.len()
@@ -581,8 +620,9 @@ impl AppState {
 ///
 /// The directive is applied from inside the run it belongs to, so executing it
 /// immediately would tear down the process before that run releases its slot
-/// and persists its final events. A short stable-idle window also lets a queued
-/// owner message acquire the slot first; in that case the restart waits again.
+/// and persists its final events. The frontend owns the prompt queue, so it
+/// confirms the restart only after queued owner work has had first claim on the
+/// exact slot-release event; Rust then verifies the real run registry is idle.
 /// Nothing is persisted and the angel remains unaware of networks, settings,
 /// or Prompt Syntax.
 pub(crate) fn schedule_agent_restart(
@@ -611,27 +651,41 @@ pub(crate) fn schedule_agent_restart(
     let actor = actor.to_string();
     tauri::async_runtime::spawn(async move {
         let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(600);
-        loop {
-            if tokio::time::Instant::now() >= deadline {
-                let state = handle.state::<AppState>();
-                state
-                    .agent_restart_scheduled
-                    .store(false, std::sync::atomic::Ordering::Release);
-                let message = "agent restart expired while other runs remained active";
-                crate::log!(log::Level::Warn, "boot", "{message}");
-                let _ = handle.emit("app:restart-failed", message);
-                return;
-            }
-            if handle.state::<AppState>().live_run_count() == 0 {
-                // Require a stable quiet interval. The frontend starts queued
-                // turns after 250 ms, so 500 ms observes that handoff.
-                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-                if handle.state::<AppState>().live_run_count() == 0 {
-                    break;
-                }
-            } else {
-                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-            }
+        let token = uuid::Uuid::new_v4().to_string();
+        let (confirmed, confirmation) = tokio::sync::oneshot::channel();
+        let ready = async {
+            let state = handle.state::<AppState>();
+            *state.agent_restart_confirmation.lock().await = Some(AgentRestartConfirmation {
+                token: token.clone(),
+                confirmed,
+            });
+            handle
+                .emit(
+                    "app:restart-scheduled",
+                    serde_json::json!({ "token": token }),
+                )
+                .map_err(|error| format!("could not announce the scheduled restart: {error}"))?;
+            tokio::time::timeout_at(deadline, confirmation)
+                .await
+                .map_err(|_| {
+                    "agent restart expired while frontend work remained queued".to_string()
+                })?
+                .map_err(|_| "the frontend restart confirmation was dropped".to_string())?;
+            tokio::time::timeout_at(deadline, state.active.wait_until_idle())
+                .await
+                .map_err(|_| "agent restart expired while runs remained active".to_string())??;
+            Ok::<(), String>(())
+        }
+        .await;
+        if let Err(message) = ready {
+            let state = handle.state::<AppState>();
+            state.agent_restart_confirmation.lock().await.take();
+            state
+                .agent_restart_scheduled
+                .store(false, std::sync::atomic::Ordering::Release);
+            crate::log!(log::Level::Warn, "boot", "{message}");
+            let _ = handle.emit("app:restart-failed", message);
+            return;
         }
 
         // Arm automatic continuation only when this agent-authored lifecycle
@@ -2349,6 +2403,8 @@ fn main() {
             study::get_study_summary,
             study::export_study_events,
             study::clear_study_events,
+            frontend_subscriptions_ready,
+            confirm_agent_restart,
             relaunch_app,
             quit_app,
             quit_app_and_proxy,
@@ -2657,6 +2713,8 @@ fn main() {
                 exit_drain_succeeded: std::sync::atomic::AtomicBool::new(false),
                 persistence_failure: Arc::new(std::sync::RwLock::new(None)),
                 agent_restart_scheduled: std::sync::atomic::AtomicBool::new(false),
+                agent_restart_confirmation: tokio::sync::Mutex::new(None),
+                frontend_subscriptions_ready: tokio::sync::watch::channel(false).0,
                 config_dir,
                 data_dir,
                 location,

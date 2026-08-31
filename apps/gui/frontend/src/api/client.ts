@@ -398,6 +398,10 @@ export interface AgencyZeroApi {
    * replaced.
    */
   relaunchApp(): Promise<void>;
+  /** Confirm every backend event subscription is installed for this boot. */
+  frontendSubscriptionsReady(): Promise<void>;
+  /** Release the backend restart barrier after frontend-owned work drains. */
+  confirmAgentRestart(token: string): Promise<void>;
   /** Where the Home task manager's conversation stands. */
   getTaskManager(): Promise<TaskManagerState>;
   /**
@@ -415,6 +419,8 @@ export interface AgencyZeroApi {
 
 /** Every broadcast the window listens for, and what rides on it. */
 export interface AppEvents {
+  /** An agent-authored restart is waiting for frontend-owned queued work. */
+  "app:restart-scheduled": { token: string };
   "settings:updated": GlobalSettings;
   "project:created": Project;
   "project:updated": Project;

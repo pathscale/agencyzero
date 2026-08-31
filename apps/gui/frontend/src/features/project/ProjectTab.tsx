@@ -926,7 +926,7 @@ function SessionChip(props: { sessionId: string | null }): JSX.Element {
     <Show
       when={props.sessionId}
       fallback={
-        <span class="shrink-0 font-mono text-az-faint text-ui-caption-sm">
+        <span class="shrink-0 font-mono text-az-body text-ui-caption-sm">
           {tx("session · none yet")}
         </span>
       }
@@ -934,9 +934,9 @@ function SessionChip(props: { sessionId: string | null }): JSX.Element {
       {(id) => (
         <span
           title={id()}
-          class="flex shrink-0 items-center gap-1 font-mono text-az-faint text-ui-caption-sm"
+          class="flex shrink-0 items-center gap-1 font-mono text-az-body text-ui-caption-sm"
         >
-          <span class="text-az-faint">{tx("session ·")}</span>
+          <span class="text-az-body">{tx("session ·")}</span>
           {id().slice(0, 8)}
           <Button
             id={`session-${encodeURIComponent(id())}-copy`}

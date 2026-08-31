@@ -412,7 +412,7 @@ function HomeItemSortControls(): JSX.Element {
         id="home-sort-by"
         type="button"
         onClick={nextSort}
-        class="rounded-md border border-az-hairline bg-az-inset px-1.5 py-0.5 font-medium text-az-muted text-ui-caption-sm transition-colors hover:text-az-strong"
+        class="rounded-md border border-az-hairline bg-az-inset px-1.5 py-0.5 font-medium text-az-body text-ui-caption-sm transition-colors hover:text-az-strong"
         aria-label={
           sortBy() === "status"
             ? tx("Sort Home by status; choose time")

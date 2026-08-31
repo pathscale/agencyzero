@@ -6350,6 +6350,23 @@ impl ActiveRuns {
             released.await;
         }
     }
+
+    pub async fn wait_until_released(&self, project_id: &str) -> Result<(), String> {
+        loop {
+            let released = self.released.notified();
+            tokio::pin!(released);
+            released.as_mut().enable();
+            if !self
+                .runs
+                .lock()
+                .map_err(|_| "the run registry is unavailable".to_string())?
+                .contains_key(project_id)
+            {
+                return Ok(());
+            }
+            released.await;
+        }
+    }
 }
 
 fn run_ready_for_followup(run: &ActiveRun) -> bool {
@@ -9074,20 +9091,17 @@ pub async fn delete_project(
             "projects",
             "{id}: stopping the live run before deleting"
         );
-        // Teardown is normally near-instant; the bound only exists so a hung
-        // agent cannot hold the delete hostage. The tombstone check in
-        // `drive_run` catches anything that outlives it.
-        for _ in 0..100 {
-            let released = state
-                .active
-                .lock()
-                .map(|active| !active.contains_key(&id))
-                .unwrap_or(true);
-            if released {
-                break;
-            }
-            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-        }
+        // Teardown is normally near-instant. Wait on the exact slot-release
+        // signal rather than sampling the registry and adding up to 100 ms of
+        // avoidable latency. Refuse the delete if a hung provider keeps the
+        // slot: its rows remain visible and retryable instead of being removed
+        // while the provider can still write to them.
+        tokio::time::timeout(
+            std::time::Duration::from_secs(10),
+            state.active.wait_until_released(&id),
+        )
+        .await
+        .map_err(|_| "the live run did not stop, so the project was not deleted".to_string())??;
     }
 
     state
@@ -10034,7 +10048,7 @@ pub async fn send_message(
     enum SendRoute {
         Inject(tokio::sync::mpsc::UnboundedSender<InjectedMessage>),
         Start {
-            reservation: RunReservation,
+            reservation: Box<RunReservation>,
             cancel: tokio::sync::watch::Receiver<bool>,
             inject_rx: tokio::sync::mpsc::UnboundedReceiver<InjectedMessage>,
             ready_for_followup: std::sync::Arc<std::sync::atomic::AtomicBool>,
@@ -10113,12 +10127,12 @@ pub async fn send_message(
                 },
             );
             SendRoute::Start {
-                reservation: RunReservation {
+                reservation: Box::new(RunReservation {
                     active: state.active.clone(),
                     app: Some(app.clone()),
                     project_id: input.project_id.clone(),
                     reservation_id,
-                },
+                }),
                 cancel: cancel_rx,
                 inject_rx,
                 ready_for_followup,
@@ -10171,6 +10185,7 @@ pub async fn send_message(
         }
         return Ok(user_message);
     };
+    let reservation = *reservation;
 
     let user_message =
         user_message_for_send(&app, &state, &input, agent_name, &model, &permission, false).await?;
@@ -15017,6 +15032,54 @@ mod tests {
             .await
             .expect("wait task joins")
             .expect("registry waits");
+    }
+
+    #[tokio::test]
+    async fn run_registry_wakes_for_one_project_while_another_keeps_running() {
+        let active = std::sync::Arc::new(ActiveRuns::default());
+        for (project_id, reservation_id) in [
+            ("project-delete", "reservation-delete"),
+            ("project-stays", "reservation-stays"),
+        ] {
+            let (cancel, _) = tokio::sync::watch::channel(false);
+            active.lock().expect("registry locks").insert(
+                project_id.into(),
+                ActiveRun {
+                    reservation_id: reservation_id.into(),
+                    cancel,
+                    agent: Agent::Codex,
+                    workspace_roots: Vec::new(),
+                    ready_for_followup: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(
+                        false,
+                    )),
+                    inject: None,
+                },
+            );
+        }
+        let waiter = tokio::spawn({
+            let active = active.clone();
+            async move { active.wait_until_released("project-delete").await }
+        });
+        tokio::task::yield_now().await;
+        assert!(!waiter.is_finished());
+
+        drop(RunReservation {
+            active: active.clone(),
+            app: None,
+            project_id: "project-delete".into(),
+            reservation_id: "reservation-delete".into(),
+        });
+
+        waiter
+            .await
+            .expect("wait task joins")
+            .expect("project release waits");
+        assert!(
+            active
+                .lock()
+                .expect("registry locks")
+                .contains_key("project-stays")
+        );
     }
 
     #[test]

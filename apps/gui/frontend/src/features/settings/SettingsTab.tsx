@@ -1225,7 +1225,7 @@ export function SettingsTab(): JSX.Element {
                       class={`rounded-full px-3 py-1 font-semibold text-ui-caption transition-colors ${
                         prefs.colorMode === option.value
                           ? "bg-primary text-primary-content"
-                          : "text-az-muted hover:bg-az-hover hover:text-az-title"
+                          : "text-az-body hover:bg-az-hover hover:text-az-title"
                       }`}
                     >
                       {option.label}
@@ -1257,7 +1257,7 @@ export function SettingsTab(): JSX.Element {
                       class={`flex size-7 items-center justify-center rounded-full font-semibold text-ui-caption-sm transition-colors ${
                         prefs.uiSize === option.value
                           ? "bg-primary text-primary-content"
-                          : "text-az-muted hover:bg-az-hover hover:text-az-title"
+                          : "text-az-body hover:bg-az-hover hover:text-az-title"
                       }`}
                     >
                       {option.label}
