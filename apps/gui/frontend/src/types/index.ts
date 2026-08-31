@@ -8,7 +8,7 @@
  */
 
 /** Which screen a tab shows. `home` is not closable; the rest are. */
-export type TabKind = "home" | "draft" | "settings" | "project" | "analytics";
+export type TabKind = "home" | "draft" | "settings" | "project" | "analytics" | "design";
 
 /** One enum for both layers: a Project and its ProjectItems share it. */
 /**

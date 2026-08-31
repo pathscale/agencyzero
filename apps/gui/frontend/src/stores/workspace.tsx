@@ -2586,6 +2586,19 @@ export function createWorkspace() {
     focus("analytics", true);
   }
 
+  /** The pencil opens Design as a real tab, the same way the gauge opens Analytics. */
+  function openDesign(): void {
+    if (!state.tabs.some((tab) => tab.kind === "design")) {
+      setState((d) => {
+        d.tabs = ((tabs) => [
+          ...tabs,
+          { ...HOME_TAB, key: "design", kind: "design", label: "Design" },
+        ])(d.tabs);
+      });
+    }
+    focus("design", true);
+  }
+
   /** One draft at a time: a second "+" focuses the Untitled tab already open. */
   function openDraft(): void {
     const existing = state.tabs.find((tab) => tab.kind === "draft");
@@ -3281,6 +3294,7 @@ export function createWorkspace() {
     deferOnboarding,
     completeOnboarding,
     openAnalytics,
+    openDesign,
     openDraft,
     closeTab,
     setTabModel,
