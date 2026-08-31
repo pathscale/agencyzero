@@ -564,6 +564,8 @@ export interface AppEvents {
     stop: string;
     exitCode: number | null;
   };
+  /** The backend removed the exact reservation that owned this project slot. */
+  "run:slot_released": { projectId: string };
   /** A WorkTable worker became terminal; the window must warn immediately. */
   "persistence:failed": { message: string };
 }

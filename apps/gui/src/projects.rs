@@ -6299,7 +6299,58 @@ pub enum InjectedMessage {
     },
 }
 
-pub type ActiveRuns = std::sync::Mutex<std::collections::HashMap<String, ActiveRun>>;
+#[derive(Default)]
+pub struct ActiveRuns {
+    runs: std::sync::Mutex<std::collections::HashMap<String, ActiveRun>>,
+    released: tokio::sync::Notify,
+}
+
+impl ActiveRuns {
+    pub fn lock(
+        &self,
+    ) -> std::sync::LockResult<
+        std::sync::MutexGuard<'_, std::collections::HashMap<String, ActiveRun>>,
+    > {
+        self.runs.lock()
+    }
+
+    pub fn len(&self) -> usize {
+        self.runs.lock().map(|runs| runs.len()).unwrap_or_default()
+    }
+
+    fn release(&self, project_id: &str, reservation_id: &str) -> bool {
+        let released = self.runs.lock().is_ok_and(|mut runs| {
+            let still_ours = runs
+                .get(project_id)
+                .is_some_and(|run| run.reservation_id == reservation_id);
+            if still_ours {
+                runs.remove(project_id);
+            }
+            still_ours
+        });
+        if released {
+            self.released.notify_waiters();
+        }
+        released
+    }
+
+    pub async fn wait_until_idle(&self) -> Result<(), String> {
+        loop {
+            let released = self.released.notified();
+            tokio::pin!(released);
+            released.as_mut().enable();
+            if self
+                .runs
+                .lock()
+                .map_err(|_| "the run registry is unavailable".to_string())?
+                .is_empty()
+            {
+                return Ok(());
+            }
+            released.await;
+        }
+    }
+}
 
 fn run_ready_for_followup(run: &ActiveRun) -> bool {
     run.ready_for_followup
@@ -6402,19 +6453,28 @@ const BUSY_WITH_RUN_ALREADY: &str = "a run is already active in this project —
 /// would refuse every later send for the project.
 pub struct RunReservation {
     active: std::sync::Arc<ActiveRuns>,
+    app: Option<AppHandle>,
     project_id: String,
     reservation_id: String,
 }
 
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RunSlotReleased {
+    project_id: String,
+}
+
 impl Drop for RunReservation {
     fn drop(&mut self) {
-        if let Ok(mut active) = self.active.lock() {
-            let still_ours = active
-                .get(&self.project_id)
-                .is_some_and(|run| run.reservation_id == self.reservation_id);
-            if still_ours {
-                active.remove(&self.project_id);
-            }
+        if self.active.release(&self.project_id, &self.reservation_id)
+            && let Some(app) = &self.app
+        {
+            let _ = app.emit(
+                "run:slot_released",
+                RunSlotReleased {
+                    project_id: self.project_id.clone(),
+                },
+            );
         }
     }
 }
@@ -7898,6 +7958,7 @@ pub async fn compact_project(
         (
             RunReservation {
                 active: state.active.clone(),
+                app: Some(app.clone()),
                 project_id: project_id.clone(),
                 reservation_id,
             },
@@ -10054,6 +10115,7 @@ pub async fn send_message(
             SendRoute::Start {
                 reservation: RunReservation {
                     active: state.active.clone(),
+                    app: Some(app.clone()),
                     project_id: input.project_id.clone(),
                     reservation_id,
                 },
@@ -10458,6 +10520,7 @@ pub async fn sync_project(
             (
                 RunReservation {
                     active: state.active.clone(),
+                    app: Some(app.clone()),
                     project_id: project_id.clone(),
                     reservation_id,
                 },
@@ -14892,23 +14955,22 @@ mod tests {
     #[test]
     fn an_old_driver_cannot_release_a_newer_run_slot() {
         let (cancel, _) = tokio::sync::watch::channel(false);
-        let active =
-            std::sync::Arc::new(std::sync::Mutex::new(std::collections::HashMap::from([(
-                "project-race".to_string(),
-                ActiveRun {
-                    reservation_id: "reservation-new".into(),
-                    cancel,
-                    agent: Agent::Codex,
-                    workspace_roots: vec!["/repo".into()],
-                    ready_for_followup: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(
-                        true,
-                    )),
-                    inject: None,
-                },
-            )])));
+        let active = std::sync::Arc::new(ActiveRuns::default());
+        active.lock().expect("registry locks").insert(
+            "project-race".to_string(),
+            ActiveRun {
+                reservation_id: "reservation-new".into(),
+                cancel,
+                agent: Agent::Codex,
+                workspace_roots: vec!["/repo".into()],
+                ready_for_followup: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true)),
+                inject: None,
+            },
+        );
 
         drop(RunReservation {
             active: active.clone(),
+            app: None,
             project_id: "project-race".into(),
             reservation_id: "reservation-old".into(),
         });
@@ -14920,6 +14982,41 @@ mod tests {
                 .contains_key("project-race"),
             "finishing the old run must not remove its replacement"
         );
+    }
+
+    #[tokio::test]
+    async fn run_registry_wakes_when_the_matching_reservation_releases() {
+        let (cancel, _) = tokio::sync::watch::channel(false);
+        let active = std::sync::Arc::new(ActiveRuns::default());
+        active.lock().expect("registry locks").insert(
+            "project-idle".into(),
+            ActiveRun {
+                reservation_id: "reservation-idle".into(),
+                cancel,
+                agent: Agent::Codex,
+                workspace_roots: Vec::new(),
+                ready_for_followup: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+                inject: None,
+            },
+        );
+        let waiter = tokio::spawn({
+            let active = active.clone();
+            async move { active.wait_until_idle().await }
+        });
+        tokio::task::yield_now().await;
+        assert!(!waiter.is_finished());
+
+        drop(RunReservation {
+            active,
+            app: None,
+            project_id: "project-idle".into(),
+            reservation_id: "reservation-idle".into(),
+        });
+
+        waiter
+            .await
+            .expect("wait task joins")
+            .expect("registry waits");
     }
 
     #[test]
@@ -14956,7 +15053,8 @@ mod tests {
         let (cancel, _) = tokio::sync::watch::channel(false);
         let ready = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
         let (inject, mut injected) = tokio::sync::mpsc::unbounded_channel();
-        let active = std::sync::Mutex::new(std::collections::HashMap::from([(
+        let active = ActiveRuns::default();
+        active.lock().expect("registry locks").insert(
             "project-review".to_string(),
             ActiveRun {
                 reservation_id: "reservation-review".into(),
@@ -14966,7 +15064,7 @@ mod tests {
                 ready_for_followup: ready,
                 inject: Some(inject),
             },
-        )]));
+        );
         let markdown =
             "## Finding\n\n`wait_for_failure` can hang.\n\n```rust\npending().await\n```";
 

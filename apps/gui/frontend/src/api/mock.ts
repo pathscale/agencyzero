@@ -787,6 +787,7 @@ export function createMockApi(): AgencyZeroApi {
         stop: "canceled",
         exitCode: null,
       });
+      emit("run:slot_released", { projectId });
       return settle(undefined);
     },
 
