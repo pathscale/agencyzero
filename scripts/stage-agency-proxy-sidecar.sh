@@ -1,12 +1,12 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#!/usr/bin/env sh
+set -eu
 
 repo_root=$(git rev-parse --show-toplevel)
 
 # `cargo pkgid` only reads an existing resolution. CI intentionally does not
 # commit Cargo.lock, so establish that resolution before asking for a package
 # id. A developer's existing ignored lockfile remains untouched.
-if [[ ! -f "$repo_root/Cargo.lock" ]]; then
+if [ ! -f "$repo_root/Cargo.lock" ]; then
   cargo generate-lockfile
 fi
 
@@ -18,12 +18,15 @@ proxy_version=$(cargo pkgid -p agency-proxy-client)
 proxy_version=${proxy_version##*@}
 # Shape-check, not just non-empty: a pkgid form without an `@` would survive
 # the expansion whole and get passed to `cargo install --version`.
-if [[ ! $proxy_version =~ ^[0-9]+\.[0-9]+ ]]; then
-  echo "could not read the agency-proxy version (got '$proxy_version')" >&2
-  exit 1
-fi
+case "$proxy_version" in
+  [0-9]*.[0-9]*) ;;
+  *)
+    echo "could not read the agency-proxy version (got '$proxy_version')" >&2
+    exit 1
+    ;;
+esac
 host_target=$(rustc -vV | sed -n 's/^host: //p')
-if [[ -z "$host_target" ]]; then
+if [ -z "$host_target" ]; then
   echo "could not determine the Rust host target" >&2
   exit 1
 fi

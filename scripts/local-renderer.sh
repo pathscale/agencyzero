@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/usr/bin/env sh
 # Run a cargo command against renderer working checkouts instead of releases.
 #
 #     scripts/local-renderer.sh check -p az-gui --features blitz-runtime
@@ -11,12 +11,12 @@
 # in `apps/gui/Cargo.toml` and they rotted unseen until a macOS release build
 # found out. Now the default exercises published ranges and this is reached for only
 # while renderer work is in flight.
-set -euo pipefail
+set -eu
 
-root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 config="$root/.cargo/local-renderer.toml"
 
-if [[ ! -f "$config" ]]; then
+if [ ! -f "$config" ]; then
     cat >&2 <<MSG
 $config does not exist.
 
@@ -29,7 +29,7 @@ MSG
 fi
 
 for checkout in ps-anyrender ps-blitz tauri-runtime-blitz; do
-    if [[ ! -d "$root/../$checkout" ]]; then
+    if [ ! -d "$root/../$checkout" ]; then
         echo "missing checkout: $root/../$checkout" >&2
         echo "the redirect needs all three beside this repository" >&2
         exit 1
@@ -52,4 +52,15 @@ restore() {
 }
 trap restore EXIT INT TERM
 
-cargo "$1" --config "$config" "${@:2}"
+if [ "$#" -eq 0 ]; then
+    echo "usage: $0 <cargo-command> [args...]" >&2
+    exit 2
+fi
+cargo_command=$1
+shift
+# A compatible older registry release may already be recorded in the ignored
+# local lockfile. Merely supplying [patch] does not force Cargo to replace that
+# resolution, so resolve the patch graph first. The trap restores the original
+# lockfile after both this update and the requested command.
+cargo update --config "$config"
+cargo "$cargo_command" --config "$config" "$@"

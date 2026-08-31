@@ -1,6 +1,11 @@
-#!/bin/sh
+#!/usr/bin/env sh
 
 set -eu
+
+if [ "$(uname -s)" != "Darwin" ]; then
+  echo "local-delivery.sh supports macOS only (it builds and signs .app bundles)" >&2
+  exit 1
+fi
 
 repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 mode=${1:-verify}
@@ -104,13 +109,15 @@ quit_running_bundle() {
 
   # Ten seconds is a graceful shutdown that has finished draining, not a
   # deadline the app is racing: it flushes and exits well inside that.
-  for _ in $(seq 1 100); do
+  quit_attempt=0
+  while [ "$quit_attempt" -lt 100 ]; do
     pids=$(pgrep -f "$executable" 2>/dev/null || true)
     if [ -z "$pids" ]; then
       echo "==> it quit"
       return 0
     fi
     sleep 0.1
+    quit_attempt=$((quit_attempt + 1))
   done
 
   echo "$(basename "$bundle") did not quit after SIGTERM." >&2
