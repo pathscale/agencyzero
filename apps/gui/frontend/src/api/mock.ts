@@ -1270,9 +1270,7 @@ export function createMockApi(): AgencyZeroApi {
       return settle(browseView());
     },
     browseDebugLog: (since) =>
-      settle(
-        browseLog.filter((entry) => since === undefined || entry.seq > since),
-      ),
+      settle(browseLog.filter((entry) => since === undefined || entry.seq > since)),
 
     async on<E extends keyof AppEvents>(
       event: E,
@@ -1321,8 +1319,12 @@ let browseActive = 0;
 const browseTabs: MockBrowseTab[] = [
   { id: 0, history: [{ url: BROWSE_BLANK, title: "" }], current: 0, status: "empty" },
 ];
-const browseLog: { seq: number; level: "info" | "warn" | "error"; source: string; message: string }[] =
-  [];
+const browseLog: {
+  seq: number;
+  level: "info" | "warn" | "error";
+  source: string;
+  message: string;
+}[] = [];
 
 /**
  * The same address policy the Rust applies, and it has to be the same: a UI
@@ -1335,7 +1337,8 @@ function browseUrlFrom(input: string): string | null {
   if (/^[a-z][a-z0-9+.-]*:/i.test(text)) return text;
   if (/\s/.test(text)) return null;
   const host = text.split(/[/?#]/)[0].split(":")[0];
-  const bare = host === "localhost" || (host.includes(".") && !host.startsWith(".") && !host.endsWith("."));
+  const bare =
+    host === "localhost" || (host.includes(".") && !host.startsWith(".") && !host.endsWith("."));
   return bare ? `https://${text}` : null;
 }
 
@@ -1345,7 +1348,12 @@ function browseVisit(tab: MockBrowseTab, url: string): void {
   tab.history.push({ url, title: "" });
   tab.current = tab.history.length - 1;
   tab.status = "loaded";
-  browseLog.push({ seq: browseLog.length, level: "info", source: "nav", message: `tab ${tab.id}: ${url}` });
+  browseLog.push({
+    seq: browseLog.length,
+    level: "info",
+    source: "nav",
+    message: `tab ${tab.id}: ${url}`,
+  });
 }
 
 function browseView(): BrowseView {
@@ -1372,4 +1380,3 @@ function browseView(): BrowseView {
     canRender: false,
   };
 }
-

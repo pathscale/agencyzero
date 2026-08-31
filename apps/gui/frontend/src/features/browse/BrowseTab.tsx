@@ -1,3 +1,4 @@
+import { Input } from "@pathscale/ui";
 import type { JSX } from "@solidjs/web";
 import { createSignal, For, onCleanup, onSettled, Show } from "solid-js";
 import { Button } from "~/components/Button";
@@ -55,7 +56,10 @@ export function BrowseTab(): JSX.Element {
   };
 
   const refresh = (): void => {
-    void actions.browseState().then(alive(adopt)).catch(alive(() => setView(null)));
+    void actions
+      .browseState()
+      .then(alive(adopt))
+      .catch(alive(() => setView(null)));
   };
 
   onSettled(() => {
@@ -70,9 +74,11 @@ export function BrowseTab(): JSX.Element {
     // disposed scope — which in Solid 2 halts reactivity for the whole app,
     // not just for this component.
     let unlisten: (() => void) | undefined;
-    void actions.onBrowseState(refresh).then(alive((stop: () => void) => {
-      unlisten = stop;
-    }));
+    void actions.onBrowseState(refresh).then(
+      alive((stop: () => void) => {
+        unlisten = stop;
+      }),
+    );
     onCleanup(() => unlisten?.());
   });
 
@@ -122,7 +128,13 @@ export function BrowseTab(): JSX.Element {
               >
                 {tab.title}
               </Button>
+              {/*
+                `role="img"`, because a bare span carries no role and an
+                aria-label on a roleless element is not announced. The dot is
+                the only thing that says how the last load went.
+              */}
               <span
+                role="img"
                 aria-label={tx("Status: {status}", { status: tab.status })}
                 class={`size-[6px] shrink-0 rounded-full ${STATUS_TONE[tab.status]}`}
               />
@@ -196,7 +208,16 @@ export function BrowseTab(): JSX.Element {
         >
           <Icon name="refresh-cw" class="text-ui-detail" />
         </Button>
-        <input
+        {/*
+          `Input.Field`, not a bare HTML input element.
+          `scripts/check-ui-controls.ts` bans the raw elements outright and
+          requires every value-bearing control to be one the QA suite already
+          drives — otherwise this ships an address bar that no rendered test
+          can type into. The ban is a line regex, so it also catches the
+          element named in a comment; that is why this sentence spells it out
+          rather than showing it.
+        */}
+        <Input.Field
           id="browse-address"
           type="text"
           value={address()}
