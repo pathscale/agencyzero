@@ -6,6 +6,7 @@ members = [
     "crates/mcp-proxy",
     "crates/wt-migrate",
     "crates/agency-tools",
+    "crates/browse-core",
 ]
 
 [workspace.package]
@@ -15,6 +16,8 @@ publish = false
 
 [workspace.dependencies]
 az-core = { path = "crates/core" }
+# Browser policy shared with chuzz; see crates/browse-core/src/lib.rs.
+ps-browse-core = { path = "crates/browse-core" }
 
 # One AgencyProxy release ships the client and the protocol together, and a
 # sidecar built from a client that disagrees with the protocol fails at connect
