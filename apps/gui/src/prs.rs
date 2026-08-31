@@ -27,6 +27,7 @@ use crate::{AppHandle, AppState};
 #[derive(Default)]
 pub(crate) struct ActiveRefreshes {
     projects: std::sync::Mutex<std::collections::HashSet<String>>,
+    finished: tokio::sync::Notify,
 }
 
 impl ActiveRefreshes {
@@ -41,11 +42,21 @@ impl ActiveRefreshes {
         })
     }
 
-    pub(crate) fn is_empty(&self) -> Result<bool, String> {
-        self.projects
-            .lock()
-            .map(|projects| projects.is_empty())
-            .map_err(|_| "the pull-request refresh tracker is unavailable".to_string())
+    pub(crate) async fn wait_until_empty(&self) -> Result<(), String> {
+        loop {
+            let finished = self.finished.notified();
+            tokio::pin!(finished);
+            finished.as_mut().enable();
+            if self
+                .projects
+                .lock()
+                .map_err(|_| "the pull-request refresh tracker is unavailable".to_string())?
+                .is_empty()
+            {
+                return Ok(());
+            }
+            finished.await;
+        }
     }
 }
 
@@ -56,8 +67,13 @@ struct RefreshLease {
 
 impl Drop for RefreshLease {
     fn drop(&mut self) {
-        if let Ok(mut projects) = self.active.projects.lock() {
-            projects.remove(&self.project_id);
+        let removed = self
+            .active
+            .projects
+            .lock()
+            .is_ok_and(|mut projects| projects.remove(&self.project_id));
+        if removed {
+            self.active.finished.notify_waiters();
         }
     }
 }
@@ -839,8 +855,27 @@ mod tests {
         drop(first);
         assert!(
             active.begin("project").is_some(),
-            "the next polling interval can refresh after completion"
+            "a later refresh can start after completion"
         );
+    }
+
+    #[tokio::test]
+    async fn persistence_drain_wakes_when_the_last_refresh_finishes() {
+        let active = Arc::new(ActiveRefreshes::default());
+        let lease = active.begin("project").expect("refresh starts");
+        let waiter = tokio::spawn({
+            let active = active.clone();
+            async move { active.wait_until_empty().await }
+        });
+        tokio::task::yield_now().await;
+        assert!(!waiter.is_finished());
+
+        drop(lease);
+
+        waiter
+            .await
+            .expect("wait task joins")
+            .expect("refresh tracker waits");
     }
 
     #[test]

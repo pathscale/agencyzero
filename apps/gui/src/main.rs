@@ -538,10 +538,7 @@ async fn resume_after_restart(app: AppHandle, marker: RestartResume) {
 
 impl AppState {
     pub(crate) fn live_run_count(&self) -> usize {
-        self.active
-            .lock()
-            .map(|active| active.len())
-            .unwrap_or_default()
+        self.active.len()
     }
 
     async fn drain_tables_once(&self) -> Result<(), String> {
@@ -562,18 +559,14 @@ impl AppState {
         // true. Let one already in flight finish before asking WorkTable if it
         // is idle, otherwise that refresh can submit a new operation after the
         // pull-request table has already reported drained.
-        let refresh_deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(15);
-        loop {
-            if self.pr_refreshes.is_empty()? {
-                break;
-            }
-            if tokio::time::Instant::now() >= refresh_deadline {
-                return Err(
-                    "a pull-request refresh did not finish before the persistence drain".into(),
-                );
-            }
-            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-        }
+        tokio::time::timeout(
+            std::time::Duration::from_secs(15),
+            self.pr_refreshes.wait_until_empty(),
+        )
+        .await
+        .map_err(|_| {
+            "a pull-request refresh did not finish before the persistence drain".to_string()
+        })??;
 
         let result = self.tables.shutdown().await;
         if result.is_ok() {
@@ -1482,16 +1475,15 @@ async fn quit_app(app: AppHandle, state: State<'_, AppState>) -> Result<(), Stri
 async fn quit_app_and_proxy(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
     state.proxy.terminate().await?;
 
-    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(15);
-    while state.live_run_count() != 0 {
-        if tokio::time::Instant::now() >= deadline {
-            return Err(
-                "AgencyProxy stopped, but AgencyZero is still settling terminated runs; try Quit Both again in a moment"
-                    .into(),
-            );
-        }
-        tokio::time::sleep(std::time::Duration::from_millis(25)).await;
-    }
+    tokio::time::timeout(
+        std::time::Duration::from_secs(15),
+        state.active.wait_until_idle(),
+    )
+    .await
+    .map_err(|_| {
+        "AgencyProxy stopped, but AgencyZero is still settling terminated runs; try Quit Both again in a moment"
+            .to_string()
+    })??;
     state.drain_tables_once().await?;
     app.exit(0);
     Ok(())
