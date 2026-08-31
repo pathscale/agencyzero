@@ -1,0 +1,48 @@
+// Whole-surface colour audit from Blitz's resolved paint state.
+//
+// An empty subject deliberately selects every named painted node on the active
+// surface. ps-qa composites translucent ancestor films before comparing text
+// at 4.5:1 and graphical controls at 3:1, so a token which resolves to the
+// wrong colour fails here even when its class name looks correct in source.
+[
+    (
+        id: "contrast-home",
+        group: "contrast",
+        what: "every named painted Home label and control meets its contrast floor",
+        open: Some("Home"),
+        hover: None,
+        click: None,
+        subject: "",
+        expect: Contrast,
+    ),
+    (
+        id: "contrast-project",
+        group: "contrast",
+        what: "every named painted Project label and control meets its contrast floor",
+        open: Some("theta theta north indi"),
+        hover: None,
+        click: None,
+        subject: "",
+        expect: Contrast,
+    ),
+    (
+        id: "contrast-settings",
+        group: "contrast",
+        what: "every named painted Settings label and control meets its contrast floor",
+        open: Some("Settings"),
+        hover: None,
+        click: None,
+        subject: "",
+        expect: Contrast,
+    ),
+    (
+        id: "contrast-analytics",
+        group: "contrast",
+        what: "every named painted Analytics label, value, tab, and control meets its contrast floor",
+        open: Some("Analytics"),
+        hover: None,
+        click: None,
+        subject: "",
+        expect: Contrast,
+    ),
+]

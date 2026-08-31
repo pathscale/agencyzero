@@ -2,16 +2,29 @@ import { defineConfig } from "@rsbuild/core";
 import { pluginBabel } from "@rsbuild/plugin-babel";
 import { pluginSolid } from "@rsbuild/plugin-solid";
 import ForkTsCheckerWebpackPlugin from "fork-ts-checker-webpack-plugin";
-import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { pluginSolidLayoutsApplication } from "rsbuild-plugin-solid-layouts";
 
 const localUiDist = process.env.AZ_UI_DIST;
-const packageVersion = (name: string) =>
-  JSON.parse(readFileSync(resolve(__dirname, "node_modules", name, "package.json"), "utf8"))
-    .version as string;
-const solidVersion = packageVersion("solid-js");
-const solidWebVersion = packageVersion("@solidjs/web");
+const localUiRoot = localUiDist ? resolve(localUiDist, "../..") : undefined;
+const packageVersion = async (name: string) =>
+  ((await Bun.file(resolve(__dirname, "node_modules", name, "package.json")).json()) as {
+    version: string;
+  }).version;
+const solidVersion = await packageVersion("solid-js");
+const solidWebVersion = await packageVersion("@solidjs/web");
+
+if (localUiDist && localUiRoot) {
+  for (const required of [
+    localUiDist,
+    resolve(localUiRoot, "package.json"),
+    resolve(localUiRoot, "dist", "layouts.manifest.json"),
+  ]) {
+    if (!(await Bun.file(required).exists())) {
+      throw new Error(`AZ_UI_DIST dependency is incomplete: ${required} does not exist`);
+    }
+  }
+}
 
 if (solidVersion !== solidWebVersion || !solidVersion.startsWith("2.")) {
   throw new Error(
@@ -26,7 +39,7 @@ export default defineConfig({
     // _$createComponent calls.
     pluginSolidLayoutsApplication({
       layouts: localUiDist
-        ? [{ module: "@pathscale/ui", root: resolve(localUiDist, "..") }]
+        ? [{ module: "@pathscale/ui", root: localUiRoot! }]
         : ["@pathscale/ui"],
     }),
     pluginBabel({ include: /\.(?:jsx|tsx|ts)$/ }),
@@ -38,8 +51,17 @@ export default defineConfig({
       ...(localUiDist
         ? {
             "@pathscale/ui": localUiDist,
-            "@solidjs/web": resolve(__dirname, "node_modules/@solidjs/web"),
-            "solid-js": resolve(__dirname, "node_modules/solid-js"),
+            // Aliasing a conditional-export package to its directory bypasses
+            // its `browser` condition and falls through to `main`, which is
+            // Solid's server runtime. The resulting bundle compiles cleanly
+            // and then throws from `render` before the first component mounts.
+            // Point at the browser entries explicitly while still forcing UI
+            // and AZ through the same physical Solid 2 installation.
+            "@solidjs/web": resolve(
+              __dirname,
+              "node_modules/@solidjs/web/dist/web.js",
+            ),
+            "solid-js": resolve(__dirname, "node_modules/solid-js/dist/solid.js"),
           }
         : {}),
     },

@@ -127,7 +127,7 @@ export function AnalyticsTab(): JSX.Element {
                           class={`shrink-0 rounded-md px-3 py-1.5 font-medium text-ui-detail transition-colors ${
                             selected()
                               ? "bg-base-100 text-az-title shadow-sm"
-                              : "text-az-muted hover:bg-base-100/55 hover:text-az-strong"
+                              : "text-az-body hover:bg-base-100/55 hover:text-az-strong"
                           }`}
                         >
                           {tx(tab.label)}

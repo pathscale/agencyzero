@@ -100,6 +100,8 @@ export function createCommandApi(call: CommandCaller, on: EventListener): Agency
     getStudySummary: () => call("get_study_summary"),
     exportStudyEvents: () => call("export_study_events"),
     clearStudyEvents: () => call("clear_study_events"),
+    frontendSubscriptionsReady: () => call("frontend_subscriptions_ready"),
+    confirmAgentRestart: (token) => call("confirm_agent_restart", { token }),
     claudeUsage: () => call("claude_usage"),
     listAgentStatus: (recheck) => call("list_agent_status", { recheck }),
     listModels: (discover) => call("list_models", { discover }),

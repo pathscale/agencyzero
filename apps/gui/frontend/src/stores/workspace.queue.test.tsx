@@ -8,6 +8,7 @@ import { bootWorkspace, waitFor } from "~/test/reactive";
 const queueHarness = vi.hoisted(() => ({
   handlers: new Map<string, (payload: unknown) => void>(),
   send: vi.fn(),
+  confirmRestart: vi.fn(async () => {}),
 }));
 
 vi.mock("~/api", async (importOriginal) => {
@@ -29,6 +30,7 @@ vi.mock("~/api", async (importOriginal) => {
       });
       queueHarness.send.mockImplementation(originalSend);
       api.sendMessage = queueHarness.send;
+      api.confirmAgentRestart = queueHarness.confirmRestart;
       return {
         api,
         backend: "tauri" as const,
@@ -45,6 +47,7 @@ async function mountWorkspace(): Promise<Workspace> {
 beforeEach(() => {
   queueHarness.handlers.clear();
   queueHarness.send.mockReset();
+  queueHarness.confirmRestart.mockClear();
   SETTINGS.workspaceTabs = null;
   setPrefs((d) => {
     d.lastTabKey = "quux";
@@ -55,6 +58,33 @@ beforeEach(() => {
 });
 
 describe("queued live follow-ups", () => {
+  it("confirms an agent restart only after the exact run slot releases", async () => {
+    await mountWorkspace();
+    queueHarness.handlers.get("run:accepted")?.({
+      projectId: "quux",
+      agent: "codex",
+      model: "gpt-5.6-sol",
+      permission: "auto",
+    });
+    queueHarness.handlers.get("app:restart-scheduled")?.({ token: "restart-token" });
+    flush();
+    expect(queueHarness.confirmRestart).not.toHaveBeenCalled();
+
+    queueHarness.handlers.get("run:stopped")?.({
+      projectId: "quux",
+      agent: "codex",
+      model: "gpt-5.6-sol",
+      permission: "auto",
+      stop: "completed",
+      exitCode: 0,
+    });
+    flush();
+    expect(queueHarness.confirmRestart).not.toHaveBeenCalled();
+
+    queueHarness.handlers.get("run:slot_released")?.({ projectId: "quux" });
+    await waitFor(() => expect(queueHarness.confirmRestart).toHaveBeenCalledWith("restart-token"));
+  });
+
   it("injects a startup-race message when the provider channel becomes ready", async () => {
     const workspace = await mountWorkspace();
     queueHarness.handlers.get("run:accepted")?.({

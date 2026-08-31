@@ -73,6 +73,8 @@ const COMMAND_FOR: Record<CommandMethod, string> = {
   getStudySummary: "get_study_summary",
   exportStudyEvents: "export_study_events",
   clearStudyEvents: "clear_study_events",
+  frontendSubscriptionsReady: "frontend_subscriptions_ready",
+  confirmAgentRestart: "confirm_agent_restart",
   claudeUsage: "claude_usage",
   listAgentStatus: "list_agent_status",
   listModels: "list_models",

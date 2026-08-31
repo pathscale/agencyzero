@@ -1394,7 +1394,7 @@ export function Composer(props: ComposerProps): JSX.Element {
                 class={`flex h-[24px] items-center rounded-full border px-2.5 font-medium text-ui-caption transition-colors ${
                   advanced()
                     ? "border-primary/35 bg-az-chip text-primary"
-                    : "border-az-hairline-strong text-az-muted hover:text-base-content"
+                    : "border-az-hairline-strong text-az-body hover:text-base-content"
                 }`}
               >
                 {tx("Advanced")}
@@ -1490,7 +1490,7 @@ export function Composer(props: ComposerProps): JSX.Element {
                 class={`flex h-[24px] items-center gap-1.5 rounded-full border px-2.5 font-medium text-ui-caption transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
                   props.agent === "claude" && props.extraThinking
                     ? "border-primary/35 bg-az-chip text-primary"
-                    : "border-az-hairline-strong text-az-muted hover:text-base-content"
+                    : "border-az-hairline-strong text-az-body hover:text-base-content"
                 }`}
               >
                 <Icon name="sparkles" class="text-ui-caption" />

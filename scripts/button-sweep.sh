@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/zsh
 #
 # Every eligible interactive control in the app, activated by semantic node
 # id from a profile that starts identical each time.
@@ -77,7 +77,7 @@ trap cleanup EXIT INT TERM
 # `ps-qa` is a published crate. `PS_QA` wins, then a sibling checkout, then an
 # installed one: a working copy should beat the released binary while you are
 # changing the harness itself, which is most of why you would be reading this.
-readonly PS_QA_REPO="${PS_QA_REPO:-$ROOT/../ps-qa}"
+readonly PS_QA_REPO="${PS_QA_REPO:-$ROOT/../ps-observability}"
 if [[ -n "${PS_QA:-}" && -x "${PS_QA:-}" ]]; then
   qa="$PS_QA"
 elif [[ -x "$PS_QA_REPO/target/release/ps-qa" ]]; then

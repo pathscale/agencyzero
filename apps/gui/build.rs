@@ -202,12 +202,25 @@ fn write_resolved_manifest() {
 
     // The whole Rust graph, deduplicated. A path or git source shows up here
     // as its source, which is the thing that must never ship unnoticed.
-    let tree = std::process::Command::new("cargo")
-        .args(["tree", "--edges", "normal", "--prefix", "none", "--quiet"])
-        .output()
-        .ok()
-        .filter(|out| out.status.success())
-        .and_then(|out| String::from_utf8(out.stdout).ok())
+    let exact_tree = std::env::var_os("AZ_RESOLVED_RUST_GRAPH").map(PathBuf::from);
+    let tree_config = std::env::var("AZ_CARGO_TREE_CONFIG").ok();
+    let tree = exact_tree
+        .as_deref()
+        .and_then(|path| std::fs::read_to_string(path).ok())
+        .or_else(|| {
+            let mut command = std::process::Command::new("cargo");
+            if let Some(config) = tree_config.as_deref() {
+                for value in config.split('|').filter(|value| !value.is_empty()) {
+                    command.arg("--config").arg(value);
+                }
+            }
+            command
+                .args(["tree", "--edges", "normal", "--prefix", "none", "--quiet"])
+                .output()
+                .ok()
+                .filter(|out| out.status.success())
+                .and_then(|out| String::from_utf8(out.stdout).ok())
+        })
         .unwrap_or_else(|| "cargo tree unavailable\n".into());
     let mut crates: Vec<&str> = tree
         .lines()
@@ -225,16 +238,26 @@ fn write_resolved_manifest() {
     // The component library as installed, not as requested. `bun.lock` is not
     // committed in this project, so the caret in `package.json` cannot answer
     // which version is on disk.
-    let package_version = |path: &str| {
+    let package_version = |path: &Path| {
         std::fs::read_to_string(path).ok().and_then(|text| {
             text.lines()
                 .find(|line| line.trim_start().starts_with("\"version\""))
                 .and_then(|line| line.split('"').nth(3).map(str::to_owned))
         })
     };
-    let ui = package_version("frontend/node_modules/@pathscale/ui/package.json");
-    let solid = package_version("frontend/node_modules/solid-js/package.json");
-    let solid_web = package_version("frontend/node_modules/@solidjs/web/package.json");
+    let local_ui_root = std::env::var_os("AZ_UI_DIST").and_then(|entry| {
+        PathBuf::from(entry)
+            .parent()
+            .and_then(Path::parent)
+            .map(Path::to_path_buf)
+    });
+    let ui_package = local_ui_root.as_ref().map_or_else(
+        || PathBuf::from("frontend/node_modules/@pathscale/ui/package.json"),
+        |root| root.join("package.json"),
+    );
+    let ui = package_version(&ui_package);
+    let solid = package_version(Path::new("frontend/node_modules/solid-js/package.json"));
+    let solid_web = package_version(Path::new("frontend/node_modules/@solidjs/web/package.json"));
     if let (Some(solid), Some(solid_web)) = (&solid, &solid_web) {
         assert!(
             solid == solid_web && solid.starts_with("2."),
@@ -250,6 +273,13 @@ fn write_resolved_manifest() {
         manifest.push_str(name);
         manifest.push(' ');
         manifest.push_str(version.as_deref().unwrap_or("unknown"));
+        if name == "@pathscale/ui"
+            && let Some(root) = &local_ui_root
+        {
+            manifest.push_str(" (");
+            manifest.push_str(&root.display().to_string());
+            manifest.push(')');
+        }
         manifest.push('\n');
     }
 
@@ -259,4 +289,20 @@ fn write_resolved_manifest() {
     println!("cargo:rerun-if-changed=../../Cargo.lock");
     println!("cargo:rerun-if-changed=Cargo.toml");
     println!("cargo:rerun-if-changed=frontend/node_modules/@pathscale/ui/package.json");
+    println!("cargo:rerun-if-env-changed=AZ_RESOLVED_RUST_GRAPH");
+    println!("cargo:rerun-if-env-changed=AZ_CARGO_TREE_CONFIG");
+    println!("cargo:rerun-if-env-changed=AZ_UI_DIST");
+    if let Some(path) = exact_tree {
+        println!("cargo:rerun-if-changed={}", path.display());
+    }
+    if let Some(root) = local_ui_root {
+        println!(
+            "cargo:rerun-if-changed={}",
+            root.join("package.json").display()
+        );
+        println!(
+            "cargo:rerun-if-changed={}",
+            root.join("dist/layouts.manifest.json").display()
+        );
+    }
 }

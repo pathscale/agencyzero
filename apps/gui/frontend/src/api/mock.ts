@@ -1188,6 +1188,8 @@ export function createMockApi(): AgencyZeroApi {
 
     // A browser tab cannot exec itself; the button is greyed off-Tauri anyway.
     relaunchApp: () => settle(undefined),
+    frontendSubscriptionsReady: () => settle(undefined),
+    confirmAgentRestart: () => settle(undefined),
 
     async on<E extends keyof AppEvents>(
       event: E,

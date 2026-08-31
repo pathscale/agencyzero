@@ -238,8 +238,12 @@ impl AgencyProxy {
                 response => return Err(response_error(response)),
             }
         }
-        if run_ids.is_empty() {
-            return Ok(0);
+        if run_ids.is_empty() || client.version().minor >= 4 {
+            // Protocol 0.4 defines CancelRun's acknowledgement as terminal:
+            // the exact run has finished and released its provider process.
+            // Older daemons acknowledged only signal delivery and retain the
+            // bounded compatibility poll below.
+            return Ok(run_ids.len());
         }
 
         let deadline = tokio::time::Instant::now() + CANCEL_CONFIRMATION;
@@ -397,25 +401,63 @@ impl AgencyProxy {
             self.set_connection_state(ConnectionState::Stopped);
             return self.disconnected_status("AgencyProxy was not running".into());
         }
-        self.shutdown(ShutdownMode::Terminate, "Stopped with AgencyZero")
+        match self
+            .shutdown(ShutdownMode::Terminate, "Stopped with AgencyZero")
             .await
+        {
+            Ok(status) => Ok(status),
+            Err(_error)
+                if tokio::net::UnixStream::connect(&self.socket_path)
+                    .await
+                    .is_err() =>
+            {
+                // A foreground process-group signal can close the child and
+                // its socket before this async task gets scheduled. The owner
+                // asked for exactly that terminal state; do not surface the
+                // transport race as a crash after the endpoint is gone.
+                self.clear_failure();
+                self.set_connection_state(ConnectionState::Stopped);
+                self.disconnected_status("Stopped with AgencyZero".into())
+            }
+            Err(error) => Err(error),
+        }
     }
 
     async fn shutdown(&self, mode: ShutdownMode, detail: &str) -> Result<Status, String> {
         let client = self.connect().await?;
-        if client.version().minor >= 3 {
+        // Arm the intentional-stop state before asking the daemon to exit.
+        // A terminal SIGINT reaches every process in the foreground group, so
+        // the child watcher can observe the proxy's signal exit before this
+        // task receives its transport result. Leaving the state as `Live`
+        // during that window mislabels an owner-requested shutdown as a crash.
+        self.set_connection_state(ConnectionState::Stopped);
+        let shutdown_result = if client.version().minor >= 3 {
             match client
                 .request(ClientMessage::Shutdown { mode })
                 .await
-                .map_err(|error| error.to_string())?
+                .map_err(|error| error.to_string())
             {
-                ServerResponse::Accepted => {}
-                response => return Err(response_error(response)),
+                Ok(ServerResponse::Accepted) => Ok(()),
+                Ok(response) => Err(response_error(response)),
+                Err(error) => Err(error),
             }
         } else {
-            shutdown_legacy_proxy(&client, mode).await?;
+            shutdown_legacy_proxy(&client, mode).await
+        };
+        if let Err(error) = shutdown_result {
+            drop(client);
+            if tokio::net::UnixStream::connect(&self.socket_path)
+                .await
+                .is_ok()
+            {
+                self.set_connection_state(ConnectionState::Live);
+                return Err(error);
+            }
+            // The endpoint vanished while shutdown was in flight. That is the
+            // requested terminal condition, even if a process-group signal
+            // closed it before the protocol acknowledgement crossed the wire.
+            return self.disconnected_status(detail.into());
         }
-        self.set_connection_state(ConnectionState::Stopped);
         drop(client);
         // Bounded. This used to spin until the socket refused connections,
         // which is fine when the daemon exits and never returns when it does
@@ -593,7 +635,7 @@ impl AgencyProxy {
         //
         // A reaped child also stops being a zombie, which is a second thing
         // the dropped handle got wrong.
-        watch_proxy_child(child, self.connection_state.clone());
+        let _ = watch_proxy_child(child, self.connection_state.clone());
         for _ in 0..50 {
             match Client::connect(&self.socket_path).await {
                 Ok(client) => {
@@ -719,6 +761,7 @@ fn describe_exit(status: std::process::ExitStatus) -> String {
         // here rather than in our own code.
         let name = match signal {
             libc::SIGKILL => " (SIGKILL, uncatchable: sent by the kernel or another process)",
+            libc::SIGINT => " (SIGINT, a request to stop)",
             libc::SIGTERM => " (SIGTERM, a request to stop)",
             libc::SIGSEGV => " (SIGSEGV, a crash)",
             libc::SIGBUS => " (SIGBUS, a crash)",
@@ -738,6 +781,19 @@ fn describe_exit(status: std::process::ExitStatus) -> String {
         Some(code) => format!("exited with status {code}"),
         None => "ended for an unknown reason".to_string(),
     }
+}
+
+#[cfg(unix)]
+fn exit_was_requested_stop(status: std::process::ExitStatus) -> bool {
+    use std::os::unix::process::ExitStatusExt;
+    status
+        .signal()
+        .is_some_and(|signal| matches!(signal, libc::SIGINT | libc::SIGTERM))
+}
+
+#[cfg(not(unix))]
+fn exit_was_requested_stop(_status: std::process::ExitStatus) -> bool {
+    false
 }
 
 #[cfg(not(unix))]
@@ -760,14 +816,18 @@ fn describe_exit(status: std::process::ExitStatus) -> String {
 /// clean, and only from `Live`. A daemon we asked to stop reaches `Stopped`
 /// through the shutdown path, and overwriting that here would make an orderly
 /// quit report itself as a crash on the next launch.
-fn watch_proxy_child(mut child: std::process::Child, connection_state: Arc<AtomicU8>) {
+fn watch_proxy_child(
+    mut child: std::process::Child,
+    connection_state: Arc<AtomicU8>,
+) -> Option<std::thread::JoinHandle<()>> {
     let pid = child.id();
     std::thread::Builder::new()
         .name("agency-proxy-watch".into())
         .spawn(move || match child.wait() {
             Ok(status) => {
                 let description = describe_exit(status);
-                let clean = status.success();
+                let requested_stop = exit_was_requested_stop(status);
+                let clean = status.success() || requested_stop;
                 crate::log!(
                     if clean {
                         crate::log::Level::Info
@@ -777,11 +837,14 @@ fn watch_proxy_child(mut child: std::process::Child, connection_state: Arc<Atomi
                     "proxy",
                     "AgencyProxy (pid {pid}) {description}",
                 );
-                if !clean
-                    && ConnectionState::from_raw(connection_state.load(Ordering::Acquire))
-                        == ConnectionState::Live
+                if ConnectionState::from_raw(connection_state.load(Ordering::Acquire))
+                    == ConnectionState::Live
                 {
-                    connection_state.store(ConnectionState::Crashed as u8, Ordering::Release);
+                    if requested_stop {
+                        connection_state.store(ConnectionState::Stopped as u8, Ordering::Release);
+                    } else if !clean {
+                        connection_state.store(ConnectionState::Crashed as u8, Ordering::Release);
+                    }
                 }
             }
             Err(error) => {
@@ -792,7 +855,7 @@ fn watch_proxy_child(mut child: std::process::Child, connection_state: Arc<Atomi
                 );
             }
         })
-        .ok();
+        .ok()
 }
 
 fn proxy_startup_failure(output_path: &Path, socket_path: &Path) -> String {
@@ -1312,7 +1375,6 @@ mod tests {
     use std::process::{Command, Stdio};
     use std::sync::Arc;
     use std::sync::atomic::{AtomicU8, Ordering};
-    use std::time::Duration;
 
     #[test]
     fn only_a_cold_proxy_may_be_started_automatically() {
@@ -1612,22 +1674,43 @@ mod tests {
             .spawn()
             .expect("spawn a shell");
 
-        watch_proxy_child(child, state.clone());
-
-        // The watcher runs on its own thread, so give it a bounded moment
-        // rather than sleeping a fixed amount and hoping.
-        for _ in 0..100 {
-            if ConnectionState::from_raw(state.load(Ordering::Acquire)) != ConnectionState::Stopped
-            {
-                break;
-            }
-            std::thread::sleep(Duration::from_millis(10));
-        }
+        watch_proxy_child(child, state.clone())
+            .expect("spawn watcher")
+            .join()
+            .expect("watcher finishes");
 
         assert_eq!(
             ConnectionState::from_raw(state.load(Ordering::Acquire)),
             ConnectionState::Stopped,
             "a clean exit must not overwrite a deliberate stop with a crash",
+        );
+    }
+
+    /// A process-group signal can kill the child before the shutdown request
+    /// returns. Once the owner has armed `Stopped`, that non-zero exit is still
+    /// intentional and must not become a crash in Settings.
+    #[cfg(unix)]
+    #[test]
+    fn watching_an_intentionally_signaled_exit_leaves_stopped() {
+        let state = Arc::new(AtomicU8::new(ConnectionState::Live as u8));
+        let child = Command::new("/bin/sh")
+            .arg("-c")
+            .arg("kill -INT $$")
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("spawn a shell");
+
+        watch_proxy_child(child, state.clone())
+            .expect("spawn watcher")
+            .join()
+            .expect("watcher finishes");
+
+        assert_eq!(
+            ConnectionState::from_raw(state.load(Ordering::Acquire)),
+            ConnectionState::Stopped,
+            "a stop signal must move a live daemon to stopped, not crashed",
         );
     }
 
@@ -1645,15 +1728,10 @@ mod tests {
             .spawn()
             .expect("spawn a shell");
 
-        watch_proxy_child(child, state.clone());
-
-        for _ in 0..100 {
-            if ConnectionState::from_raw(state.load(Ordering::Acquire)) == ConnectionState::Crashed
-            {
-                break;
-            }
-            std::thread::sleep(Duration::from_millis(10));
-        }
+        watch_proxy_child(child, state.clone())
+            .expect("spawn watcher")
+            .join()
+            .expect("watcher finishes");
 
         assert_eq!(
             ConnectionState::from_raw(state.load(Ordering::Acquire)),

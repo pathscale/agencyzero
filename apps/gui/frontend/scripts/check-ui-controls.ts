@@ -1,10 +1,7 @@
-import { readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
 import ts from "typescript";
 
-const sourceRoot = join(import.meta.dir, "..", "src");
-const repositoryRoot = join(import.meta.dir, "..", "..", "..", "..");
-const qaRoot = join(repositoryRoot, "tests", "ps-qa");
+const sourceRoot = `${import.meta.dir}/../src`;
+const qaRoot = `${import.meta.dir}/../../../../tests/ps-qa`;
 
 /**
  * Components whose rendered output contains the control QA addresses.
@@ -81,25 +78,21 @@ const inputCoverage: Record<string, readonly string[]> = {
   Textarea: ["notes-draft-enables-save", "notes-forget-clears"],
 };
 
-function tsxFiles(directory: string): string[] {
-  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
-    const path = join(directory, entry.name);
-    if (entry.isDirectory()) return tsxFiles(path);
-    return entry.name.endsWith(".tsx") ? [path] : [];
-  });
-}
+const tsxFiles = Array.from(
+  new Bun.Glob("**/*.tsx").scanSync({ cwd: sourceRoot, absolute: true, onlyFiles: true }),
+);
+const sources = new Map<string, string>();
+for (const file of tsxFiles) sources.set(file, await Bun.file(file).text());
 
-const violations = tsxFiles(sourceRoot).flatMap((file) => {
-  const source = readFileSync(file, "utf8");
-  return source.split("\n").flatMap((line, index) => {
+const violations = [...sources].flatMap(([file, source]) =>
+  source.split("\n").flatMap((line, index) => {
     const matches = line.match(/<(?:button|input|select|textarea)\b/g) ?? [];
     return matches.map((tag) => `${file}:${index + 1}: ${tag}`);
-  });
-});
+  }),
+);
 
 const literalIds = new Map<string, string>();
-for (const file of tsxFiles(sourceRoot)) {
-  const source = readFileSync(file, "utf8");
+for (const [file, source] of sources) {
   const sourceFile = ts.createSourceFile(
     file,
     source,
@@ -150,8 +143,7 @@ for (const file of tsxFiles(sourceRoot)) {
 }
 
 const importedInputs = new Set<string>();
-for (const file of tsxFiles(sourceRoot)) {
-  const source = readFileSync(file, "utf8");
+for (const source of sources.values()) {
   for (const match of source.matchAll(/import\s*\{([\s\S]*?)\}\s*from\s*["']@pathscale\/ui["']/g)) {
     for (const imported of match[1].split(",")) {
       const name = imported
@@ -164,9 +156,12 @@ for (const file of tsxFiles(sourceRoot)) {
 }
 
 const outcomeContracts = new Map<string, string>();
-for (const entry of readdirSync(qaRoot, { withFileTypes: true })) {
-  if (!entry.isFile() || !entry.name.endsWith(".ron")) continue;
-  const source = readFileSync(join(qaRoot, entry.name), "utf8");
+for (const path of new Bun.Glob("*.ron").scanSync({
+  cwd: qaRoot,
+  absolute: true,
+  onlyFiles: true,
+})) {
+  const source = await Bun.file(path).text();
   const matches = [...source.matchAll(/\bid:\s*"([^"]+)"/g)];
   for (const [index, match] of matches.entries()) {
     const start = match.index ?? 0;

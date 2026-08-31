@@ -1,16 +1,11 @@
-import { readdirSync, readFileSync } from "node:fs";
-import { extname, join, relative } from "node:path";
-
-const sourceRoot = join(import.meta.dir, "..", "src");
-const sourceExtensions = new Set([".css", ".html", ".ts", ".tsx"]);
-
-function sourceFiles(directory: string): string[] {
-  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
-    const path = join(directory, entry.name);
-    if (entry.isDirectory()) return sourceFiles(path);
-    return sourceExtensions.has(extname(entry.name)) ? [path] : [];
-  });
-}
+const sourceRoot = `${import.meta.dir}/../src`;
+const sourceFiles = Array.from(
+  new Bun.Glob("**/*.{css,html,ts,tsx}").scanSync({
+    cwd: sourceRoot,
+    absolute: true,
+    onlyFiles: true,
+  }),
+);
 
 const forbidden = [
   {
@@ -28,17 +23,17 @@ const forbidden = [
 ] as const;
 
 const violations: string[] = [];
-for (const file of sourceFiles(sourceRoot)) {
-  const source = readFileSync(file, "utf8");
+for (const file of sourceFiles) {
+  const source = await Bun.file(file).text();
   for (const { label, pattern } of forbidden) {
     for (const match of source.matchAll(pattern)) {
       const line = source.slice(0, match.index).split("\n").length;
-      violations.push(`${relative(sourceRoot, file)}:${line}: ${label}: ${match[0]}`);
+      violations.push(`${file.slice(sourceRoot.length + 1)}:${line}: ${label}: ${match[0]}`);
     }
   }
 }
 
-const theme = readFileSync(join(sourceRoot, "styles", "theme.css"), "utf8");
+const theme = await Bun.file(`${sourceRoot}/styles/theme.css`).text();
 const typography = [...theme.matchAll(/--text-ui-[a-z-]+:\s*([^;]+);/g)];
 if (typography.length === 0) {
   violations.push("styles/theme.css: typography ladder declares no --text-ui-* tokens");

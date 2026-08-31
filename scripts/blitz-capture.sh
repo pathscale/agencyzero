@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/zsh
 # Capture one performance round from a running diagnostics build.
 #
 # Usage: scripts/blitz-capture.sh <label> [sample-seconds]
@@ -28,7 +28,7 @@ sample "$pid" "$seconds" 1 -f "$out/$label-sample.txt" >/dev/null 2>&1 &
 sampler=$!
 
 sleep 2
-"${PS_QA:-$(dirname "$0")/../../ps-qa/target/release/ps-qa}" \
+"${PS_QA:-$(dirname "$0")/../../ps-observability/target/release/ps-qa}" \
   --descriptor "$repo_root/target/blitz-control.json" frames 2>&1 | tee "$out/$label-frames.txt"
 
 wait "$sampler"

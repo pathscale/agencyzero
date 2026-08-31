@@ -5,7 +5,7 @@
 set -euo pipefail
 
 readonly ROOT="${0:A:h:h}"
-readonly PS_QA="${PS_QA:-$ROOT/../ps-qa/target/release/ps-qa}"
+readonly PS_QA="${PS_QA:-$ROOT/../ps-observability/target/release/ps-qa}"
 readonly MAX_GROWTH_BYTES="${QA_MAX_NAVIGATION_GROWTH_BYTES:-67108864}"
 readonly MAX_NODE_GROWTH="${QA_MAX_NAVIGATION_NODE_GROWTH:-8}"
 

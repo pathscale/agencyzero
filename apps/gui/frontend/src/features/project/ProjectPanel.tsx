@@ -257,7 +257,7 @@ function ItemSortControls(): JSX.Element {
             d.itemSortBy = sortBy() === "status" ? "time" : "status";
           })
         }
-        class="rounded-full border border-az-hairline bg-az-inset px-2 py-0.5 font-medium text-az-muted text-ui-caption-sm transition-colors hover:text-az-strong"
+        class="rounded-full border border-az-hairline bg-az-inset px-2 py-0.5 font-medium text-az-body text-ui-caption-sm transition-colors hover:text-az-strong"
         aria-label={
           sortBy() === "status"
             ? tx("Sort items by status; choose time")
@@ -1986,7 +1986,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
             id={`project-${props.projectId}-item-new`}
             type="button"
             onClick={() => setAdding(true)}
-            class="mt-1 flex flex-none items-center gap-2 rounded-[9px] border border-primary/16 border-dashed bg-base-200 px-2.5 py-2 text-az-muted text-ui-label transition-colors hover:border-primary hover:text-primary"
+            class="mt-1 flex flex-none items-center gap-2 rounded-[9px] border border-primary/16 border-dashed bg-base-200 px-2.5 py-2 text-az-body text-ui-label transition-colors hover:border-primary hover:text-primary"
           >
             <Icon name="plus" class="text-ui-body" />
             {tx("New item")}
@@ -2422,7 +2422,7 @@ function CopyLogButton(props: { projectId: string }): JSX.Element {
       type="button"
       onClick={() => void copy()}
       aria-label={tx(copied() ? "Copied task log" : "Copy task log")}
-      class="shrink-0 text-az-faint text-ui-caption transition-colors hover:text-base-content"
+      class="shrink-0 text-az-body text-ui-caption transition-colors hover:text-base-content"
     >
       {tx(copied() ? "Copied" : "Copy")}
     </Button>
@@ -2647,7 +2647,7 @@ function ClearLogButton(props: { projectId: string }): JSX.Element {
       id={`project-${props.projectId}-task-log-clear`}
       type="button"
       onClick={() => void actions.clearTaskLog(props.projectId)}
-      class="shrink-0 text-az-faint text-ui-caption transition-colors hover:text-base-content"
+      class="shrink-0 text-az-body text-ui-caption transition-colors hover:text-base-content"
     >
       {tx("Clear")}
     </Button>

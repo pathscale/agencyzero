@@ -513,6 +513,9 @@ export function createWorkspace() {
    */
   let apiRef: AgencyZeroApi | null = null;
   let agentStatusLoad: Promise<void> | null = null;
+  let agentRestartToken: string | undefined;
+  let confirmingAgentRestart = false;
+  const activeRunProjects = new Set<string>();
   const api = (): AgencyZeroApi | null => apiRef;
   const setApi = (next: AgencyZeroApi): void => {
     apiRef = next;
@@ -623,6 +626,32 @@ export function createWorkspace() {
    * owner triggers keeps `client()` and its error.
    */
   const clientIfReady = (): AgencyZeroApi | null => api();
+
+  function frontendWorkBlocksRestart(): boolean {
+    return (
+      activeRunProjects.size > 0 ||
+      Object.values(state.queued).some((queued) => queued.length > 0) ||
+      Object.keys(state.pendingCompact).length > 0 ||
+      Object.values(state.compacting).some(Boolean)
+    );
+  }
+
+  function maybeConfirmAgentRestart(): void {
+    const token = agentRestartToken;
+    if (token === undefined || confirmingAgentRestart || frontendWorkBlocksRestart()) return;
+    confirmingAgentRestart = true;
+    void client()
+      .confirmAgentRestart(token)
+      .then(() => {
+        if (agentRestartToken === token) agentRestartToken = undefined;
+      })
+      .catch((cause) =>
+        log.warn(`could not confirm the scheduled agent restart: ${describeError(cause)}`),
+      )
+      .finally(() => {
+        confirmingAgentRestart = false;
+      });
+  }
 
   /**
    * The one load boundary for the project side panel.
@@ -1405,6 +1434,7 @@ export function createWorkspace() {
 
       log.info("boot: subscribing to events");
       await subscribe(backend);
+      await backend.frontendSubscriptionsReady();
 
       log.info("boot: hydrating");
       const settingsPromise = backend.getSettings().then(async (settings) => {
@@ -2072,6 +2102,7 @@ export function createWorkspace() {
     });
 
     bind("run:accepted", ({ projectId, agent, model, permission }) => {
+      activeRunProjects.add(projectId);
       touchRunStatus(projectId, "waiting for the agent…", { agent, model, permission });
       refreshProxyAfterLifecycleEvent();
     });
@@ -2146,7 +2177,6 @@ export function createWorkspace() {
           log.warn(`could not refresh project panel after compaction: ${describeError(cause)}`),
         );
       }
-
     });
 
     bind("run:text", ({ projectId, delta }) => {
@@ -2278,11 +2308,19 @@ export function createWorkspace() {
     bind("run:slot_released", ({ projectId }) => {
       // This event comes from RunReservation::drop after the matching backend
       // slot is removed. It replaces the old 250 ms guess after run:stopped.
+      activeRunProjects.delete(projectId);
       if (state.pendingCompact[projectId] !== undefined) {
-        flushPendingCompact(projectId);
+        void flushPendingCompact(projectId).finally(maybeConfirmAgentRestart);
       } else if ((state.queued[projectId] ?? []).length > 0) {
-        void flushQueue(projectId, 0);
+        void flushQueue(projectId, 0).finally(maybeConfirmAgentRestart);
+      } else {
+        maybeConfirmAgentRestart();
       }
+    });
+
+    bind("app:restart-scheduled", ({ token }) => {
+      agentRestartToken = token;
+      maybeConfirmAgentRestart();
     });
 
     unlisteners.push(...(await installSubscriptions(pendingSubscriptions)));
@@ -3120,14 +3158,14 @@ export function createWorkspace() {
    * their own label, and a silent retry that never lands is worse than a
    * button the user can press again.
    */
-  function flushPendingCompact(projectId: string): void {
+  function flushPendingCompact(projectId: string): Promise<void> {
     const agent = state.pendingCompact[projectId];
-    if (agent === undefined) return;
+    if (agent === undefined) return Promise.resolve();
     setState((d) => {
       const waiting = d.pendingCompact;
       delete waiting[projectId];
     });
-    void client()
+    return client()
       .compactProject(projectId, agent)
       .catch(() => {});
   }
