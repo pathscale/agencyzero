@@ -169,13 +169,16 @@ describe("tasks", () => {
 
   it("cancelling the run empties Running for that project only", async () => {
     const stopped = vi.fn();
+    const released = vi.fn();
     await api.on("run:stopped", stopped);
+    await api.on("run:slot_released", released);
 
     await api.cancelRun("worktable");
 
     expect(await api.listRunningTasks("worktable")).toHaveLength(0);
     expect(await api.listRunningTasks("cafe")).toHaveLength(1);
     expect(stopped).toHaveBeenCalledWith(expect.objectContaining({ projectId: "worktable" }));
+    expect(released).toHaveBeenCalledWith({ projectId: "worktable" });
   });
 
   /*

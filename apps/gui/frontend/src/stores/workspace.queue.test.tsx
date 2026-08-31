@@ -137,6 +137,10 @@ describe("queued live follow-ups", () => {
       stop: "reconnected",
       exitCode: null,
     });
+    flush();
+    expect(queueHarness.send).not.toHaveBeenCalled();
+
+    queueHarness.handlers.get("run:slot_released")?.({ projectId: "quux" });
 
     await waitFor(() => expect(queueHarness.send).toHaveBeenCalledTimes(2), { timeout: 2_000 });
     expect(queueHarness.send).toHaveBeenLastCalledWith(

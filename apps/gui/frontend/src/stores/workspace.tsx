@@ -2147,11 +2147,6 @@ export function createWorkspace() {
         );
       }
 
-      // Same cue as `run:stopped`, and the same beat of delay: the slot is
-      // released as this run unwinds, a moment after the event goes out.
-      if ((state.queued[projectId] ?? []).length > 0) {
-        globalThis.setTimeout(() => void flushQueue(projectId, 0), 250);
-      }
     });
 
     bind("run:text", ({ projectId, delta }) => {
@@ -2277,24 +2272,17 @@ export function createWorkspace() {
         });
       }
 
-      /*
-       * The slot just freed is the queue's cue. Delayed a beat: `run:stopped`
-       * is emitted from inside the run's own teardown, a moment before the
-       * backend actually releases the one-run-per-project slot, so an
-       * immediate send can still be refused. `flushQueue` retries on that.
-       */
-      /*
-       * A held compaction goes first and takes the beat to itself. The prompts
-       * behind it are not flushed here: the compaction sets `compacting`, and
-       * its own end already flushes the queue, so sending them now would only
-       * bounce them off the compaction and queue them a second time.
-       */
-      if (state.pendingCompact[projectId] !== undefined) {
-        globalThis.setTimeout(() => flushPendingCompact(projectId), 250);
-      } else if ((state.queued[projectId] ?? []).length > 0) {
-        globalThis.setTimeout(() => void flushQueue(projectId, 0), 250);
-      }
       refreshProxyAfterLifecycleEvent();
+    });
+
+    bind("run:slot_released", ({ projectId }) => {
+      // This event comes from RunReservation::drop after the matching backend
+      // slot is removed. It replaces the old 250 ms guess after run:stopped.
+      if (state.pendingCompact[projectId] !== undefined) {
+        flushPendingCompact(projectId);
+      } else if ((state.queued[projectId] ?? []).length > 0) {
+        void flushQueue(projectId, 0);
+      }
     });
 
     unlisteners.push(...(await installSubscriptions(pendingSubscriptions)));
@@ -3117,9 +3105,9 @@ export function createWorkspace() {
   /**
    * Send the oldest queued prompt, once the slot frees.
    *
-   * Retries with backoff because `run:stopped` slightly precedes the slot
-   * actually opening; after the attempts run out the prompt goes back to the
-   * front of the queue, still visible above the composer rather than lost.
+   * A rejected dispatch goes back to the front and retries with backoff. Slot
+   * release itself is event-driven; the retries cover unrelated transient IPC
+   * and provider failures without losing the visible queued prompt.
    */
   /**
    * Run a compaction that was asked for while the project was busy.

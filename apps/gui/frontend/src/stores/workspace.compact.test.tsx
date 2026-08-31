@@ -46,6 +46,7 @@ function stopRun(): void {
     stop: "finished",
     exitCode: 0,
   });
+  compactHarness.handlers.get("run:slot_released")?.({ projectId: "quux" });
 }
 
 beforeEach(() => {
