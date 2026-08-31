@@ -24,7 +24,12 @@ experimental = ["dep:agent-experimental"]
 webview-runtime = ["tauri/wry"]
 blitz-runtime = [
     "dep:blitz-dom",
+    # The browsing surface fetches page documents itself; `blitz-net` is the
+    # same provider the engine hands a document for its subresources, so a page
+    # and everything in it come through one client and one cache.
+    "dep:blitz-net",
     "dep:blitz-script",
+    "dep:blitz-traits",
     "dep:brotli",
     "dep:tauri-runtime-blitz",
     "dep:url",
@@ -71,6 +76,10 @@ agent-experimental = { version = "^0.1.3", default-features = false, optional = 
 promptsyntax = "0.2.0"
 shlex = "1.3"
 az-core.workspace = true
+# Browser policy, shared with chuzz. Not gated on a renderer: tabs, history and
+# address resolution are the same in a build that cannot draw a page, which is
+# what lets such a build say so instead of appearing to work.
+ps-browse-core.workspace = true
 # Shared with the migration and headless tools so one schema cannot resolve
 # against a different WorkTable implementation.
 worktable.workspace = true
@@ -119,6 +128,11 @@ tauri-runtime-blitz = { version = "^0.3", optional = true, features = ["macos-pr
 # actually resolves.
 blitz-dom = { package = "ps-blitz-dom", version = "^0.3", features = ["system-fonts", "parallel-construct"], optional = true }
 blitz-script = { package = "ps-blitz-script", version = "^0.3", features = ["system-fonts"], optional = true }
+# Same `^0.3` line as blitz-dom and blitz-script, and it has to be: two engine
+# versions in one graph put two `NetProvider` traits in it, and the document
+# config stops accepting the provider with an error that names neither.
+blitz-net = { package = "ps-blitz-net", version = "^0.3", optional = true }
+blitz-traits = { package = "ps-blitz-traits", version = "^0.3", optional = true }
 brotli = { version = "8.0.4", default-features = false, features = ["std"], optional = true }
 url = { version = "2.5.8", optional = true }
 tauri-plugin-updater = "2"

@@ -3,6 +3,7 @@
 mod agent_proxy;
 mod agents;
 mod angel;
+mod browse;
 mod chat_import;
 mod db;
 mod directives;
@@ -302,6 +303,15 @@ const IMPLEMENTED: &[&str] = &[
     "open_external",
     "check_for_update",
     "install_update",
+    "browse_state",
+    "browse_navigate",
+    "browse_open_tab",
+    "browse_close_tab",
+    "browse_select_tab",
+    "browse_back",
+    "browse_forward",
+    "browse_reload",
+    "browse_debug_log",
 ];
 
 /// What the GUI carries for the life of the process.
@@ -2290,8 +2300,20 @@ fn main() {
         eprintln!("{info}\n{backtrace}");
     }));
 
+    // The browsing surface is created before the app so the document factory
+    // can capture it: the chrome document's poll hook is the only place a page
+    // may be mounted, and it has to be installed as the document is built.
+    let browse = browse::Browse::new();
+
     #[cfg(feature = "blitz-runtime")]
-    tauri_runtime_blitz::set_document_factory(create_blitz_document);
+    {
+        let document_browse = browse.clone();
+        tauri_runtime_blitz::set_document_factory(move |url| {
+            let mut document = create_blitz_document(url)?;
+            document_browse.install_document_lifecycle(&mut document);
+            Ok(document)
+        });
+    }
 
     // The CLI switch is the rescue path for QA when the Settings toggle is
     // off. Read it before the app is built so control can start before the
@@ -2333,6 +2355,15 @@ fn main() {
             stop_agent_proxy,
             get_workspace_root,
             create_workspace_root,
+            browse::browse_state,
+            browse::browse_navigate,
+            browse::browse_open_tab,
+            browse::browse_close_tab,
+            browse::browse_select_tab,
+            browse::browse_back,
+            browse::browse_forward,
+            browse::browse_reload,
+            browse::browse_debug_log,
             projects::list_projects,
             projects::get_home_snapshot,
             projects::list_items,
@@ -2420,6 +2451,12 @@ fn main() {
         ])
         .setup(move |app| {
             app.set_menu(build_menu(app.handle())?)?;
+
+            // Before anything fallible below it. The browsing surface has no
+            // store, no directory and nothing to fail at, and managing it here
+            // means a chrome that asks for `browse_state` during boot gets an
+            // answer rather than a missing-state panic.
+            browse::manage(app.handle(), browse.clone());
 
             // The store is opened before the window is usable, and a failure is
             // fatal on purpose. Running with no persistence would let every
