@@ -24,6 +24,7 @@ const TAB_ICON: Record<Tab["kind"], IconProps["name"] | null> = {
   draft: "file-plus-2",
   settings: "settings",
   analytics: "gauge",
+  design: "pencil",
   project: null,
 };
 
@@ -231,6 +232,18 @@ export function TabStrip(): JSX.Element {
         carries the tab into it instead of cutting it off at a straight seam.
       */}
       <div class="az-strip-cap relative z-20 flex flex-none items-center gap-1.5 rounded-full pr-1 pl-5">
+        <Button
+          id="tabs-design"
+          type="button"
+          onClick={() => actions.openDesign()}
+          title={tx("Design")}
+          aria-label={tx("Design")}
+          class={`relative flex size-[30px] items-center justify-center rounded-full transition-colors hover:bg-az-hover ${
+            state.activeKey === "design" ? "text-primary" : "text-az-muted hover:text-base-content"
+          }`}
+        >
+          <Icon name="pencil" class="text-ui-lead" />
+        </Button>
         <Button
           id="tabs-analytics"
           type="button"

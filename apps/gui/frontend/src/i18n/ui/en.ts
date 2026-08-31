@@ -1037,6 +1037,36 @@ const en = {
   Timings: "Timings",
   "worst total first": "worst total first",
   "Nothing measured yet": "Nothing measured yet",
+
+  // Design module
+  Design: "Design",
+  "Compose @pathscale/ui components and read the source they emit":
+    "Compose @pathscale/ui components and read the source they emit",
+  Components: "Components",
+  "Drag onto the canvas, or click": "Drag onto the canvas, or click",
+  Layout: "Layout",
+  Display: "Display",
+  Form: "Form",
+  Artboard: "Artboard",
+  "Design canvas": "Design canvas",
+  "Drag a component here": "Drag a component here",
+  "Drop target {target}": "Drop target {target}",
+  Properties: "Properties",
+  "Component name": "Component name",
+  Text: "Text",
+  Default: "Default",
+  "This component has no props": "This component has no props",
+  "Select a component on the canvas": "Select a component on the canvas",
+  "Delete component": "Delete component",
+  "Clear artboard": "Clear artboard",
+  Undo: "Undo",
+  Redo: "Redo",
+  Source: "Source",
+  "Copy source": "Copy source",
+  "Emitted source": "Emitted source",
+  "Emitting {count} files": "Emitting {count} files",
+  "{component} needs a parent it does not have here":
+    "{component} needs a parent it does not have here",
 } as const;
 
 export default en;

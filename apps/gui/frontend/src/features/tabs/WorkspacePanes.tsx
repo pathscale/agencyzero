@@ -1,6 +1,7 @@
 import type { JSX } from "@solidjs/web";
 import { createMemo, Match, Show, Switch } from "solid-js";
 import { AnalyticsTab } from "~/features/analytics/AnalyticsTab";
+import { DesignTab } from "~/features/design/DesignTab";
 import { HomeTab } from "~/features/home/HomeTab";
 import { ProjectPanel } from "~/features/project/ProjectPanel";
 import { ProjectTab } from "~/features/project/ProjectTab";
@@ -58,6 +59,11 @@ export function WorkspacePanes(): JSX.Element {
       <Match when={activeTab().kind === "analytics"}>
         <div data-active-tab="analytics" class="flex min-h-0 min-w-0 flex-1">
           <AnalyticsTab />
+        </div>
+      </Match>
+      <Match when={activeTab().kind === "design"}>
+        <div data-active-tab="design" class="flex min-h-0 min-w-0 flex-1">
+          <DesignTab />
         </div>
       </Match>
       <Match when={activeTab().kind === "project" && activeProject() !== null}>

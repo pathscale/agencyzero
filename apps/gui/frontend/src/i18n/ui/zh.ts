@@ -998,6 +998,35 @@ const zh = {
   Timings: "耗时",
   "worst total first": "按总耗时降序",
   "Nothing measured yet": "尚无测量数据",
+
+  // Design module
+  Design: "设计",
+  "Compose @pathscale/ui components and read the source they emit":
+    "组合 @pathscale/ui 组件并查看生成的源码",
+  Components: "组件",
+  "Drag onto the canvas, or click": "拖到画板上，或点击添加",
+  Layout: "布局",
+  Display: "展示",
+  Form: "表单",
+  Artboard: "画板",
+  "Design canvas": "设计画板",
+  "Drag a component here": "把组件拖到这里",
+  "Drop target {target}": "放置目标 {target}",
+  Properties: "属性",
+  "Component name": "组件名称",
+  Text: "文本",
+  Default: "默认",
+  "This component has no props": "此组件没有可设置的属性",
+  "Select a component on the canvas": "在画板上选择一个组件",
+  "Delete component": "删除组件",
+  "Clear artboard": "清空画板",
+  Undo: "撤销",
+  Redo: "重做",
+  Source: "源码",
+  "Copy source": "复制源码",
+  "Emitted source": "生成的源码",
+  "Emitting {count} files": "生成 {count} 个文件",
+  "{component} needs a parent it does not have here": "{component} 缺少它所需的父组件",
 } satisfies Record<keyof typeof en, string>;
 
 export default zh;
