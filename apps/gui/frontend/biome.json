@@ -60,6 +60,13 @@
     }
   },
   "files": {
-    "includes": ["**", "!node_modules", "!../dist", "!*.config.ts", "!*.config.mjs"]
+    "includes": [
+      "**",
+      "!node_modules",
+      "!../dist",
+      "!*.config.ts",
+      "!*.config.mjs",
+      "!src/features/schema/schema.generated.json"
+    ]
   }
 }

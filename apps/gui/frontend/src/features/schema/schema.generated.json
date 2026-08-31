@@ -1,0 +1,2066 @@
+{
+  "tables": [
+    {
+      "name": "AgentIoRow",
+      "table_name": "agent_io_row",
+      "file": "agent_io.rs",
+      "doc": "The raw exchange with the agent, when a project asks for it to be kept.\n\n# Off by default, and per project\n\nThis is the highest-volume thing the app could write. A single turn emits a\ntext event per delta, so a long run is thousands of rows for data whose\nvalue drops off within minutes — the panel answers \"what just happened\".\nWriting that for every project by default would put continuous load on a\nstore the whole workspace depends on, and WorkTable is sensitive to a\nhalf-written page.\n\nSo it is opt-in per project, recorded in `kv` under `io-persist:<project_id>`\nand toggled from the project's Settings section. Turn it on for the project\nyou are debugging; leave it off for the rest.\n\nRows are trimmed to the newest [`crate::projects::MAX_IO_ENTRIES`] per\nproject on write, so a session left recording overnight cannot grow without\nbound.\n\n**Adding a column here changes the rkyv layout of every row on disk.** Bump\n`SCHEMA_FINGERPRINT` in `db/tables.rs` in the same commit — see the module\ndoc on `db/schema/project.rs` for what happens otherwise.",
+      "persist": true,
+      "version": null,
+      "partition_by": null,
+      "page_size": null,
+      "columns": [
+        {
+          "name": "id",
+          "type": "String",
+          "primary_key": true,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        },
+        {
+          "name": "project_id",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        },
+        {
+          "name": "at",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": "ISO 8601. Sort key, and the cursor for trimming."
+        },
+        {
+          "name": "direction",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": "sent | received | gui."
+        },
+        {
+          "name": "kind",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": "request | started | text | tool_call | tool_result | rate_limit |\nstop | stderr | unparsed | action."
+        },
+        {
+          "name": "detail",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "project_idx",
+          "column": "project_id",
+          "unique": false,
+          "backend": null
+        }
+      ],
+      "queries": {
+        "updates": [],
+        "deletes": [
+          {
+            "name": "ByProject",
+            "columns": [],
+            "by": "project_id"
+          }
+        ],
+        "in_place": []
+      }
+    },
+    {
+      "name": "ApprovalRule",
+      "table_name": "approval_rule",
+      "file": "approval_rule.rs",
+      "doc": "One row per remembered approval: a standing \"always allow similar\" grant.\n\n# Why a table and not a kv blob\n\nThese are permission grants, and grants deserve the same standing as any\nother row: queryable one at a time (per-rule deletion is a `delete`, not a\nparse-edit-rewrite of a JSON string), visible to `agency-tools` for auditing,\nand shaped honestly — a list of rows is rows, not a string that happens to\ncontain them.\n\n`signature` is computed only in Rust (`projects::approval_signature`):\nBash rules are program plus subcommand, file rules the parent directory,\nURL rules the host. Uniqueness of `(project_id, signature)` is enforced by\nthe writer, not the table — the single writer makes that safe.\n\n**Adding a column here changes the rkyv layout of every row on disk.** Bump\n`SCHEMA_FINGERPRINT` in `db/tables.rs` in the same commit — see the module\ndoc on `db/schema/project.rs` for what happens otherwise.",
+      "persist": true,
+      "version": null,
+      "partition_by": null,
+      "page_size": null,
+      "columns": [
+        {
+          "name": "id",
+          "type": "String",
+          "primary_key": true,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        },
+        {
+          "name": "project_id",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        },
+        {
+          "name": "signature",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": "The remembered shape, e.g. \"Bash: cargo test\" or \"Edit: apps/gui/src\"."
+        },
+        {
+          "name": "created_at",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": "ISO 8601 — when the user taught it."
+        }
+      ],
+      "indexes": [
+        {
+          "name": "project_idx",
+          "column": "project_id",
+          "unique": false,
+          "backend": null
+        }
+      ],
+      "queries": {
+        "updates": [],
+        "deletes": [
+          {
+            "name": "ByProject",
+            "columns": [],
+            "by": "project_id"
+          }
+        ],
+        "in_place": []
+      }
+    },
+    {
+      "name": "ItemCompletion",
+      "table_name": "item_completion",
+      "file": "item_completion.rs",
+      "doc": "Durable denominator for outcome-per-dollar analytics.\n\nFinished item rows retire from the working list, so counting the current\ntable makes historical productivity shrink over time. One row per item id\nrecords its first accepted finish and survives item/project deletion.",
+      "persist": true,
+      "version": null,
+      "partition_by": null,
+      "page_size": null,
+      "columns": [
+        {
+          "name": "id",
+          "type": "String",
+          "primary_key": true,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": "Item ids are installation-wide and never reused."
+        },
+        {
+          "name": "project_id",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        },
+        {
+          "name": "agent",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": "claude | codex | copilot | owner | unknown"
+        },
+        {
+          "name": "completed_at",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "completion_project_idx",
+          "column": "project_id",
+          "unique": false,
+          "backend": null
+        },
+        {
+          "name": "completion_agent_idx",
+          "column": "agent",
+          "unique": false,
+          "backend": null
+        }
+      ],
+      "queries": {
+        "updates": [],
+        "deletes": [],
+        "in_place": []
+      }
+    },
+    {
+      "name": "Kv",
+      "table_name": "kv",
+      "file": "kv.rs",
+      "doc": "Settings and the agent probe cache: two keyed blobs.\n\nA blob rather than a column per field, unlike every other table here. The\nsettings record is nested and does not flatten into columns without inventing\na join, and a typed table would need a `worktable_version!` migration every\ntime the frontend adds a setting. Serde defaults carry that instead.\n\nThat reasoning does **not** extend to the entities below it. A transcript\nwants columns, indexes and queries, which is what the rest of this directory\nis for.",
+      "persist": true,
+      "version": null,
+      "partition_by": null,
+      "page_size": null,
+      "columns": [
+        {
+          "name": "key",
+          "type": "String",
+          "primary_key": true,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        },
+        {
+          "name": "value",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        },
+        {
+          "name": "updated_at",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        }
+      ],
+      "indexes": [],
+      "queries": {
+        "updates": [],
+        "deletes": [],
+        "in_place": []
+      }
+    },
+    {
+      "name": "Message",
+      "table_name": "message",
+      "file": "message.rs",
+      "doc": "The transcript, one row per message.\n\nAgent, model, permission and usage are recorded per message rather than read\nfrom the project, so history stays readable after the tab's settings move on.\n`moderation` and `usage` are JSON: both are optional nested records, and\nspreading them across a dozen nullable columns would make every read\nreassemble them.",
+      "persist": true,
+      "version": null,
+      "partition_by": null,
+      "page_size": null,
+      "columns": [
+        {
+          "name": "id",
+          "type": "String",
+          "primary_key": true,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        },
+        {
+          "name": "project_id",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        },
+        {
+          "name": "item_id",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": "Soft association to a `ProjectItem`, never enforced. Empty is normal."
+        },
+        {
+          "name": "author",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": "user | agent | moderator."
+        },
+        {
+          "name": "agent",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        },
+        {
+          "name": "moderation",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": "`Moderation` as JSON, empty when this is not a moderator note."
+        },
+        {
+          "name": "model",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        },
+        {
+          "name": "permission",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        },
+        {
+          "name": "usage",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": "`Usage` as JSON, empty when the agent did not report any."
+        },
+        {
+          "name": "stop",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        },
+        {
+          "name": "exit_code",
+          "type": "i64",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        },
+        {
+          "name": "body",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": "Markdown, as the agent emits it."
+        },
+        {
+          "name": "created_at",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": "ISO 8601, transcript order."
+        }
+      ],
+      "indexes": [
+        {
+          "name": "project_idx",
+          "column": "project_id",
+          "unique": false,
+          "backend": null
+        }
+      ],
+      "queries": {
+        "updates": [
+          {
+            "name": "FinalizeById",
+            "columns": [
+              "usage",
+              "stop",
+              "exit_code"
+            ],
+            "by": "id"
+          }
+        ],
+        "deletes": [
+          {
+            "name": "ByProject",
+            "columns": [],
+            "by": "project_id"
+          }
+        ],
+        "in_place": []
+      }
+    },
+    {
+      "name": "MessageChunk",
+      "table_name": "message_chunk",
+      "file": "message_chunk.rs",
+      "doc": "Overflow for a message body too large to fit one page.\n\nA WorkTable row must fit a single ~16 KB data page, so a message body over\nthe inline cap cannot live in the `message` row. Rather than truncate it —\nwhich lost the tail of long replies and, worse, of long user messages — the\nhead stays inline on the message row and the remainder spills here, one\nordered chunk per row, keyed by the message id. The read path stitches the\nhead and the chunks back into the whole body; nothing else knows the split\nhappened.\n\n`seq` orders the chunks after the inline head (seq 0 is the first overflow\npiece, not the head). Deleting a message deletes its chunks by the same\n`message_id`, so no orphan survives its row.",
+      "persist": true,
+      "version": null,
+      "partition_by": null,
+      "page_size": null,
+      "columns": [
+        {
+          "name": "id",
+          "type": "String",
+          "primary_key": true,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": "`<message id>#<seq>`, unique per chunk, so the primary key is a real\nkey rather than the message id repeated."
+        },
+        {
+          "name": "message_id",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        },
+        {
+          "name": "project_id",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        },
+        {
+          "name": "seq",
+          "type": "u32",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": "Order after the inline head. 0 is the first overflow chunk."
+        },
+        {
+          "name": "text",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": "A page-bounded slice of the body's tail, in byte order."
+        }
+      ],
+      "indexes": [
+        {
+          "name": "chunk_message_idx",
+          "column": "message_id",
+          "unique": false,
+          "backend": null
+        },
+        {
+          "name": "chunk_project_idx",
+          "column": "project_id",
+          "unique": false,
+          "backend": null
+        }
+      ],
+      "queries": {
+        "updates": [],
+        "deletes": [
+          {
+            "name": "ByMessage",
+            "columns": [],
+            "by": "message_id"
+          },
+          {
+            "name": "ByProject",
+            "columns": [],
+            "by": "project_id"
+          }
+        ],
+        "in_place": []
+      }
+    },
+    {
+      "name": "Project",
+      "table_name": "project",
+      "file": "project.rs",
+      "doc": "Layer 1 of the Home list: one open tab per project.\n\n`dirs` and `forked_from` are JSON rather than columns. WorkTable has no list\ncolumn and no join, and a `project_dir` side table would buy ordering and\nreferential integrity that a handful of paths read together do not need.\n\n# Do not add a column here without reading this\n\nRows are persisted with rkyv, positionally. Adding, removing or reordering a\ncolumn changes the layout, and **every row already on disk is then read\nthrough the new one** — silently. `version()` is a fixed constant the macro\nemits, so it does not change with the schema and catches none of this.\n\nWhat that looks like is not an error. It is a project whose id reads as\n`00:00   `, whose name is nonsense, and which every command then fails to\nfind: delete, pin and the session write all return `NotFound`, two tabs\ncollide on one garbage key, and one composer feeds two conversations. That\nis a real afternoon, spent here.\n\nThe session id is in `kv` under `session:<project_id>` for exactly this\nreason — it is a per-project fact that arrived after the schema, and `kv` is\na `String -> String` blob table whose layout cannot shift.\n\nIf a column genuinely has to change, bump `SCHEMA_FINGERPRINT` in\n`db/tables.rs` in the same commit. The guard there will then refuse to open\nthe old files rather than misread them.",
+      "persist": true,
+      "version": null,
+      "partition_by": null,
+      "page_size": null,
+      "columns": [
+        {
+          "name": "id",
+          "type": "String",
+          "primary_key": true,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        },
+        {
+          "name": "name",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        },
+        {
+          "name": "status",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": "`ProjectStatus`: pending | active | finished | canceled."
+        },
+        {
+          "name": "position",
+          "type": "u32",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": "Home order, and the tab-strip order it is written back from."
+        },
+        {
+          "name": "dirs",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": "Working directories, JSON-encoded."
+        },
+        {
+          "name": "pinned",
+          "type": "bool",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        },
+        {
+          "name": "moderator_enabled",
+          "type": "bool",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": "Per-session override of the global moderator setting."
+        },
+        {
+          "name": "forked_from",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": "Parent linkage when this is a fork. Item forks carry\n`{projectId, itemId}`; legacy conversation forks may carry a message id."
+        },
+        {
+          "name": "last_activity_at",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": "ISO 8601, orders the Recent list."
+        }
+      ],
+      "indexes": [
+        {
+          "name": "status_idx",
+          "column": "status",
+          "unique": false,
+          "backend": null
+        }
+      ],
+      "queries": {
+        "updates": [
+          {
+            "name": "NameById",
+            "columns": [
+              "name"
+            ],
+            "by": "id"
+          },
+          {
+            "name": "DirsById",
+            "columns": [
+              "dirs"
+            ],
+            "by": "id"
+          },
+          {
+            "name": "StatusById",
+            "columns": [
+              "status"
+            ],
+            "by": "id"
+          },
+          {
+            "name": "PinnedById",
+            "columns": [
+              "pinned"
+            ],
+            "by": "id"
+          },
+          {
+            "name": "ModeratorById",
+            "columns": [
+              "moderator_enabled"
+            ],
+            "by": "id"
+          },
+          {
+            "name": "PositionById",
+            "columns": [
+              "position"
+            ],
+            "by": "id"
+          },
+          {
+            "name": "LastActivityById",
+            "columns": [
+              "last_activity_at"
+            ],
+            "by": "id"
+          }
+        ],
+        "deletes": [],
+        "in_place": []
+      }
+    },
+    {
+      "name": "ProjectItem",
+      "table_name": "project_item",
+      "file": "project_item.rs",
+      "doc": "Layer 2: the work items inside a project.",
+      "persist": true,
+      "version": null,
+      "partition_by": null,
+      "page_size": null,
+      "columns": [
+        {
+          "name": "id",
+          "type": "String",
+          "primary_key": true,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        },
+        {
+          "name": "project_id",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        },
+        {
+          "name": "title",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": "One short line, not a body."
+        },
+        {
+          "name": "status",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": "Same `ProjectStatus` vocabulary as the parent project."
+        },
+        {
+          "name": "position",
+          "type": "u32",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        },
+        {
+          "name": "reference",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": "Where the work went: a pull request or issue number without the `#`.\nEmpty until there is one.\n\nIts own column rather than a suffix on the title, because the title\nis the match key for every later status change. A row renamed to\n\"Fix copy (#35)\" would stop matching the line that closes it, and\nstripping the suffix back off at match time is a parse nobody would\nremember was there."
+        },
+        {
+          "name": "priority",
+          "type": "u8",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": "How much this item matters, so a turn can carry the few that do\nrather than the whole list.\n\nA small integer rather than a `high`/`normal`/`low` string: it sorts\nwithout a lookup table, and 0 is the normal case, so an item nobody\nhas prioritised costs nothing to store and needs no backfill.\nHigher is more urgent. See `Priority` in `projects.rs` for the names\nthe surface uses."
+        }
+      ],
+      "indexes": [
+        {
+          "name": "project_idx",
+          "column": "project_id",
+          "unique": false,
+          "backend": null
+        }
+      ],
+      "queries": {
+        "updates": [
+          {
+            "name": "StatusById",
+            "columns": [
+              "status"
+            ],
+            "by": "id"
+          },
+          {
+            "name": "PositionById",
+            "columns": [
+              "position"
+            ],
+            "by": "id"
+          },
+          {
+            "name": "TitleById",
+            "columns": [
+              "title"
+            ],
+            "by": "id"
+          },
+          {
+            "name": "ReferenceById",
+            "columns": [
+              "reference"
+            ],
+            "by": "id"
+          },
+          {
+            "name": "PriorityById",
+            "columns": [
+              "priority"
+            ],
+            "by": "id"
+          }
+        ],
+        "deletes": [
+          {
+            "name": "ByProject",
+            "columns": [],
+            "by": "project_id"
+          }
+        ],
+        "in_place": []
+      }
+    },
+    {
+      "name": "PullRequest",
+      "table_name": "pull_request",
+      "file": "pull_request.rs",
+      "doc": "Pull requests cut during a project's runs, tracked as chips over the composer.\n\nOne row per PR URL per project, created from an authored PS directive and\nrefreshed through `gh` when available. `state` is GitHub's own word\n(`OPEN` | `MERGED` | `CLOSED`, or `unknown` before the first refresh);\n`ci` is the check rollup reduced to `pass` | `fail` | `pending` | `none` |\n`unknown`. Dismissed rows stay on disk — a chip the owner waved away is\nnot a PR that stopped existing, and un-dismissing is then possible.",
+      "persist": true,
+      "version": null,
+      "partition_by": null,
+      "page_size": null,
+      "columns": [
+        {
+          "name": "id",
+          "type": "String",
+          "primary_key": true,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        },
+        {
+          "name": "project_id",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        },
+        {
+          "name": "url",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        },
+        {
+          "name": "repo",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": "\"owner/repo\", straight from the URL."
+        },
+        {
+          "name": "number",
+          "type": "u32",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        },
+        {
+          "name": "branch",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": "Head branch, from `gh`; empty until a refresh answers."
+        },
+        {
+          "name": "state",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        },
+        {
+          "name": "additions",
+          "type": "u32",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        },
+        {
+          "name": "deletions",
+          "type": "u32",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        },
+        {
+          "name": "ci",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        },
+        {
+          "name": "dismissed",
+          "type": "bool",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        },
+        {
+          "name": "updated_at",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "pr_project_idx",
+          "column": "project_id",
+          "unique": false,
+          "backend": null
+        }
+      ],
+      "queries": {
+        "updates": [
+          {
+            "name": "PrFactsById",
+            "columns": [
+              "branch",
+              "state",
+              "additions",
+              "deletions",
+              "ci",
+              "updated_at"
+            ],
+            "by": "id"
+          },
+          {
+            "name": "PrDismissedById",
+            "columns": [
+              "dismissed"
+            ],
+            "by": "id"
+          }
+        ],
+        "deletes": [
+          {
+            "name": "ByProject",
+            "columns": [],
+            "by": "project_id"
+          }
+        ],
+        "in_place": []
+      }
+    },
+    {
+      "name": "Question",
+      "table_name": "question",
+      "file": "question.rs",
+      "doc": "Questions an agent raised during a run, tracked as chips over the composer.\n\nA question is its own entity, not a work item and not a tool approval. An\n`@agency:ask` directive is the source: it turns authored text into a row the\nowner answers. While open it sits at the transcript tail, the action the\nconversation is waiting on. Once answered it stays inline above that owner\nreply so the exchange remains readable in order.\n\n`urgency` is how loudly it calls for attention: `critical` (answer now, e.g.\na security hole), `blocking` (the agent cannot proceed until answered), or\n`passive` (answer when free, the agent keeps working). `item_id` and\n`issue_url` are optional back-references, empty until given, so the IDE can\nshow what a question is about. `answered` rows stay on disk, like a dismissed\nPR: a question the owner closed is not one that never happened.",
+      "persist": true,
+      "version": null,
+      "partition_by": null,
+      "page_size": null,
+      "columns": [
+        {
+          "name": "id",
+          "type": "String",
+          "primary_key": true,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        },
+        {
+          "name": "project_id",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        },
+        {
+          "name": "text",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": "The question itself, as the agent authored it. The data plane: the\n`questions` state transition is the execution plane, this is what\nrides it."
+        },
+        {
+          "name": "urgency",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": "`critical` | `blocking` | `passive`. Never empty: `ask` defaults a\nmissing urgency to `blocking`, the safe middle, so a question always\nsays how badly it is needed."
+        },
+        {
+          "name": "item_id",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": "Optional back-reference to the item this is about. Empty when none."
+        },
+        {
+          "name": "issue_url",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": "Optional GitHub issue URL this is about. Empty when none."
+        },
+        {
+          "name": "answered",
+          "type": "bool",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": "Cleared to `true` when the owner answers. An answered row stays for\nhistory, like a dismissed PR, and un-answering is then possible."
+        },
+        {
+          "name": "created_at",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "question_project_idx",
+          "column": "project_id",
+          "unique": false,
+          "backend": null
+        }
+      ],
+      "queries": {
+        "updates": [
+          {
+            "name": "QuestionAnsweredById",
+            "columns": [
+              "answered"
+            ],
+            "by": "id"
+          }
+        ],
+        "deletes": [
+          {
+            "name": "ByProject",
+            "columns": [],
+            "by": "project_id"
+          }
+        ],
+        "in_place": []
+      }
+    },
+    {
+      "name": "QuestionReply",
+      "table_name": "question_reply",
+      "file": "question_reply.rs",
+      "doc": "Durable links from owner messages to the questions they answer.\n\nSeparate from both rows so the existing persisted layouts never change.\nA message can eventually answer more than one question and a question can\nbe reopened without rewriting transcript history, so this is a relation,\nnot a column smuggled into either entity.",
+      "persist": true,
+      "version": null,
+      "partition_by": null,
+      "page_size": null,
+      "columns": [
+        {
+          "name": "id",
+          "type": "String",
+          "primary_key": true,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        },
+        {
+          "name": "project_id",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        },
+        {
+          "name": "question_id",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        },
+        {
+          "name": "message_id",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        },
+        {
+          "name": "created_at",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "question_reply_project_idx",
+          "column": "project_id",
+          "unique": false,
+          "backend": null
+        },
+        {
+          "name": "question_reply_question_idx",
+          "column": "question_id",
+          "unique": false,
+          "backend": null
+        },
+        {
+          "name": "question_reply_message_idx",
+          "column": "message_id",
+          "unique": false,
+          "backend": null
+        }
+      ],
+      "queries": {
+        "updates": [],
+        "deletes": [
+          {
+            "name": "ByProject",
+            "columns": [],
+            "by": "project_id"
+          }
+        ],
+        "in_place": []
+      }
+    },
+    {
+      "name": "ReplyCheckpoint",
+      "table_name": "reply_checkpoint",
+      "file": "reply_checkpoint.rs",
+      "doc": "Crash recovery for the one agent reply currently streaming per project.\n\nCheckpoints are immutable rows. A new snapshot is inserted before older\nsnapshots are deleted, so a crash can leave several recoverable versions\nbut can never expose the resize-in-place failure that the old KV design did.",
+      "persist": true,
+      "version": null,
+      "partition_by": null,
+      "page_size": null,
+      "columns": [
+        {
+          "name": "id",
+          "type": "String",
+          "primary_key": true,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        },
+        {
+          "name": "project_id",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        },
+        {
+          "name": "payload",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        },
+        {
+          "name": "created_at",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "reply_checkpoint_project_idx",
+          "column": "project_id",
+          "unique": false,
+          "backend": null
+        }
+      ],
+      "queries": {
+        "updates": [],
+        "deletes": [
+          {
+            "name": "ByProject",
+            "columns": [],
+            "by": "project_id"
+          }
+        ],
+        "in_place": []
+      }
+    },
+    {
+      "name": "StudyEvent",
+      "table_name": "study_event",
+      "file": "study_event.rs",
+      "doc": "Content-free events for the opt-in PromptSyntax deployment study.\n\nThe table records how a declared operation travelled through AgencyZero,\nnot what the user or agent said. Prompt bodies, task titles, project names,\npaths, URLs, tool output and agent prose do not belong here. Local ids are\nkept only so an export can link a later manual correction to the operation\nit followed; the export command replaces every one with a per-export\npseudonym.\n\nCollection is disabled by default. Callers go through `crate::study`, which\nchecks the persisted setting before any row is written.",
+      "persist": true,
+      "version": null,
+      "partition_by": null,
+      "page_size": null,
+      "columns": [
+        {
+          "name": "id",
+          "type": "String",
+          "primary_key": true,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        },
+        {
+          "name": "study_id",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        },
+        {
+          "name": "at",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        },
+        {
+          "name": "project_id",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        },
+        {
+          "name": "turn_id",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        },
+        {
+          "name": "interaction_id",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": "Links one parsed PS segment to its one terminal result."
+        },
+        {
+          "name": "agent",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        },
+        {
+          "name": "pathway",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        },
+        {
+          "name": "operation",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        },
+        {
+          "name": "stage",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        },
+        {
+          "name": "outcome",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        },
+        {
+          "name": "code",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        },
+        {
+          "name": "target_kind",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        },
+        {
+          "name": "target_id",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        },
+        {
+          "name": "latency_ms",
+          "type": "i64",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        },
+        {
+          "name": "detail",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": "Allow-listed JSON counters and booleans, never source text."
+        },
+        {
+          "name": "app_version",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        },
+        {
+          "name": "parser_version",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        },
+        {
+          "name": "protocol_version",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "study_idx",
+          "column": "study_id",
+          "unique": false,
+          "backend": null
+        },
+        {
+          "name": "project_idx",
+          "column": "project_id",
+          "unique": false,
+          "backend": null
+        }
+      ],
+      "queries": {
+        "updates": [],
+        "deletes": [
+          {
+            "name": "ByStudy",
+            "columns": [],
+            "by": "study_id"
+          }
+        ],
+        "in_place": []
+      }
+    },
+    {
+      "name": "TaskLog",
+      "table_name": "task_log",
+      "file": "task_log.rs",
+      "doc": "Finished tool calls, one row per call.\n\nThe panel's badge counts every call a project has ever made while the list\nholds one page, so this is a real table rather than a bounded in-memory\nring: a page cannot report the size of the thing it is a page of.\n\n# Why `ok` is an integer\n\n`ok` is **nullable in the model** — null means the agent did not say whether\nthe call succeeded, which is not the same as failure and must not render as\none. WorkTable columns are not nullable, so the tri-state is carried as\n`-1` unknown / `0` failed / `1` succeeded and mapped back at the edge.\n`duration_ms` and `exit_code` use `-1` the same way, matching how\n`MessageRow.exit_code` already encodes an absent code.",
+      "persist": true,
+      "version": null,
+      "partition_by": null,
+      "page_size": null,
+      "columns": [
+        {
+          "name": "id",
+          "type": "String",
+          "primary_key": true,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        },
+        {
+          "name": "tool_call_id",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": "The agent's own id for the call, empty when it did not supply one.\nWithout it a running row cannot be correlated to its result."
+        },
+        {
+          "name": "project_id",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        },
+        {
+          "name": "item_id",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": "Soft association to a `ProjectItem`, never enforced. Empty is normal."
+        },
+        {
+          "name": "label",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": "What the row reads as: built from the tool's input, agent-side shapes\nand all, because only Rust has seen them."
+        },
+        {
+          "name": "tool",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        },
+        {
+          "name": "ok",
+          "type": "i64",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": "-1 unknown | 0 failed | 1 succeeded. See the module doc."
+        },
+        {
+          "name": "output",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        },
+        {
+          "name": "duration_ms",
+          "type": "i64",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": "-1 when the call was not timed."
+        },
+        {
+          "name": "exit_code",
+          "type": "i64",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": "-1 when the agent did not report one."
+        },
+        {
+          "name": "finished_at",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": "ISO 8601. Newest first in the panel, and the cursor for older pages."
+        }
+      ],
+      "indexes": [
+        {
+          "name": "project_idx",
+          "column": "project_id",
+          "unique": false,
+          "backend": null
+        }
+      ],
+      "queries": {
+        "updates": [],
+        "deletes": [
+          {
+            "name": "ByProject",
+            "columns": [],
+            "by": "project_id"
+          }
+        ],
+        "in_place": []
+      }
+    },
+    {
+      "name": "UsageCache",
+      "table_name": "usage_cache",
+      "file": "usage_cache.rs",
+      "doc": "The prompt-cache split of a turn's usage, the metric that drives token\noptimization.\n\nSeparate from `usage_ledger` on purpose: adding columns to that table would\nchange its fingerprint mid-string and mark every existing store a mismatch\n(and misread its rkyv rows positionally). A new table appends to the\nfingerprint instead, which the prefix check treats as a clean addition with\nno rows on disk to misread. One row per priced turn, keyed to the ledger by\nthe same day and project for aggregation.\n\nCache *reads* bill at a tenth of input; cache *writes* at a premium (1.25x at\nthe five-minute TTL, 2x at the one-hour). The read-to-write ratio over time\nis the single most useful signal for whether caching is actually working, so\nit is worth persisting rather than leaving only in the live per-turn usage.",
+      "persist": true,
+      "version": null,
+      "partition_by": null,
+      "page_size": null,
+      "columns": [
+        {
+          "name": "id",
+          "type": "String",
+          "primary_key": true,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        },
+        {
+          "name": "day",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": "UTC date bucket, \"YYYY-MM-DD\", matching the ledger's `day`."
+        },
+        {
+          "name": "project_id",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        },
+        {
+          "name": "model",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        },
+        {
+          "name": "cache_read_tokens",
+          "type": "i64",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": "Tokens served from cache this turn, billed at ~0.1x input."
+        },
+        {
+          "name": "cache_write_tokens",
+          "type": "i64",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": "Tokens written to cache this turn, billed at a premium."
+        },
+        {
+          "name": "input_tokens",
+          "type": "i64",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": "The uncached input remainder, for the full decomposition. `input`\nfrom the ledger already excludes cache reads on Claude."
+        },
+        {
+          "name": "at",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": "ISO 8601 finish time, for the time-series panels."
+        }
+      ],
+      "indexes": [
+        {
+          "name": "cache_day_idx",
+          "column": "day",
+          "unique": false,
+          "backend": null
+        },
+        {
+          "name": "cache_project_idx",
+          "column": "project_id",
+          "unique": false,
+          "backend": null
+        }
+      ],
+      "queries": {
+        "updates": [],
+        "deletes": [],
+        "in_place": []
+      }
+    },
+    {
+      "name": "UsageLedger",
+      "table_name": "usage_ledger",
+      "file": "usage_ledger.rs",
+      "doc": "One row per agent turn that reported usage: the durable cost record.\n\n# Why a ledger and not the messages table\n\nMessages already carry each turn's usage blob, but they die with their\nproject and they answer \"what did this conversation cost\", not \"what did\nthis week cost\". The ledger survives project deletion and is shaped for the\nonly question Settings asks: sums over date ranges.\n\n# Micro-dollars, not floats\n\n`cost_micro` is USD × 1,000,000 as an integer. The figure is the agent's\nown (`cost_usd` from the turn's usage — nothing here computes a price) and\nsumming integers keeps the ledger exact; the display divides once at the\nend.\n\n`day` is the UTC date (`YYYY-MM-DD`) carved off `at` at write time, so the\nrange queries are string comparisons — ISO dates sort lexicographically.\n\n**Adding a column here changes the rkyv layout of every row on disk.** Bump\n`SCHEMA_FINGERPRINT` in `db/tables.rs` in the same commit — see the module\ndoc on `db/schema/project.rs` for what happens otherwise.",
+      "persist": true,
+      "version": null,
+      "partition_by": null,
+      "page_size": null,
+      "columns": [
+        {
+          "name": "id",
+          "type": "String",
+          "primary_key": true,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        },
+        {
+          "name": "at",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": "ISO 8601, the turn's finish time."
+        },
+        {
+          "name": "day",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": "UTC date bucket, \"YYYY-MM-DD\"."
+        },
+        {
+          "name": "project_id",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        },
+        {
+          "name": "model",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": "The model the run was asked for; the agent may resolve an alias."
+        },
+        {
+          "name": "cost_micro",
+          "type": "i64",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": "USD × 1e6, as reported by the agent itself."
+        },
+        {
+          "name": "input_tokens",
+          "type": "i64",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        },
+        {
+          "name": "output_tokens",
+          "type": "i64",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "day_idx",
+          "column": "day",
+          "unique": false,
+          "backend": null
+        }
+      ],
+      "queries": {
+        "updates": [],
+        "deletes": [],
+        "in_place": []
+      }
+    },
+    {
+      "name": "UsageSession",
+      "table_name": "usage_session",
+      "file": "usage_session.rs",
+      "doc": "Provider-session ownership for durable usage-ledger turns.\n\nThe ledger intentionally survives project deletion, while the resumable\nprovider session id currently lives in project-scoped KV. This appended\nrelation snapshots that id at turn completion and keys it to the ledger row\nwithout changing the layout of any existing persisted table.",
+      "persist": true,
+      "version": null,
+      "partition_by": null,
+      "page_size": null,
+      "columns": [
+        {
+          "name": "id",
+          "type": "String",
+          "primary_key": true,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": "The matching usage-ledger row id."
+        },
+        {
+          "name": "project_id",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        },
+        {
+          "name": "agent",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        },
+        {
+          "name": "session_id",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": "Empty only when the provider never supplied a resumable id."
+        },
+        {
+          "name": "model",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        },
+        {
+          "name": "at",
+          "type": "String",
+          "primary_key": false,
+          "generator": null,
+          "optional": false,
+          "index_backend": null,
+          "doc": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "usage_session_project_idx",
+          "column": "project_id",
+          "unique": false,
+          "backend": null
+        },
+        {
+          "name": "usage_session_id_idx",
+          "column": "session_id",
+          "unique": false,
+          "backend": null
+        }
+      ],
+      "queries": {
+        "updates": [],
+        "deletes": [],
+        "in_place": []
+      }
+    }
+  ],
+  "relationships": [
+    {
+      "from_table": "agent_io_row",
+      "from_column": "project_id",
+      "to_table": "project",
+      "to_column": "id",
+      "kind": "required",
+      "origin": "inferred",
+      "note": "`project_id` names the `project` table"
+    },
+    {
+      "from_table": "approval_rule",
+      "from_column": "project_id",
+      "to_table": "project",
+      "to_column": "id",
+      "kind": "required",
+      "origin": "inferred",
+      "note": "`project_id` names the `project` table"
+    },
+    {
+      "from_table": "item_completion",
+      "from_column": "id",
+      "to_table": "project_item",
+      "to_column": "id",
+      "kind": "optional",
+      "origin": "overlay",
+      "note": "The primary key IS the item id. The row deliberately outlives the item, so the target is often gone. This is a historical reference, not an integrity constraint."
+    },
+    {
+      "from_table": "item_completion",
+      "from_column": "project_id",
+      "to_table": "project",
+      "to_column": "id",
+      "kind": "required",
+      "origin": "inferred",
+      "note": "`project_id` names the `project` table"
+    },
+    {
+      "from_table": "message",
+      "from_column": "item_id",
+      "to_table": "project_item",
+      "to_column": "id",
+      "kind": "optional",
+      "origin": "overlay",
+      "note": "Soft association, never enforced. Empty is normal, and an empty string is not a null."
+    },
+    {
+      "from_table": "message",
+      "from_column": "project_id",
+      "to_table": "project",
+      "to_column": "id",
+      "kind": "required",
+      "origin": "inferred",
+      "note": "`project_id` names the `project` table"
+    },
+    {
+      "from_table": "message_chunk",
+      "from_column": "message_id",
+      "to_table": "message",
+      "to_column": "id",
+      "kind": "required",
+      "origin": "inferred",
+      "note": "`message_id` names the `message` table"
+    },
+    {
+      "from_table": "message_chunk",
+      "from_column": "project_id",
+      "to_table": "project",
+      "to_column": "id",
+      "kind": "required",
+      "origin": "inferred",
+      "note": "`project_id` names the `project` table"
+    },
+    {
+      "from_table": "project_item",
+      "from_column": "project_id",
+      "to_table": "project",
+      "to_column": "id",
+      "kind": "required",
+      "origin": "inferred",
+      "note": "`project_id` names the `project` table"
+    },
+    {
+      "from_table": "pull_request",
+      "from_column": "project_id",
+      "to_table": "project",
+      "to_column": "id",
+      "kind": "required",
+      "origin": "inferred",
+      "note": "`project_id` names the `project` table"
+    },
+    {
+      "from_table": "question",
+      "from_column": "item_id",
+      "to_table": "project_item",
+      "to_column": "id",
+      "kind": "optional",
+      "origin": "overlay",
+      "note": "Optional back-reference so the surface can show what a question is about."
+    },
+    {
+      "from_table": "question",
+      "from_column": "project_id",
+      "to_table": "project",
+      "to_column": "id",
+      "kind": "required",
+      "origin": "inferred",
+      "note": "`project_id` names the `project` table"
+    },
+    {
+      "from_table": "question_reply",
+      "from_column": "message_id",
+      "to_table": "message",
+      "to_column": "id",
+      "kind": "required",
+      "origin": "inferred",
+      "note": "`message_id` names the `message` table"
+    },
+    {
+      "from_table": "question_reply",
+      "from_column": "project_id",
+      "to_table": "project",
+      "to_column": "id",
+      "kind": "required",
+      "origin": "inferred",
+      "note": "`project_id` names the `project` table"
+    },
+    {
+      "from_table": "question_reply",
+      "from_column": "question_id",
+      "to_table": "question",
+      "to_column": "id",
+      "kind": "required",
+      "origin": "inferred",
+      "note": "`question_id` names the `question` table"
+    },
+    {
+      "from_table": "reply_checkpoint",
+      "from_column": "project_id",
+      "to_table": "project",
+      "to_column": "id",
+      "kind": "required",
+      "origin": "inferred",
+      "note": "`project_id` names the `project` table"
+    },
+    {
+      "from_table": "study_event",
+      "from_column": "project_id",
+      "to_table": "project",
+      "to_column": "id",
+      "kind": "required",
+      "origin": "inferred",
+      "note": "`project_id` names the `project` table"
+    },
+    {
+      "from_table": "task_log",
+      "from_column": "item_id",
+      "to_table": "project_item",
+      "to_column": "id",
+      "kind": "optional",
+      "origin": "overlay",
+      "note": "Soft association, never enforced. Empty is normal."
+    },
+    {
+      "from_table": "task_log",
+      "from_column": "project_id",
+      "to_table": "project",
+      "to_column": "id",
+      "kind": "required",
+      "origin": "inferred",
+      "note": "`project_id` names the `project` table"
+    },
+    {
+      "from_table": "usage_cache",
+      "from_column": "day",
+      "to_table": "usage_ledger",
+      "to_column": "day",
+      "kind": "required",
+      "origin": "overlay",
+      "note": "Not an id at all, so inference cannot see it: the two tables are joined on the same UTC day bucket and project."
+    },
+    {
+      "from_table": "usage_cache",
+      "from_column": "project_id",
+      "to_table": "project",
+      "to_column": "id",
+      "kind": "required",
+      "origin": "inferred",
+      "note": "`project_id` names the `project` table"
+    },
+    {
+      "from_table": "usage_ledger",
+      "from_column": "project_id",
+      "to_table": "project",
+      "to_column": "id",
+      "kind": "required",
+      "origin": "inferred",
+      "note": "`project_id` names the `project` table"
+    },
+    {
+      "from_table": "usage_session",
+      "from_column": "id",
+      "to_table": "usage_ledger",
+      "to_column": "id",
+      "kind": "required",
+      "origin": "overlay",
+      "note": "The primary key IS the ledger row id: this table is an appended relation, added without changing the ledger's persisted layout."
+    },
+    {
+      "from_table": "usage_session",
+      "from_column": "project_id",
+      "to_table": "project",
+      "to_column": "id",
+      "kind": "required",
+      "origin": "inferred",
+      "note": "`project_id` names the `project` table"
+    }
+  ],
+  "unresolved": []
+}
