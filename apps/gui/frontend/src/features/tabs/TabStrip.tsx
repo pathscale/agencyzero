@@ -24,6 +24,7 @@ const TAB_ICON: Record<Tab["kind"], IconProps["name"] | null> = {
   draft: "file-plus-2",
   settings: "settings",
   analytics: "gauge",
+  schema: "layout-grid",
   project: null,
 };
 
@@ -233,6 +234,17 @@ export function TabStrip(): JSX.Element {
       <div class="az-strip-cap relative z-20 flex flex-none items-center gap-1.5 rounded-full pr-1 pl-5">
         <Button
           id="tabs-analytics"
+          type="button"
+          onClick={() => actions.openSchema()}
+          title={tx("Store schema")}
+          aria-label={tx("Store schema")}
+          class={`relative flex size-[30px] items-center justify-center rounded-full transition-colors hover:bg-az-hover ${
+            state.activeKey === "schema" ? "text-primary" : "text-az-muted hover:text-base-content"
+          }`}
+        >
+          <Icon name="layout-grid" class="text-[15px]" />
+        </Button>
+        <Button
           type="button"
           onClick={() => actions.openAnalytics()}
           title={tx("Analytics")}

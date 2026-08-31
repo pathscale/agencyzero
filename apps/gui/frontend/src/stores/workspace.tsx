@@ -2586,6 +2586,20 @@ export function createWorkspace() {
     focus("analytics", true);
   }
 
+  /** The schema diagram opens the same way, and is read-only for the same
+   * reason the crate behind it is: it draws the store, it never writes it. */
+  function openSchema(): void {
+    if (!state.tabs.some((tab) => tab.kind === "schema")) {
+      setState((d) => {
+        d.tabs = ((tabs) => [
+          ...tabs,
+          { ...HOME_TAB, key: "schema", kind: "schema", label: "Schema" },
+        ])(d.tabs);
+      });
+    }
+    focus("schema", true);
+  }
+
   /** One draft at a time: a second "+" focuses the Untitled tab already open. */
   function openDraft(): void {
     const existing = state.tabs.find((tab) => tab.kind === "draft");
@@ -3281,6 +3295,7 @@ export function createWorkspace() {
     deferOnboarding,
     completeOnboarding,
     openAnalytics,
+    openSchema,
     openDraft,
     closeTab,
     setTabModel,

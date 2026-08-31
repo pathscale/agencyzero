@@ -1,0 +1,49 @@
+{
+  "$comment": "Relationships the DSL does not declare. WorkTable has no foreign keys, so naming inference proposes the obvious edges and this file carries the rest: the ones a convention cannot reach, and the ones it would get wrong. Edit it by hand; `bun run schema:generate` folds it into schema.generated.json.",
+  "edges": [
+    {
+      "from": "message.item_id",
+      "to": "project_item.id",
+      "kind": "optional",
+      "note": "Soft association, never enforced. Empty is normal, and an empty string is not a null."
+    },
+    {
+      "from": "question.item_id",
+      "to": "project_item.id",
+      "kind": "optional",
+      "note": "Optional back-reference so the surface can show what a question is about."
+    },
+    {
+      "from": "task_log.item_id",
+      "to": "project_item.id",
+      "kind": "optional",
+      "note": "Soft association, never enforced. Empty is normal."
+    },
+    {
+      "from": "item_completion.id",
+      "to": "project_item.id",
+      "kind": "optional",
+      "note": "The primary key IS the item id. The row deliberately outlives the item, so the target is often gone. This is a historical reference, not an integrity constraint."
+    },
+    {
+      "from": "usage_session.id",
+      "to": "usage_ledger.id",
+      "kind": "required",
+      "note": "The primary key IS the ledger row id: this table is an appended relation, added without changing the ledger's persisted layout."
+    },
+    {
+      "from": "usage_cache.day",
+      "to": "usage_ledger.day",
+      "kind": "required",
+      "note": "Not an id at all, so inference cannot see it: the two tables are joined on the same UTC day bucket and project."
+    }
+  ],
+  "ignore": [
+    "study_event.study_id",
+    "study_event.turn_id",
+    "study_event.interaction_id",
+    "study_event.target_id",
+    "task_log.tool_call_id",
+    "usage_session.session_id"
+  ]
+}
