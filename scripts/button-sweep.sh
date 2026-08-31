@@ -1,4 +1,4 @@
-#!/bin/zsh
+#!/usr/bin/env sh
 #
 # Every eligible interactive control in the app, activated by semantic node
 # id from a profile that starts identical each time.
@@ -18,7 +18,7 @@
 #   scripts/button-sweep.sh              # every surface
 #   scripts/button-sweep.sh home         # one surface
 #
-set -euo pipefail
+set -eu
 
 cd "$(dirname "$0")/.."
 readonly ROOT="$PWD"
@@ -26,7 +26,7 @@ readonly LIVE=/tmp/qa-profile-db
 readonly DESCRIPTOR="$ROOT/target/blitz-control.json"
 
 surface=${1:-}
-if [[ $# -gt 1 ]]; then
+if [ "$#" -gt 1 ]; then
   echo "usage: scripts/button-sweep.sh [surface]" >&2
   exit 2
 fi
@@ -34,7 +34,7 @@ fi
 # Never kill by executable name: another build or the owner's stable instance
 # may use the same name. A pre-existing lock means this disposable profile is
 # already owned, so stop before deleting anything under that process.
-if [[ -e "$LIVE.lock" ]]; then
+if [ -e "$LIVE.lock" ]; then
   echo "$LIVE.lock already exists; stop its exact owner before running the sweep" >&2
   exit 1
 fi
@@ -54,9 +54,11 @@ readonly APP=$!
 cleanup() {
   if ! kill -0 "$APP" 2>/dev/null; then return; fi
   kill -TERM "$APP" 2>/dev/null || true
-  for _ in $(seq 1 50); do
+  cleanup_attempt=0
+  while [ "$cleanup_attempt" -lt 50 ]; do
     if ! kill -0 "$APP" 2>/dev/null; then break; fi
     sleep 0.1
+    cleanup_attempt=$((cleanup_attempt + 1))
   done
   if kill -0 "$APP" 2>/dev/null; then
     echo "az-gui pid $APP did not exit after TERM; sending KILL" >&2
@@ -78,9 +80,9 @@ trap cleanup EXIT INT TERM
 # installed one: a working copy should beat the released binary while you are
 # changing the harness itself, which is most of why you would be reading this.
 readonly PS_QA_REPO="${PS_QA_REPO:-$ROOT/../ps-observability}"
-if [[ -n "${PS_QA:-}" && -x "${PS_QA:-}" ]]; then
+if [ -n "${PS_QA:-}" ] && [ -x "${PS_QA:-}" ]; then
   qa="$PS_QA"
-elif [[ -x "$PS_QA_REPO/target/release/ps-qa" ]]; then
+elif [ -x "$PS_QA_REPO/target/release/ps-qa" ]; then
   qa="$PS_QA_REPO/target/release/ps-qa"
 elif command -v ps-qa >/dev/null 2>&1; then
   qa="$(command -v ps-qa)"
@@ -96,14 +98,16 @@ fi
 cd "$ROOT"
 
 attached=0
-for _ in $(seq 1 40); do
+attach_attempt=0
+while [ "$attach_attempt" -lt 40 ]; do
   if "$qa" nodes --descriptor "$DESCRIPTOR" >/dev/null 2>&1; then
     attached=1
     break
   fi
   sleep 1
+  attach_attempt=$((attach_attempt + 1))
 done
-if [[ "$attached" == 0 ]]; then
+if [ "$attached" -eq 0 ]; then
   echo "ps-qa could not attach to az-gui pid $APP" >&2
   exit 1
 fi

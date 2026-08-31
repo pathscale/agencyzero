@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/usr/bin/env sh
 #
 # Stop a locally built AgencyZero: TERM, and KILL only once TERM has failed.
 #
@@ -35,6 +35,11 @@
 #        was parked), or --no-kill was given and it is still running
 
 set -eu
+
+if [ "$(uname -s)" != "Darwin" ]; then
+  echo "az-stop.sh supports macOS only (it targets the local .app bundle and uses sample)" >&2
+  exit 1
+fi
 
 repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 # The bundle this checkout builds, and nothing else. `local-delivery.sh` writes

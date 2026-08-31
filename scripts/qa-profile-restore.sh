@@ -1,4 +1,4 @@
-#!/usr/bin/env zsh
+#!/usr/bin/env sh
 #
 # Expand the committed QA profile to a throwaway directory.
 #
@@ -6,14 +6,14 @@
 # copy and never on the archive. Restoring before each run is what makes a
 # `PaintsMore` or `Grows` delta mean anything: an editor left open by an earlier
 # press is already counted in the baseline otherwise.
-set -euo pipefail
+set -eu
 
-readonly REPO_ROOT="${0:A:h:h}"
+readonly REPO_ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 readonly ARCHIVE="$REPO_ROOT/tests/data/qa-profile.tar.zst"
 readonly DESTINATION="${1:-/tmp/qa-profile-db}"
 readonly QA_HOME="${DESTINATION}-home"
 
-if [[ ! -f "$ARCHIVE" ]]; then
+if [ ! -f "$ARCHIVE" ]; then
   echo "no archive at $ARCHIVE" >&2
   exit 1
 fi

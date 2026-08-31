@@ -1,11 +1,16 @@
-#!/bin/zsh
+#!/usr/bin/env sh
 
 # Run the complete native outcome suite in one disposable app process.
 # Provider history, workspace creation and database writes all stay beneath
 # the chosen profile path; the owner's live profile is never opened.
-set -euo pipefail
+set -eu
 
-readonly ROOT="${0:A:h:h}"
+if [ "$(uname -s)" != "Darwin" ]; then
+  echo "qa-full-local.sh currently supports macOS only (it launches the macOS app bundle)" >&2
+  exit 1
+fi
+
+readonly ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 readonly PROFILE="${1:-$ROOT/target/qa-profile-full}"
 readonly APP="$ROOT/target/release/bundle/macos/AgencyZero Experimental.app/Contents/MacOS/az-gui"
 readonly QA_HOME="${PROFILE}-home"
@@ -25,12 +30,14 @@ cleanup() {
 }
 trap cleanup EXIT
 
-for _ in {1..200}; do
+attempt=0
+while [ "$attempt" -lt 200 ]; do
   if ps-qa --descriptor "$DESCRIPTOR_PATH" find Home --role button --limit 1 2>/dev/null | \
     grep -Eq '^matched:[[:space:]]*[1-9]'; then
     break
   fi
   sleep 0.05
+  attempt=$((attempt + 1))
 done
 
 if ! ps-qa --descriptor "$DESCRIPTOR_PATH" find Home --role button --limit 1 | \

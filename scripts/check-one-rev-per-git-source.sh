@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/usr/bin/env sh
 #
 # Fail if Cargo.lock resolves any git dependency at more than one revision.
 #
@@ -17,7 +17,7 @@
 #
 # Reading the lockfile rather than running cargo keeps it honest on any runner
 # and costs nothing, and the lockfile is the resolution the release job uses.
-set -euo pipefail
+set -eu
 
 lock="${1:-Cargo.lock}"
 
@@ -37,7 +37,7 @@ duplicates=$(
                        END { for (url in count) if (count[url] > 1) print url revs[url] }'
 )
 
-if [[ -n $duplicates ]]; then
+if [ -n "$duplicates" ]; then
     echo "Cargo.lock resolves a git dependency at more than one revision:" >&2
     echo "$duplicates" >&2
     echo >&2

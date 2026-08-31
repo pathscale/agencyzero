@@ -1,6 +1,11 @@
-#!/bin/sh
+#!/usr/bin/env sh
 
 set -eu
+
+if [ "$(uname -s)" != "Darwin" ]; then
+  echo "blitz-control.sh currently supports macOS only (it reads the descriptor with plutil)" >&2
+  exit 1
+fi
 
 repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 descriptor=${TAURI_BLITZ_DRIVER_DESCRIPTOR:-$repo_root/target/blitz-driver.json}

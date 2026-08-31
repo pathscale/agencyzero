@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/usr/bin/env sh
 #
 # Build a bundle for the owner to test, and refuse to hand over a wrong one.
 #
@@ -27,14 +27,20 @@
 # It is off by default: a build carrying unpublished component code is not the
 # thing the owner is usually asking to test, and it must never happen silently.
 
-set -euo pipefail
+set -eu
 
-repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+if [ "$(uname -s)" != "Darwin" ]; then
+  echo "owner-build.sh supports macOS only (it builds and verifies a signed .app bundle)" >&2
+  exit 1
+fi
+
+repo_root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 cd "$repo_root"
 
 mode="${1:-experimental}"
+[ "$#" -eq 0 ] || shift
 link_local_ui=0
-for arg in "${@:2}"; do
+for arg in "$@"; do
   case "$arg" in
     --link-local-ui) link_local_ui=1 ;;
     *) echo "unknown option: $arg" >&2; exit 2 ;;
@@ -157,7 +163,8 @@ HOME="$probe_home" AZ_DATA_DIR="$probe_data" "$binary" --blitz-control \
   > "$probe_data/launch.log" 2>&1 &
 probe_pid=$!
 launched=0
-for _ in $(seq 1 30); do
+probe_attempt=0
+while [ "$probe_attempt" -lt 30 ]; do
   sleep 1
   kill -0 "$probe_pid" 2>/dev/null || break
   # The frontend answering an IPC call, not a rendered project panel: the probe
@@ -167,6 +174,7 @@ for _ in $(seq 1 30); do
     launched=1
     break
   fi
+  probe_attempt=$((probe_attempt + 1))
 done
 kill -TERM "$probe_pid" 2>/dev/null || true
 wait "$probe_pid" 2>/dev/null || true
@@ -179,9 +187,11 @@ wait "$probe_pid" 2>/dev/null || true
 # reported failure one line before saying so.
 #
 # So give the writers a moment to finish, then never let the result matter.
-for _ in $(seq 1 5); do
+cleanup_attempt=0
+while [ "$cleanup_attempt" -lt 5 ]; do
   rm -rf "$probe_home" "$probe_data" 2>/dev/null && break
   sleep 1
+  cleanup_attempt=$((cleanup_attempt + 1))
 done
 rm -rf "$probe_home" "$probe_data" 2>/dev/null || true
 

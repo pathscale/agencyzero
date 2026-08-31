@@ -1,4 +1,4 @@
-#!/bin/zsh
+#!/usr/bin/env sh
 #
 # Measure an az-gui build's idle CPU as CPU time consumed, not as a percentage.
 #
@@ -25,6 +25,11 @@
 # report a number for a process that failed to take it: two readings were once
 # taken from an app that had never started.
 set -u
+
+if [ "$(uname -s)" != "Darwin" ]; then
+    echo "idle-cpu.sh currently supports macOS only (it reads the macOS app store and BSD ps output)" >&2
+    exit 1
+fi
 
 repo=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 mode=${1:-}
@@ -55,18 +60,18 @@ fi
 to_seconds() { awk -F: '{ s = 0; for (i = 1; i <= NF; i++) s = s * 60 + $i; print s }'; }
 
 sample() {
-    local name=$1 a b rss
-    a=$(ps -o time= -p "$pid" | tr -d ' ' | to_seconds)
+    sample_name=$1
+    sample_a=$(ps -o time= -p "$pid" | tr -d ' ' | to_seconds)
     sleep "$window"
-    b=$(ps -o time= -p "$pid" | tr -d ' ' | to_seconds)
-    rss=$(ps -o rss= -p "$pid" | tr -d ' ')
-    awk -v l="$name" -v a="$a" -v b="$b" -v w="$window" -v r="$rss" \
+    sample_b=$(ps -o time= -p "$pid" | tr -d ' ' | to_seconds)
+    sample_rss=$(ps -o rss= -p "$pid" | tr -d ' ')
+    awk -v l="$sample_name" -v a="$sample_a" -v b="$sample_b" -v w="$window" -v r="$sample_rss" \
         'BEGIN { printf "%-40s %6.2fs CPU over %ss wall  (%5.1f%% of a core, rss %dMB)\n", l, b - a, w, (b - a) * 100 / w, r / 1024 }'
 }
 
 bench() { (cd "$repo" && "${PS_QA:-$(dirname "$0")/../../ps-observability/target/release/ps-qa}" "$@" >/dev/null 2>&1); }
 
-log=$(mktemp -t azidle)
+log=$(mktemp "${TMPDIR:-/tmp}/azidle.XXXXXX")
 # Performance instrumentation remains environment-driven; inspector control
 # does not. The explicit rescue flag makes this disposable process attachable.
 BLITZ_INCREMENTAL=1 \
@@ -95,7 +100,11 @@ case "$mode" in
         cycles=${3:-6}
         sample "idle, never driven"
         echo "  attaching $cycles control clients, each hanging up..."
-        for _ in $(seq "$cycles"); do bench nodes; done
+        client_cycle=0
+        while [ "$client_cycle" -lt "$cycles" ]; do
+            bench nodes
+            client_cycle=$((client_cycle + 1))
+        done
         sample "idle, after $cycles connections"
         ;;
     after-use)
@@ -109,11 +118,14 @@ case "$mode" in
         sample "after paging through Settings"
         ;;
     soak)
-        for round in $(seq "${3:-10}"); do
+        round=1
+        round_limit=${3:-10}
+        while [ "$round" -le "$round_limit" ]; do
             sample "round $round"
             bench key pagedown 4 "600,400"
             bench drag "Conversation" -900 3
             bench nodes
+            round=$((round + 1))
         done
         ;;
 esac

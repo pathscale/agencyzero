@@ -117,8 +117,8 @@ tauri-runtime-blitz = { version = "^0.3", optional = true, features = ["macos-pr
 # file. Working against a local checkout stays possible through the `[patch]`
 # entries in `.cargo/config.toml`, so the default exercises what a release
 # actually resolves.
-blitz-dom = { package = "ps-blitz-dom", version = "^0.3.2", features = ["system-fonts", "parallel-construct"], optional = true }
-blitz-script = { package = "ps-blitz-script", version = "^0.3.2", features = ["system-fonts"], optional = true }
+blitz-dom = { package = "ps-blitz-dom", version = "^0.3", features = ["system-fonts", "parallel-construct"], optional = true }
+blitz-script = { package = "ps-blitz-script", version = "^0.3", features = ["system-fonts"], optional = true }
 brotli = { version = "8.0.4", default-features = false, features = ["std"], optional = true }
 url = { version = "2.5.8", optional = true }
 tauri-plugin-updater = "2"

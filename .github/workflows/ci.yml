@@ -58,6 +58,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Check portable shell scripts
+        run: /bin/sh tests/shell-scripts.sh
+
       # The Tauri stack needs a webview toolchain to compile at all.
       - name: Install Tauri system dependencies
         run: |
