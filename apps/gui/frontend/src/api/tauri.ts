@@ -166,6 +166,16 @@ export function createCommandApi(call: CommandCaller, on: EventListener): Agency
     listApprovalRules: (projectId) => call("list_approval_rules", { projectId }),
     clearApprovalRules: (projectId) => call("clear_approval_rules", { projectId }),
 
+    browseState: () => call("browse_state"),
+    browseNavigate: (tab, input) => call("browse_navigate", { tab, input }),
+    browseOpenTab: (input) => call("browse_open_tab", { input: input ?? null }),
+    browseCloseTab: (tab) => call("browse_close_tab", { tab }),
+    browseSelectTab: (tab) => call("browse_select_tab", { tab }),
+    browseBack: (tab) => call("browse_back", { tab }),
+    browseForward: (tab) => call("browse_forward", { tab }),
+    browseReload: (tab) => call("browse_reload", { tab }),
+    browseDebugLog: (since) => call("browse_debug_log", { since: since ?? null }),
+
     on,
   };
 }

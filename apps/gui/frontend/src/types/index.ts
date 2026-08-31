@@ -8,7 +8,7 @@
  */
 
 /** Which screen a tab shows. `home` is not closable; the rest are. */
-export type TabKind = "home" | "draft" | "settings" | "project" | "analytics";
+export type TabKind = "home" | "draft" | "settings" | "project" | "analytics" | "browse";
 
 /** One enum for both layers: a Project and its ProjectItems share it. */
 /**
@@ -1272,3 +1272,59 @@ export type MessagePage = {
   messages: Message[];
   total: number;
 };
+
+/**
+ * One tab of the browsing surface.
+ *
+ * Mirrors `ps_browse_core::TabSnapshot`. The id is the browser's own, not a
+ * workspace tab key: browsing tabs live inside the Browse surface and are
+ * unrelated to the window's tab strip.
+ */
+export interface BrowseTab {
+  id: number;
+  /** The page's title, or its address while it has none. */
+  title: string;
+  url: string;
+  /**
+   * `loading` while a fetch is in flight, otherwise how the last load went.
+   *
+   * `partial` and `degraded` are the states worth having: a page whose
+   * subresources all failed looks exactly like one that worked if the only
+   * answer is loaded/not-loaded.
+   */
+  status: "empty" | "loading" | "loaded" | "partial" | "degraded" | "error";
+  canGoBack: boolean;
+  canGoForward: boolean;
+}
+
+/** One entry in the active tab's back/forward stack. */
+export interface BrowseHistoryEntry {
+  url: string;
+  title: string;
+  current: boolean;
+}
+
+/** The whole browsing surface in one read. */
+export interface BrowseView {
+  tabs: BrowseTab[];
+  /** Which tab's page is showing. */
+  active: number;
+  /** The active tab's history, oldest first. */
+  history: BrowseHistoryEntry[];
+  /**
+   * Whether this build can render a page at all.
+   *
+   * A webview-only build has the whole surface and no engine behind it. Saying
+   * so is the difference between an explained limitation and a browser that
+   * appears to work and shows nothing.
+   */
+  canRender: boolean;
+}
+
+/** One line of the browsing surface's debugging stream. */
+export interface BrowseDebugEntry {
+  seq: number;
+  level: "info" | "warn" | "error";
+  source: string;
+  message: string;
+}

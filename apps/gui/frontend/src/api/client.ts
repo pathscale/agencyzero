@@ -5,6 +5,8 @@ import type {
   AgentModels,
   AgentStatus,
   AvailableUpdate,
+  BrowseDebugEntry,
+  BrowseView,
   BuildInfo,
   ChatImportSource,
   ClaudeUsage,
@@ -410,6 +412,39 @@ export interface AgencyZeroApi {
    */
   resetTaskManager(): Promise<void>;
 
+  // — Browsing ————————————————————————————————————————————————
+  //
+  // Every one of these returns the whole surface rather than the field it
+  // changed. The surface also changes on its own — a load finishing, a page
+  // mounting — so the caller has to be able to redraw from a snapshot anyway,
+  // and a command that returned a fragment would give it two ways to be right.
+
+  /** The browsing surface as it stands. */
+  browseState(): Promise<BrowseView>;
+  /**
+   * Go to whatever was typed.
+   *
+   * Nothing happens when the input is not an address: there is no search
+   * fallback, deliberately, so a typo goes nowhere visible instead of
+   * somewhere unrelated.
+   */
+  browseNavigate(tab: number, input: string): Promise<BrowseView>;
+  /** Open a tab, blank unless given an address. */
+  browseOpenTab(input?: string): Promise<BrowseView>;
+  /** Close a tab. Closing the last one blanks it rather than emptying the surface. */
+  browseCloseTab(tab: number): Promise<BrowseView>;
+  browseSelectTab(tab: number): Promise<BrowseView>;
+  browseBack(tab: number): Promise<BrowseView>;
+  browseForward(tab: number): Promise<BrowseView>;
+  browseReload(tab: number): Promise<BrowseView>;
+  /**
+   * The debugging stream from where the caller left off.
+   *
+   * A page that renders and then does nothing is almost always a subresource
+   * that never arrived, and without this that fact only exists on stderr.
+   */
+  browseDebugLog(since?: number): Promise<BrowseDebugEntry[]>;
+
   // — Events ——————————————————————————————————————————————————
   on<E extends keyof AppEvents>(
     event: E,
@@ -422,6 +457,13 @@ export interface AppEvents {
   /** An agent-authored restart is waiting for frontend-owned queued work. */
   "app:restart-scheduled": { token: string };
   "settings:updated": GlobalSettings;
+  /**
+   * The browsing surface changed: a load started, finished, or a page mounted.
+   *
+   * Carries the whole surface, not a delta. A dropped delta leaves a tab strip
+   * permanently wrong; a dropped snapshot is corrected by the next one.
+   */
+  "browse:state": Omit<BrowseView, "canRender">;
   "project:created": Project;
   "project:updated": Project;
   "project:deleted": { id: string };

@@ -1,0 +1,26 @@
+[package]
+name = "ps-browse-core"
+description = "Host-agnostic browser policy: tabs, history, address resolution, load outcomes"
+version.workspace = true
+edition.workspace = true
+# Inherited `false` for now. This crate exists to be shared with chuzz, and
+# chuzz takes every dependency as a published version with a caret rather than
+# a path or a git revision — that is written into its working agreement. So
+# the step that actually lets chuzz adopt this is flipping `publish` and
+# releasing it; until then agencyzero consumes it by path and chuzz keeps its
+# own copy of the policy. Nothing here depends on agencyzero, precisely so
+# that flip is the only work left.
+publish.workspace = true
+
+[dependencies]
+# The entire dependency set, and deliberately so.
+#
+# Browser *policy* is not browser *rendering*. Tabs, a back stack, and the
+# question of whether a typed string is an address are decisions a browser
+# makes before any engine is involved, and they are the decisions two
+# applications want to agree on. Nothing in this crate mentions blitz, tauri,
+# a document, or a node: the host owns the engine and calls in here to ask what
+# to do. That is what makes the crate shareable, and it is also what makes it
+# testable without a window.
+serde = { version = "1", features = ["derive"] }
+url = "2"

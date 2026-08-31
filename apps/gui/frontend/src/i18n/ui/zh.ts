@@ -998,6 +998,21 @@ const zh = {
   Timings: "耗时",
   "worst total first": "按总耗时降序",
   "Nothing measured yet": "尚无测量数据",
+  Browse: "浏览",
+  "Show {title}": "显示 {title}",
+  "Status: {status}": "状态：{status}",
+  "Close tab": "关闭标签页",
+  "New tab": "新建标签页",
+  Forward: "前进",
+  Reload: "重新加载",
+  Address: "地址",
+  "Enter an address": "输入地址",
+  "What the browser did": "浏览器做了什么",
+  "This build has no page renderer, so addresses resolve but nothing is drawn.":
+    "此版本没有页面渲染器，地址可以解析但不会绘制任何内容。",
+  "Type an address above. Pages render with the same engine as this window.":
+    "在上方输入地址。页面使用与本窗口相同的引擎渲染。",
+  "Nothing recorded yet.": "尚无记录。",
 } satisfies Record<keyof typeof en, string>;
 
 export default zh;

@@ -32,6 +32,15 @@ export {
 type CommandMethod = Exclude<keyof AgencyZeroApi, "on">;
 
 const COMMAND_FOR: Record<CommandMethod, string> = {
+  browseState: "browse_state",
+  browseNavigate: "browse_navigate",
+  browseOpenTab: "browse_open_tab",
+  browseCloseTab: "browse_close_tab",
+  browseSelectTab: "browse_select_tab",
+  browseBack: "browse_back",
+  browseForward: "browse_forward",
+  browseReload: "browse_reload",
+  browseDebugLog: "browse_debug_log",
   listProjects: "list_projects",
   getHomeSnapshot: "get_home_snapshot",
   createProject: "create_project",

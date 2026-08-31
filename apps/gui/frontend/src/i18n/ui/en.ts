@@ -1037,6 +1037,21 @@ const en = {
   Timings: "Timings",
   "worst total first": "worst total first",
   "Nothing measured yet": "Nothing measured yet",
+  Browse: "Browse",
+  "Show {title}": "Show {title}",
+  "Status: {status}": "Status: {status}",
+  "Close tab": "Close tab",
+  "New tab": "New tab",
+  Forward: "Forward",
+  Reload: "Reload",
+  Address: "Address",
+  "Enter an address": "Enter an address",
+  "What the browser did": "What the browser did",
+  "This build has no page renderer, so addresses resolve but nothing is drawn.":
+    "This build has no page renderer, so addresses resolve but nothing is drawn.",
+  "Type an address above. Pages render with the same engine as this window.":
+    "Type an address above. Pages render with the same engine as this window.",
+  "Nothing recorded yet.": "Nothing recorded yet.",
 } as const;
 
 export default en;
