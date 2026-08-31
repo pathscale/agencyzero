@@ -2586,6 +2586,25 @@ export function createWorkspace() {
     focus("analytics", true);
   }
 
+  /**
+   * The expand control opens Browse as a real tab, beside Home.
+   *
+   * A tab rather than an overlay: a page you are reading is somewhere you go,
+   * not a mode you are trapped in, and everything the window already does with
+   * tabs — restore on boot, Cmd-number, close — then works on it for free.
+   */
+  function openBrowse(): void {
+    if (!state.tabs.some((tab) => tab.kind === "browse")) {
+      setState((d) => {
+        d.tabs = ((tabs) => [
+          ...tabs,
+          { ...HOME_TAB, key: "browse", kind: "browse", label: "Browse" },
+        ])(d.tabs);
+      });
+    }
+    focus("browse", true);
+  }
+
   /** One draft at a time: a second "+" focuses the Untitled tab already open. */
   function openDraft(): void {
     const existing = state.tabs.find((tab) => tab.kind === "draft");
@@ -3281,6 +3300,7 @@ export function createWorkspace() {
     deferOnboarding,
     completeOnboarding,
     openAnalytics,
+    openBrowse,
     openDraft,
     closeTab,
     setTabModel,
@@ -3479,6 +3499,27 @@ export function createWorkspace() {
       await client().clearApprovalRules(projectId);
       patchProjectPanelData(projectId, { approvalRules: [] });
     },
+    // Browsing goes straight through. The surface's state lives in Rust — it
+    // has to, the page is a document the engine owns — so mirroring it into
+    // the workspace store would give the window two copies of one truth and a
+    // way for them to disagree. The Browse pane holds the snapshot it was
+    // last given and re-reads on `browse:state`.
+    browseState: () => client().browseState(),
+    browseNavigate: (tab: number, input: string) => client().browseNavigate(tab, input),
+    browseOpenTab: (input?: string) => client().browseOpenTab(input),
+    browseCloseTab: (tab: number) => client().browseCloseTab(tab),
+    browseSelectTab: (tab: number) => client().browseSelectTab(tab),
+    browseBack: (tab: number) => client().browseBack(tab),
+    browseForward: (tab: number) => client().browseForward(tab),
+    browseReload: (tab: number) => client().browseReload(tab),
+    browseDebugLog: (since?: number) => client().browseDebugLog(since),
+    /**
+     * Subscribe to the surface changing on its own — a load finishing, a page
+     * mounting. Returns the unlisten, which the caller owns: the Browse pane is
+     * unmounted every time the window changes tab, and a subscription that
+     * outlived it would write into a disposed scope.
+     */
+    onBrowseState: (handler: () => void) => client().on("browse:state", handler),
     getCostSummary: () => client().getCostSummary(),
     getUsageAnalytics: () => client().getUsageAnalytics(),
     discoverChatImports: () => client().discoverChatImports(),

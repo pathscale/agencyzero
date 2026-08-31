@@ -3,6 +3,9 @@ import type {
   AgentIoEntry,
   AgentModels,
   AgentStatus,
+  BrowseHistoryEntry,
+  BrowseTab,
+  BrowseView,
   CreatedProject,
   DataLocationView,
   GlobalSettings,
@@ -1191,6 +1194,86 @@ export function createMockApi(): AgencyZeroApi {
     frontendSubscriptionsReady: () => settle(undefined),
     confirmAgentRestart: () => settle(undefined),
 
+    // — Browsing ————————————————————————————————————————————————
+    //
+    // A real surface, not a canned answer. `docs/ui-verification.md` drives
+    // this app headlessly against the mock, so the browsing chrome can only be
+    // verified here if tabs, history and the Back button actually behave. What
+    // the mock cannot do is fetch or render: a navigation resolves to a
+    // "loaded" tab with no page behind it, and `canRender` says so.
+
+    browseState: () => settle(browseView()),
+    browseNavigate: (tab, input) => {
+      const url = browseUrlFrom(input);
+      const state = browseTabs.find((candidate) => candidate.id === tab);
+      if (url && state) {
+        browseVisit(state, url);
+      }
+      return settle(browseView());
+    },
+    browseOpenTab: (input) => {
+      const url = input ? browseUrlFrom(input) : null;
+      const state: MockBrowseTab = {
+        id: browseNextId++,
+        history: [{ url: url ?? BROWSE_BLANK, title: "" }],
+        current: 0,
+        status: url ? "loaded" : "empty",
+      };
+      browseTabs.push(state);
+      browseActive = state.id;
+      return settle(browseView());
+    },
+    browseCloseTab: (tab) => {
+      const index = browseTabs.findIndex((candidate) => candidate.id === tab);
+      if (index !== -1) {
+        if (browseTabs.length === 1) {
+          // Closing the last tab blanks it. A surface with no tab has nowhere
+          // to put a page and no address-bar target, so the Rust never lets it
+          // happen and neither does this.
+          browseTabs[0] = {
+            id: tab,
+            history: [{ url: BROWSE_BLANK, title: "" }],
+            current: 0,
+            status: "empty",
+          };
+        } else {
+          browseTabs.splice(index, 1);
+          if (browseActive === tab) {
+            browseActive = browseTabs[Math.min(index, browseTabs.length - 1)].id;
+          }
+        }
+      }
+      return settle(browseView());
+    },
+    browseSelectTab: (tab) => {
+      if (browseTabs.some((candidate) => candidate.id === tab)) {
+        browseActive = tab;
+      }
+      return settle(browseView());
+    },
+    browseBack: (tab) => {
+      const state = browseTabs.find((candidate) => candidate.id === tab);
+      if (state && state.current > 0) {
+        state.current -= 1;
+      }
+      return settle(browseView());
+    },
+    browseForward: (tab) => {
+      const state = browseTabs.find((candidate) => candidate.id === tab);
+      if (state && state.current + 1 < state.history.length) {
+        state.current += 1;
+      }
+      return settle(browseView());
+    },
+    browseReload: (tab) => {
+      void tab;
+      return settle(browseView());
+    },
+    browseDebugLog: (since) =>
+      settle(
+        browseLog.filter((entry) => since === undefined || entry.seq > since),
+      ),
+
     async on<E extends keyof AppEvents>(
       event: E,
       handler: (payload: AppEvents[E]) => void,
@@ -1222,3 +1305,71 @@ export function createMockApi(): AgencyZeroApi {
     return entry;
   }
 }
+
+/** A mock browsing tab: the same history model the Rust keeps, in miniature. */
+interface MockBrowseTab {
+  id: number;
+  history: { url: string; title: string }[];
+  current: number;
+  status: BrowseTab["status"];
+}
+
+const BROWSE_BLANK = "about:blank";
+
+let browseNextId = 1;
+let browseActive = 0;
+const browseTabs: MockBrowseTab[] = [
+  { id: 0, history: [{ url: BROWSE_BLANK, title: "" }], current: 0, status: "empty" },
+];
+const browseLog: { seq: number; level: "info" | "warn" | "error"; source: string; message: string }[] =
+  [];
+
+/**
+ * The same address policy the Rust applies, and it has to be the same: a UI
+ * test that types prose and sees a navigation would pass against a mock that
+ * was more permissive than the thing it stands in for.
+ */
+function browseUrlFrom(input: string): string | null {
+  const text = input.trim();
+  if (!text) return null;
+  if (/^[a-z][a-z0-9+.-]*:/i.test(text)) return text;
+  if (/\s/.test(text)) return null;
+  const host = text.split(/[/?#]/)[0].split(":")[0];
+  const bare = host === "localhost" || (host.includes(".") && !host.startsWith(".") && !host.endsWith("."));
+  return bare ? `https://${text}` : null;
+}
+
+function browseVisit(tab: MockBrowseTab, url: string): void {
+  if (tab.history[tab.current].url === url) return;
+  tab.history = tab.history.slice(0, tab.current + 1);
+  tab.history.push({ url, title: "" });
+  tab.current = tab.history.length - 1;
+  tab.status = "loaded";
+  browseLog.push({ seq: browseLog.length, level: "info", source: "nav", message: `tab ${tab.id}: ${url}` });
+}
+
+function browseView(): BrowseView {
+  const active = browseTabs.find((tab) => tab.id === browseActive) ?? browseTabs[0];
+  const history: BrowseHistoryEntry[] = active.history.map((entry, index) => ({
+    url: entry.url,
+    title: entry.title || entry.url,
+    current: index === active.current,
+  }));
+  return {
+    tabs: browseTabs.map((tab) => ({
+      id: tab.id,
+      title: tab.history[tab.current].title || tab.history[tab.current].url,
+      url: tab.history[tab.current].url,
+      status: tab.status,
+      canGoBack: tab.current > 0,
+      canGoForward: tab.current + 1 < tab.history.length,
+    })),
+    active: active.id,
+    history,
+    // The mock has no engine. Saying so is the point: the chrome renders its
+    // "this build cannot show pages" state against it, which is otherwise only
+    // reachable in a webview-only build.
+    canRender: false,
+  };
+}
+

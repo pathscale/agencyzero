@@ -24,6 +24,7 @@ const TAB_ICON: Record<Tab["kind"], IconProps["name"] | null> = {
   draft: "file-plus-2",
   settings: "settings",
   analytics: "gauge",
+  browse: "search",
   project: null,
 };
 
@@ -193,6 +194,28 @@ export function TabStrip(): JSX.Element {
     <div data-tauri-drag-region="deep" class="flex flex-none items-center gap-2 px-3.5 pt-3 pb-1.5">
       {/* Room for the macOS traffic lights, which the window keeps. */}
       <div class="w-[62px] shrink-0" />
+
+      {/*
+        Expand from the left: the full browsing surface.
+
+        On this edge rather than beside the gear on the right, and that is the
+        whole point of it — it opens *outward* from where the window's own
+        content begins, so it reads as widening into a bigger surface rather
+        than as one more utility tab. The chevron points the way it opens.
+      */}
+      <Button
+        id="tabs-browse"
+        type="button"
+        onClick={() => actions.openBrowse()}
+        title={tx("Browse")}
+        aria-label={tx("Browse")}
+        aria-pressed={state.activeKey === "browse" ? "true" : "false"}
+        class={`flex size-[30px] shrink-0 items-center justify-center rounded-full transition-colors hover:bg-az-hover ${
+          state.activeKey === "browse" ? "text-primary" : "text-az-muted hover:text-base-content"
+        }`}
+      >
+        <Icon name="chevron-right" class="text-ui-lead" />
+      </Button>
 
       <Show when={overflow().left || overflow().right}>
         <ScrollArrow direction={-1} isDisabled={!overflow().left} onScroll={() => nudge(-1)} />
