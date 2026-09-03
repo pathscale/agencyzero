@@ -51,7 +51,7 @@ impl From<QuestionRow> for QuestionDto {
 /// number: an `https://` value is a GitHub issue, anything else is an item id.
 /// The row is always emitted so the card lands the moment the directive parses,
 /// not at the next project load.
-pub fn record(
+pub async fn record(
     app: &AppHandle,
     tables: &Tables,
     project_id: &str,
@@ -76,7 +76,7 @@ pub fn record(
         answered: false,
         created_at: crate::projects::now(),
     };
-    tables.question.insert(row.clone()).map_err(|error| {
+    tables.question.insert(row.clone()).await.map_err(|error| {
         crate::log!(
             crate::log::Level::Error,
             "questions",
@@ -227,14 +227,17 @@ mod tests {
         tables
             .question
             .insert(question("open", "project-a", false))
+            .await
             .expect("open question inserts");
         tables
             .question
             .insert(question("second-open", "project-a", false))
+            .await
             .expect("second question inserts");
         tables
             .question
             .insert(question("other-project", "project-b", false))
+            .await
             .expect("other project question inserts");
 
         let target = reply_target(&tables, "project-a", Some("open"))
@@ -289,6 +292,7 @@ mod tests {
         tables
             .question
             .insert(question("only"))
+            .await
             .expect("question inserts");
         assert!(
             reply_target(&tables, "project-a", None)
@@ -299,6 +303,7 @@ mod tests {
         tables
             .question
             .insert(question("ambiguous"))
+            .await
             .expect("second question inserts");
         assert!(
             reply_target(&tables, "project-a", None)
@@ -328,6 +333,7 @@ mod tests {
                 message_id: "message-a".into(),
                 created_at: "2026-08-07T00:00:00Z".into(),
             })
+            .await
             .expect("reply link inserts");
         tables.shutdown().await.expect("tables drain");
 

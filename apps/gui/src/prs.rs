@@ -203,7 +203,7 @@ pub fn canonical_rows(rows: Vec<PullRequestRow>) -> Vec<PullRequestRow> {
 /// Rows are born `unknown` and honest; `gh` upgrades them moments later when
 /// it is installed and authenticated. The number is returned so the same
 /// directive can attach it to an item without parsing the URL twice.
-pub fn record_url(
+pub async fn record_url(
     app: &AppHandle,
     tables: &Tables,
     project_id: &str,
@@ -243,14 +243,18 @@ pub fn record_url(
                 dismissed: false,
                 updated_at: crate::projects::now(),
             };
-            tables.pull_request.insert(row.clone()).map_err(|error| {
-                crate::log!(
-                    crate::log::Level::Error,
-                    "prs",
-                    "{project_id}: could not record {url}: {error}"
-                );
-                format!("WRITE_FAILED: {error}")
-            })?;
+            tables
+                .pull_request
+                .insert(row.clone())
+                .await
+                .map_err(|error| {
+                    crate::log!(
+                        crate::log::Level::Error,
+                        "prs",
+                        "{project_id}: could not record {url}: {error}"
+                    );
+                    format!("WRITE_FAILED: {error}")
+                })?;
             row
         }
     };
@@ -515,7 +519,7 @@ pub fn refresh_project(app: AppHandle, project_id: String) {
                         dismissed: false,
                         updated_at: crate::projects::now(),
                     };
-                    match state.tables.pull_request.insert(row.clone()) {
+                    match state.tables.pull_request.insert(row.clone()).await {
                         Ok(_) => {
                             let _ = app.emit("pr:updated", PullRequestDto::from(row));
                         }
@@ -711,7 +715,7 @@ pub async fn dismiss_pull_request(
     let (project_id, _) = dismiss_association(&app, &state.tables, &id).await?;
     let mut study = crate::study::Record::manual(project_id, "pr.dismiss", "pull_request", id);
     study.latency = Some(started.elapsed());
-    crate::study::record(&state.tables, study);
+    crate::study::record(&state.tables, study).await;
     Ok(())
 }
 
@@ -730,7 +734,7 @@ pub fn discover_pull_requests(app: AppHandle, project_id: String) {
 
 /// Ask `gh` again, for the refresh affordance on the chip.
 #[tauri::command]
-pub fn refresh_pull_request(app: AppHandle, id: String) {
+pub async fn refresh_pull_request(app: AppHandle, id: String) {
     // Asked about one, answered for its whole project: the query costs the
     // same either way, and a chip nobody clicked is no less stale.
     let state = app.state::<AppState>();
@@ -757,7 +761,8 @@ pub fn refresh_pull_request(app: AppHandle, id: String) {
                 latency: None,
                 detail: serde_json::json!({}),
             },
-        );
+        )
+        .await;
         refresh_project(app, project);
     }
 }

@@ -518,6 +518,7 @@ async fn copy_scrubbed(
         tables
             .project
             .insert(scrubbed_row)
+            .await
             .map_err(|error| error.to_string())?;
         scrubbed += 1;
     }
@@ -537,6 +538,7 @@ async fn copy_scrubbed(
         tables
             .project_item
             .insert(scrubbed_row)
+            .await
             .map_err(|error| error.to_string())?;
         scrubbed += 1;
     }
@@ -555,6 +557,7 @@ async fn copy_scrubbed(
         tables
             .message
             .insert(scrubbed_row)
+            .await
             .map_err(|error| error.to_string())?;
         scrubbed += 1;
     }
@@ -569,6 +572,7 @@ async fn copy_scrubbed(
         tables
             .task_log
             .insert(scrubbed_row)
+            .await
             .map_err(|error| error.to_string())?;
         scrubbed += 1;
     }
@@ -601,6 +605,7 @@ async fn copy_scrubbed(
         tables
             .message_chunk
             .insert(scrubbed_row)
+            .await
             .map_err(|error| error.to_string())?;
         scrubbed += 1;
     }
@@ -620,6 +625,7 @@ async fn copy_scrubbed(
         tables
             .reply_checkpoint
             .insert(scrubbed_row)
+            .await
             .map_err(|error| error.to_string())?;
         scrubbed += 1;
     }
@@ -637,6 +643,7 @@ async fn copy_scrubbed(
         tables
             .agent_io
             .insert(scrubbed_row)
+            .await
             .map_err(|error| error.to_string())?;
         scrubbed += 1;
     }
@@ -660,6 +667,7 @@ async fn copy_scrubbed(
                 kind: "action".to_owned(),
                 detail: "QA fixture entry".to_owned(),
             })
+            .await
             .map_err(|error| error.to_string())?;
         scrubbed += 1;
     }
@@ -674,6 +682,7 @@ async fn copy_scrubbed(
         tables
             .question
             .insert(scrubbed_row)
+            .await
             .map_err(|error| error.to_string())?;
         scrubbed += 1;
     }
@@ -708,6 +717,7 @@ async fn copy_scrubbed(
         tables
             .pull_request
             .insert(row)
+            .await
             .map_err(|error| error.to_string())?;
         scrubbed += 1;
     }
@@ -723,6 +733,7 @@ async fn copy_scrubbed(
         tables
             .approval_rule
             .insert(scrubbed_row)
+            .await
             .map_err(|error| error.to_string())?;
         scrubbed += 1;
     }
@@ -738,6 +749,7 @@ async fn copy_scrubbed(
         tables
             .study_event
             .insert(scrubbed_row)
+            .await
             .map_err(|error| error.to_string())?;
         scrubbed += 1;
     }
@@ -751,6 +763,7 @@ async fn copy_scrubbed(
         tables
             .question_reply
             .insert(row)
+            .await
             .map_err(|error| error.to_string())?;
         scrubbed += 1;
     }
@@ -764,6 +777,7 @@ async fn copy_scrubbed(
         tables
             .item_completion
             .insert(row)
+            .await
             .map_err(|error| error.to_string())?;
         scrubbed += 1;
     }
@@ -777,6 +791,7 @@ async fn copy_scrubbed(
         tables
             .usage_ledger
             .insert(row)
+            .await
             .map_err(|error| error.to_string())?;
         scrubbed += 1;
     }
@@ -790,6 +805,7 @@ async fn copy_scrubbed(
         tables
             .usage_cache
             .insert(row)
+            .await
             .map_err(|error| error.to_string())?;
         scrubbed += 1;
     }
@@ -803,6 +819,7 @@ async fn copy_scrubbed(
         tables
             .usage_session
             .insert(row)
+            .await
             .map_err(|error| error.to_string())?;
         scrubbed += 1;
     }
@@ -818,6 +835,7 @@ async fn copy_scrubbed(
         tables
             .kv
             .insert(scrubbed_row)
+            .await
             .map_err(|error| error.to_string())?;
         scrubbed += 1;
     }

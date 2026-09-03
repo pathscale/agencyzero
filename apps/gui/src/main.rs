@@ -828,6 +828,87 @@ mod restart_resume_tests {
     }
 
     #[test]
+    fn a_strict_load_refusal_rebuilds_the_store_and_preserves_the_original() {
+        use crate::db::schema::project::ProjectRow;
+
+        let root = std::env::temp_dir().join(format!(
+            "az-strict-store-rebuild-{}-{}",
+            std::process::id(),
+            uuid::Uuid::now_v7()
+        ));
+        let source = root.join("source");
+        let empty = root.join("empty");
+
+        tauri::async_runtime::block_on(async {
+            let tables = Tables::open(&source).await.expect("source store opens");
+            tables
+                .project
+                .insert(ProjectRow {
+                    id: "project-1".into(),
+                    name: "kept".into(),
+                    status: "active".into(),
+                    position: 1,
+                    dirs: "[]".into(),
+                    pinned: false,
+                    moderator_enabled: false,
+                    forked_from: String::new(),
+                    last_activity_at: "2026-09-04T00:00:00Z".into(),
+                })
+                .await
+                .expect("project inserts");
+            tables.shutdown().await.expect("source store drains");
+
+            let tables = Tables::open(&empty).await.expect("empty store opens");
+            tables.shutdown().await.expect("empty store drains");
+        });
+        std::fs::copy(
+            empty.join("project/status_idx.wt.idx"),
+            source.join("project/status_idx.wt.idx"),
+        )
+        .expect("replace the secondary index with a valid but stale one");
+
+        let error = match tauri::async_runtime::block_on(Tables::open(&source)) {
+            Ok(tables) => {
+                tauri::async_runtime::block_on(tables.shutdown()).expect("unexpected store drains");
+                panic!("strict load must reject the stale secondary index");
+            }
+            Err(error) => error,
+        };
+        assert!(
+            is_persistence_load_refusal(&error),
+            "strict refusal was not classified: {error:?}"
+        );
+
+        let mut location = DataLocation {
+            path: source.clone(),
+            source: "test".into(),
+            is_editable: false,
+        };
+        let tables = rebuild_rejected_store(&mut location, &error.to_string())
+            .expect("startup recovery rebuild succeeds");
+        let rows: Vec<ProjectRow> = tables
+            .project
+            .select_all()
+            .execute()
+            .expect("rebuilt rows select");
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].id, "project-1");
+        assert_eq!(location.path, source);
+        assert!(
+            std::fs::read_dir(&root)
+                .expect("rebuild root exists")
+                .flatten()
+                .any(|entry| entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with("source.pre-rebuild-")),
+            "the rejected source must be retained beside the rebuilt live store"
+        );
+        tauri::async_runtime::block_on(tables.shutdown()).expect("rebuilt store drains");
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn live_project_mutations_never_route_to_fixture_data() {
         let capabilities = list_capabilities();
         for command in ["set_project_moderator", "reorder_projects"] {
@@ -1681,9 +1762,12 @@ pub(crate) async fn apply_settings_patch(
     let boundary = study::normalize_setting(&previous.study_analytics, &mut parsed.study_analytics);
     let merged = serde_json::to_value(&parsed).map_err(|error| error.to_string())?;
 
-    let boundary_id = boundary
-        .map(|boundary| study::record_boundary(&state.tables, &parsed.study_analytics, boundary))
-        .transpose()?;
+    let boundary_id = match boundary {
+        Some(boundary) => {
+            Some(study::record_boundary(&state.tables, &parsed.study_analytics, boundary).await?)
+        }
+        None => None,
+    };
 
     #[cfg(feature = "blitz-runtime")]
     let runtime_debug_changed = previous.blitz_control_enabled != parsed.blitz_control_enabled
@@ -2189,6 +2273,113 @@ fn migrate_forward(location: &mut location::DataLocation, found: &str) -> Result
     }
 }
 
+/// Rebuild a store whose row layout matches but whose persisted indexes fail
+/// WorkTable's strict startup audit.
+///
+/// Beta 17 made that audit complete. Older builds could leave a secondary
+/// index behind its primary index while continuing to serve the table, so an
+/// unchanged schema fingerprint is not proof that the persisted index set is
+/// internally consistent. The source is opened only in recovery mode by the
+/// offline tool, every row is written into fresh indexes, and the destination
+/// must strict-open before it is published.
+fn is_persistence_load_refusal(error: &eyre::Report) -> bool {
+    error
+        .downcast_ref::<worktable::prelude::PersistenceLoadError>()
+        .is_some()
+}
+
+fn rebuild_rejected_store(
+    location: &mut location::DataLocation,
+    refusal: &str,
+) -> Result<Tables, String> {
+    let stamp = chrono::Utc::now().format("%Y%m%dT%H%M%SZ").to_string();
+    let next = location
+        .path
+        .with_extension(format!("next-rebuild-{stamp}"));
+    crate::log!(
+        log::Level::Warn,
+        "boot",
+        "WorkTable rejected the store at {:?} ({refusal}); rebuilding every readable row into \
+         {next:?} without touching the source",
+        location.path
+    );
+
+    let rebuilt = tauri::async_runtime::block_on(wt_migrate::rebuild_store(&location.path, &next));
+    let report = match rebuilt {
+        Ok(report) => report,
+        Err(error) => {
+            let _ = std::fs::remove_dir_all(&next);
+            crate::log!(
+                log::Level::Error,
+                "boot",
+                "store rebuild failed: {error}. The store at {:?} is byte-for-byte untouched; \
+                 booting on a scratch store so the app still opens.",
+                location.path
+            );
+            *location = ephemeral_location();
+            return tauri::async_runtime::block_on(Tables::open(&location.path))
+                .map_err(|error| format!("could not open a scratch store: {error}"));
+        }
+    };
+
+    let keep = location.path.with_extension(format!("pre-rebuild-{stamp}"));
+    if let Err(error) = std::fs::rename(&location.path, &keep) {
+        let _ = std::fs::remove_dir_all(&next);
+        crate::log!(
+            log::Level::Error,
+            "boot",
+            "could not preserve the rejected store before publishing its rebuild: {error}. The \
+             store at {:?} is untouched; booting on a scratch store.",
+            location.path
+        );
+        *location = ephemeral_location();
+        return tauri::async_runtime::block_on(Tables::open(&location.path))
+            .map_err(|error| format!("could not open a scratch store: {error}"));
+    }
+
+    if let Err(error) = std::fs::rename(&next, &location.path) {
+        match std::fs::rename(&keep, &location.path) {
+            Ok(()) => {
+                let _ = std::fs::remove_dir_all(&next);
+                crate::log!(
+                    log::Level::Error,
+                    "boot",
+                    "could not publish the rebuilt store: {error}. The original is back at {:?}; \
+                     booting on a scratch store.",
+                    location.path
+                );
+            }
+            Err(back) => crate::log!(
+                log::Level::Error,
+                "boot",
+                "could not publish the rebuilt store ({error}) or put the original back ({back}). \
+                 Nothing was deleted: the original is at {keep:?}, the rebuild is at {next:?}, \
+                 and the expected live path is {:?}. Booting on a scratch store.",
+                location.path
+            ),
+        }
+        *location = ephemeral_location();
+        return tauri::async_runtime::block_on(Tables::open(&location.path))
+            .map_err(|error| format!("could not open a scratch store: {error}"));
+    }
+
+    crate::log!(
+        log::Level::Info,
+        "boot",
+        "rebuilt the rejected WorkTable store: [{}]. The original is kept whole at {keep:?}",
+        report
+            .iter()
+            .map(|(table, rows)| format!("{table}: {rows}"))
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
+    tauri::async_runtime::block_on(Tables::open(&location.path)).map_err(|error| {
+        let message = format!("could not open the strictly verified rebuilt store: {error}");
+        crate::log!(log::Level::Error, "boot", "{message}");
+        message
+    })
+}
+
 fn main() {
     // This binary has two diagnostic flags and otherwise launches a GUI. Handle
     // the conventional read-only CLI exits before Tauri setup opens the store or
@@ -2609,19 +2800,24 @@ fn main() {
                         .map_err(|error| format!("could not open a scratch store: {error}"))?
                 }
                 Ok(stored) => match db::tables::check_schema(stored.as_deref()) {
-                db::tables::SchemaState::Match => tauri::async_runtime::block_on(Tables::open(
-                    &location.path,
-                ))
-                .map_err(|error| {
-                    let message = format!(
-                        "could not open the tables in {:?}: {error}. \
+                db::tables::SchemaState::Match => {
+                    match tauri::async_runtime::block_on(Tables::open(&location.path)) {
+                        Ok(tables) => tables,
+                        Err(error) if is_persistence_load_refusal(&error) => {
+                            rebuild_rejected_store(&mut location, &error.to_string())?
+                        }
+                        Err(error) => {
+                            let message = format!(
+                                "could not open the tables in {:?}: {error}. \
                                  Relaunch with AZ_NO_PERSIST=1 (or --debug-no-persist) to start \
                                  the app without touching the store, then diagnose.",
-                        location.path
-                    );
-                    crate::log!(log::Level::Error, "boot", "{message}");
-                    message
-                })?,
+                                location.path
+                            );
+                            crate::log!(log::Level::Error, "boot", "{message}");
+                            return Err(message.into());
+                        }
+                    }
+                }
                 db::tables::SchemaState::Mismatch { found } if no_migration => {
                     crate::log!(
                         log::Level::Warn,

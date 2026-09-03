@@ -427,7 +427,7 @@ async fn record_item_completion(tables: &Tables, row: &ProjectItemRow, actor: Op
         agent,
         completed_at: now(),
     };
-    if let Err(error) = tables.item_completion.insert(completion) {
+    if let Err(error) = tables.item_completion.insert(completion).await {
         crate::log!(
             crate::log::Level::Warn,
             "items",
@@ -534,7 +534,7 @@ fn usage_json(usage: &agent_abstraction::Usage) -> String {
 /// Missing fields stay zero in the decomposition and a missing provider cost
 /// stays zero dollars. The transcript labels a locally estimated cost as such;
 /// this durable ledger never promotes that estimate into a provider charge.
-fn record_turn_usage(
+async fn record_turn_usage(
     tables: &Tables,
     project_id: &str,
     agent: Agent,
@@ -587,21 +587,21 @@ fn record_turn_usage(
         at: ledger.at.clone(),
     };
 
-    if let Err(error) = tables.usage_ledger.insert(ledger) {
+    if let Err(error) = tables.usage_ledger.insert(ledger).await {
         crate::log!(
             crate::log::Level::Error,
             "run",
             "{project_id}: could not record the turn usage: {error}"
         );
     }
-    if let Err(error) = tables.usage_cache.insert(cache) {
+    if let Err(error) = tables.usage_cache.insert(cache).await {
         crate::log!(
             crate::log::Level::Error,
             "run",
             "{project_id}: could not record the cache split: {error}"
         );
     }
-    if let Err(error) = tables.usage_session.insert(session) {
+    if let Err(error) = tables.usage_session.insert(session).await {
         crate::log!(
             crate::log::Level::Error,
             "run",
@@ -848,11 +848,12 @@ async fn record_imported_usage(
         tables
             .usage_ledger
             .insert(ledger)
+            .await
             .map_err(|error| error.to_string())?;
         inserted_ledger = true;
     }
     if tables.usage_cache.select(ledger_id.clone()).is_none() {
-        if let Err(error) = tables.usage_cache.insert(cache) {
+        if let Err(error) = tables.usage_cache.insert(cache).await {
             if inserted_ledger {
                 let _ = tables.usage_ledger.delete(ledger_id).await;
             }
@@ -861,7 +862,7 @@ async fn record_imported_usage(
         inserted_cache = true;
     }
     if tables.usage_session.select(ledger_id.clone()).is_none() {
-        if let Err(error) = tables.usage_session.insert(session) {
+        if let Err(error) = tables.usage_session.insert(session).await {
             if inserted_cache {
                 let _ = tables.usage_cache.delete(ledger_id.clone()).await;
             }
@@ -1629,9 +1630,8 @@ fn body_head(body: &str) -> String {
 ///
 /// Call after the message row's id is known; the chunks key off it. A body
 /// within the cap writes nothing. Every caller mints a fresh message id, so
-/// there are never prior chunks to clear: this is insert-only and synchronous,
-/// which keeps the send path off an await it does not need.
-fn store_body(tables: &Tables, message_id: &str, project_id: &str, body: &str) {
+/// there are never prior chunks to clear: this is insert-only.
+async fn store_body(tables: &Tables, message_id: &str, project_id: &str, body: &str) {
     if body.len() <= MAX_MESSAGE_BODY {
         return;
     }
@@ -1645,7 +1645,7 @@ fn store_body(tables: &Tables, message_id: &str, project_id: &str, body: &str) {
             seq: u32::try_from(seq).unwrap_or(u32::MAX),
             text: chunk,
         };
-        if let Err(error) = tables.message_chunk.insert(row) {
+        if let Err(error) = tables.message_chunk.insert(row).await {
             crate::log!(
                 crate::log::Level::Error,
                 "message",
@@ -1716,7 +1716,7 @@ struct AgentMessageOutcome {
     exit_code: i64,
 }
 
-fn persist_message_body(
+async fn persist_message_body(
     tables: &Tables,
     row: MessageRow,
     body: &str,
@@ -1724,8 +1724,9 @@ fn persist_message_body(
     tables
         .message
         .insert(row.clone())
+        .await
         .map_err(|error| error.to_string())?;
-    store_body(tables, &row.id, &row.project_id, body);
+    store_body(tables, &row.id, &row.project_id, body).await;
     let mut dto = MessageDto::from(row);
     dto.body = body.to_string();
     Ok(dto)
@@ -1763,7 +1764,7 @@ async fn flush_continued_agent_chunk(
         body: body_head(&full),
         created_at: started_at.take().unwrap_or_else(now),
     };
-    match persist_message_body(tables, row, &full) {
+    match persist_message_body(tables, row, &full).await {
         Ok(dto) => {
             let id = dto.id.clone();
             let _ = app.emit("message:appended", dto);
@@ -1859,7 +1860,7 @@ async fn persist_terminal_agent_chunk(
         body: body_head(&body),
         created_at: started_at.unwrap_or_else(now),
     };
-    persist_message_body(tables, row, &body)
+    persist_message_body(tables, row, &body).await
 }
 
 /// Mirror a child fork's concise result into the parent conversation.
@@ -1933,7 +1934,7 @@ async fn persist_fork_handback(
         body: body_head(&full),
         created_at: now(),
     };
-    match persist_message_body(tables, row, &full) {
+    match persist_message_body(tables, row, &full).await {
         Ok(message) => {
             let _ = app.emit("message:appended", message);
             touch_item(tables, &item_id).await;
@@ -2249,26 +2250,19 @@ pub async fn create_item(
     if title.is_empty() {
         return Err("an item needs a title".into());
     }
-    let tables = std::sync::Arc::clone(&state.tables);
-    let row = tokio::task::spawn_blocking(move || create_item_row(&tables, project_id, title))
-        .await
-        .map_err(|error| error.to_string())??;
+    let row = create_item_row(&state.tables, project_id, title).await?;
     touch_item(&state.tables, &row.id).await;
     let dto = item_dto(row, &state.tables);
     let _ = app.emit("item:created", dto.clone());
     let mut study =
         crate::study::Record::manual(dto.project_id.clone(), "items.add", "item", dto.id.clone());
     study.latency = Some(started.elapsed());
-    crate::study::record(&state.tables, study);
+    crate::study::record(&state.tables, study).await;
     Ok(dto)
 }
 
-/// Validate and persist a new item away from the window and async-runtime threads.
-///
-/// WorkTable selection and insertion are synchronous. Running them directly in
-/// the async Tauri command held semantic input dispatch and inspector snapshots
-/// behind a roughly one-second store write on the release QA profile.
-fn create_item_row(
+/// Validate and persist a new item without blocking the async runtime.
+async fn create_item_row(
     tables: &Tables,
     project_id: String,
     title: String,
@@ -2300,6 +2294,7 @@ fn create_item_row(
     tables
         .project_item
         .insert(row.clone())
+        .await
         .map_err(|error| error.to_string())?;
     Ok(row)
 }
@@ -2368,6 +2363,7 @@ pub async fn fork_item(
         .tables
         .project
         .insert(row.clone())
+        .await
         .map_err(|error| error.to_string())?;
     if let Err(error) = state
         .tables
@@ -2814,7 +2810,7 @@ pub async fn set_item_status(
         dto.id.clone(),
     );
     study.latency = Some(started.elapsed());
-    crate::study::record(&state.tables, study);
+    crate::study::record(&state.tables, study).await;
     Ok(dto)
 }
 
@@ -2856,7 +2852,7 @@ pub async fn update_item(
         dto.id.clone(),
     );
     study.latency = Some(started.elapsed());
-    crate::study::record(&state.tables, study);
+    crate::study::record(&state.tables, study).await;
     Ok(dto)
 }
 
@@ -2931,7 +2927,7 @@ pub async fn set_item_issue(
     let dto = link_item_issue_inner(&app, &state.tables, &id, &url).await?;
     let mut study = crate::study::Record::manual(dto.project_id.clone(), "issue.link", "item", id);
     study.latency = Some(started.elapsed());
-    crate::study::record(&state.tables, study);
+    crate::study::record(&state.tables, study).await;
     Ok(dto)
 }
 
@@ -2956,7 +2952,7 @@ pub async fn delete_item(
         let _ = app.emit("item:updated", dto);
         let mut study = crate::study::Record::manual(row.project_id, "items.archive", "item", id);
         study.latency = Some(started.elapsed());
-        crate::study::record(&state.tables, study);
+        crate::study::record(&state.tables, study).await;
         return Ok(());
     }
     state
@@ -2972,7 +2968,7 @@ pub async fn delete_item(
     );
     let mut study = crate::study::Record::manual(row.project_id, "items.retire", "item", id);
     study.latency = Some(started.elapsed());
-    crate::study::record(&state.tables, study);
+    crate::study::record(&state.tables, study).await;
     Ok(())
 }
 
@@ -3026,7 +3022,7 @@ pub async fn reorder_items(
         crate::study::Record::manual(project_id.clone(), "items.reorder", "project", project_id);
     study.latency = Some(started.elapsed());
     study.detail = serde_json::json!({ "itemCount": moved.len() });
-    crate::study::record(&state.tables, study);
+    crate::study::record(&state.tables, study).await;
     Ok(items)
 }
 
@@ -3846,7 +3842,7 @@ async fn apply_directive(
                 .unwrap_or(project_id);
             let pr_number = match pr.as_deref() {
                 Some(url) if url.starts_with("https://github.com/") => {
-                    match crate::prs::record_url(app, tables, target_project, url) {
+                    match crate::prs::record_url(app, tables, target_project, url).await {
                         Ok(number) => Some(number.to_string()),
                         Err(code) => {
                             return Outcome::Refused {
@@ -4017,7 +4013,7 @@ async fn apply_directive(
                                 forked_from: String::new(),
                                 last_activity_at: now(),
                             };
-                            if let Err(error) = tables.project.insert(row.clone()) {
+                            if let Err(error) = tables.project.insert(row.clone()).await {
                                 return Outcome::Refused {
                                     what: format!("items.add({title:?}) project"),
                                     code: format!("WRITE_FAILED: {error}"),
@@ -4123,7 +4119,7 @@ async fn apply_directive(
                     code: format!("WRITE_FAILED: {error}"),
                 };
             }
-            match tables.project_item.insert(row.clone()) {
+            match tables.project_item.insert(row.clone()).await {
                 Ok(_) => {
                     touch_item(tables, &row.id).await;
                     if let Some(handle) = handle.as_ref() {
@@ -4274,7 +4270,7 @@ async fn apply_directive(
                 .map(|(_, project)| project.as_str())
                 .unwrap_or(project_id);
             let tracked = match url.as_deref() {
-                Some(url) => match crate::prs::record_url(app, tables, target_project, url) {
+                Some(url) => match crate::prs::record_url(app, tables, target_project, url).await {
                     Ok(found) => Some(found.to_string()),
                     Err(code) => {
                         return Outcome::Refused {
@@ -4377,7 +4373,9 @@ async fn apply_directive(
                 &text,
                 &urgency,
                 reference.as_deref(),
-            ) {
+            )
+            .await
+            {
                 Ok(id) => Outcome::Done(format!("{id} asked ({urgency})")),
                 Err(code) => Outcome::Refused {
                     what: "ask".to_string(),
@@ -4638,7 +4636,8 @@ async fn apply_directives_with_state(
                         latency: None,
                         detail: serde_json::json!({}),
                     },
-                );
+                )
+                .await;
                 let started = std::time::Instant::now();
                 let outcome = apply_directive(
                     app,
@@ -4668,7 +4667,8 @@ async fn apply_directives_with_state(
                         latency: Some(started.elapsed()),
                         detail: serde_json::json!({}),
                     },
-                );
+                )
+                .await;
                 done.push(outcome);
             }
             Some(crate::directives::Authored::Refused(outcome)) => {
@@ -4690,7 +4690,8 @@ async fn apply_directives_with_state(
                         latency: None,
                         detail: serde_json::json!({}),
                     },
-                );
+                )
+                .await;
                 let (result, code) = outcome.study_result();
                 crate::study::record(
                     tables,
@@ -4709,7 +4710,8 @@ async fn apply_directives_with_state(
                         latency: Some(std::time::Duration::ZERO),
                         detail: serde_json::json!({}),
                     },
-                );
+                )
+                .await;
                 done.push(outcome);
             }
             None => {}
@@ -4744,7 +4746,7 @@ fn user_authored_ps(text: &str) -> bool {
     })
 }
 
-fn record_study_turn(
+async fn record_study_turn(
     tables: &crate::db::tables::Tables,
     project_id: &str,
     turn_id: &str,
@@ -4783,7 +4785,8 @@ fn record_study_turn(
                 "userAuthoredPs": authored.user_authored_ps,
             }),
         },
-    );
+    )
+    .await;
 }
 
 /// Find the project a line named, by id or by name, case-insensitively.
@@ -5019,6 +5022,7 @@ async fn write_partial_reply(
             payload: encoded.to_string(),
             created_at: now(),
         })
+        .await
         .map_err(|error| error.to_string())?;
 
     // Insert first, then delete: a process death can leave extra snapshots but
@@ -5248,8 +5252,9 @@ async fn user_message_for_send(
         .tables
         .message
         .insert(row.clone())
+        .await
         .map_err(|error| error.to_string())?;
-    store_body(&state.tables, &row.id, &input.project_id, &input.body);
+    store_body(&state.tables, &row.id, &input.project_id, &input.body).await;
 
     // The emitted DTO carries the whole body, not just the stored head: the
     // caller has it in hand and the reader would otherwise have to round-trip
@@ -5264,7 +5269,7 @@ async fn user_message_for_send(
             message_id: message.id.clone(),
             created_at: message.created_at.clone(),
         };
-        match state.tables.question_reply.insert(relation) {
+        match state.tables.question_reply.insert(relation).await {
             Ok(_) => {
                 message.reply_to_question_id = Some(question.id.clone());
                 crate::questions::answer_for_reply(
@@ -5292,7 +5297,8 @@ async fn user_message_for_send(
         &input.body,
         input.study.as_ref(),
         followup,
-    );
+    )
+    .await;
     note_gui(
         app,
         state,
@@ -5593,7 +5599,7 @@ async fn recover_partial_reply(tables: &Tables, project_id: &str, raw: String) -
         body: body_head(&checkpoint_body),
         created_at: checkpoint.started_at.unwrap_or_else(now),
     };
-    if let Err(error) = tables.message.insert(message) {
+    if let Err(error) = tables.message.insert(message).await {
         crate::log!(
             crate::log::Level::Error,
             "run",
@@ -5601,7 +5607,7 @@ async fn recover_partial_reply(tables: &Tables, project_id: &str, raw: String) -
         );
         return false;
     }
-    store_body(tables, &message_id, project_id, &checkpoint_body);
+    store_body(tables, &message_id, project_id, &checkpoint_body).await;
     crate::log!(
         crate::log::Level::Info,
         "run",
@@ -5825,14 +5831,17 @@ fn persist_io(app: &AppHandle, entry: &AgentIoEntry) {
         kind: entry.kind.clone(),
         detail: entry.detail.clone(),
     };
-    if let Err(error) = state.tables.agent_io.insert(row) {
-        crate::log!(
-            crate::log::Level::Warn,
-            "io",
-            "{}: could not persist an I/O line: {error}",
-            entry.project_id
-        );
-    }
+    let table = std::sync::Arc::clone(&state.tables.agent_io);
+    let project_id = entry.project_id.clone();
+    tauri::async_runtime::spawn(async move {
+        if let Err(error) = table.insert(row).await {
+            crate::log!(
+                crate::log::Level::Warn,
+                "io",
+                "{project_id}: could not persist an I/O line: {error}"
+            );
+        }
+    });
 }
 
 /// The raw exchange for one project, oldest first.
@@ -5931,7 +5940,7 @@ impl RateLimitReport {
 /// the turn that just happened and is worthless a day later.
 pub type Receipts = std::sync::Mutex<std::collections::HashMap<String, Vec<String>>>;
 
-fn queue_directive_receipts(
+async fn queue_directive_receipts(
     receipts: &Receipts,
     tables: &crate::db::tables::Tables,
     project_id: &str,
@@ -5965,7 +5974,8 @@ fn queue_directive_receipts(
             latency: None,
             detail: serde_json::json!({ "outcomeCount": outcomes.len() }),
         },
-    );
+    )
+    .await;
 }
 
 pub type RunningTasks = std::sync::Mutex<std::collections::HashMap<String, Vec<RunningTaskDto>>>;
@@ -7611,6 +7621,7 @@ pub async fn resolve_approval(
                 .tables
                 .approval_rule
                 .insert(row)
+                .await
                 .map_err(|error| error.to_string())?;
             crate::log!(
                 crate::log::Level::Info,
@@ -8118,7 +8129,7 @@ pub async fn compact_project(
 
         // Attribute the handoff pass to the session that actually paid for it
         // before clearing that id.
-        record_turn_usage(&state.tables, &project_id, agent, &compact_model, usage);
+        record_turn_usage(&state.tables, &project_id, agent, &compact_model, usage).await;
         state
             .tables
             .kv_put(&agent_session_key(&project_id, agent), String::new())
@@ -8154,6 +8165,7 @@ pub async fn compact_project(
             .tables
             .message
             .insert(row.clone())
+            .await
             .map_err(|error| error.to_string())?;
         let _ = app.emit("message:appended", &MessageDto::from(row));
         if let Some(project) = state.tables.project.select(project_id.clone()) {
@@ -8382,6 +8394,7 @@ pub async fn compact_project(
         .tables
         .message
         .insert(row.clone())
+        .await
         .map_err(|error| error.to_string())?;
     let _ = app.emit("message:appended", &MessageDto::from(row));
     if has_usage {
@@ -8390,7 +8403,7 @@ pub async fn compact_project(
         } else {
             compact_model.clone()
         };
-        record_turn_usage(&state.tables, &project_id, agent, &model, &compact_usage);
+        record_turn_usage(&state.tables, &project_id, agent, &model, &compact_usage).await;
     }
     let _ = app.emit(
         "run:compaction",
@@ -9682,7 +9695,7 @@ pub async fn import_chat_session(
         .kv_put(&import_key, project_id.clone())
         .await
         .map_err(|error| error.to_string())?;
-    if let Err(error) = state.tables.project.insert(row.clone()) {
+    if let Err(error) = state.tables.project.insert(row.clone()).await {
         let _ = state.tables.kv.delete(import_key).await;
         return Err(error.to_string());
     }
@@ -9721,7 +9734,7 @@ pub async fn import_chat_session(
             body: body_head(&message.text),
             created_at: at.to_rfc3339(),
         };
-        match persist_message_body(&state.tables, stored.clone(), &message.text) {
+        match persist_message_body(&state.tables, stored.clone(), &message.text).await {
             Ok(dto) => {
                 stored_rows.push(stored);
                 imported.push(dto);
@@ -9793,14 +9806,19 @@ pub async fn create_project(
         forked_from: String::new(),
         last_activity_at: now(),
     };
-    state.tables.project.insert(row.clone()).map_err(|error| {
-        crate::log!(
-            crate::log::Level::Error,
-            "projects",
-            "could not insert {project_id}: {error}"
-        );
-        error.to_string()
-    })?;
+    state
+        .tables
+        .project
+        .insert(row.clone())
+        .await
+        .map_err(|error| {
+            crate::log!(
+                crate::log::Level::Error,
+                "projects",
+                "could not insert {project_id}: {error}"
+            );
+            error.to_string()
+        })?;
 
     let project = with_session(ProjectDto::from(row), &state.tables);
     crate::log!(
@@ -10835,7 +10853,7 @@ pub async fn review_pull_request(
                     detail
                 }
             );
-            return append_review_message(&app, &state, &review, body, 1);
+            return append_review_message(&app, &state, &review, body, 1).await;
         }
         Err(error) => {
             return append_review_message(
@@ -10847,7 +10865,8 @@ pub async fn review_pull_request(
                  `gh auth login`, and check the network connection before trying again."
                 ),
                 1,
-            );
+            )
+            .await;
         }
     };
 
@@ -10864,7 +10883,8 @@ pub async fn review_pull_request(
                 &review,
                 format!("the review request could not be configured: {error}"),
                 1,
-            );
+            )
+            .await;
         }
     };
 
@@ -10877,7 +10897,8 @@ pub async fn review_pull_request(
                 &review,
                 format!("the review run failed: {error}"),
                 1,
-            );
+            )
+            .await;
         }
     };
 
@@ -10886,7 +10907,7 @@ pub async fn review_pull_request(
     } else {
         (outcome.text, i64::from(outcome.exit_code))
     };
-    append_review_message(&app, &state, &review, body, exit_code)
+    append_review_message(&app, &state, &review, body, exit_code).await
 }
 
 struct ReviewMessageContext<'a> {
@@ -10898,7 +10919,7 @@ struct ReviewMessageContext<'a> {
 }
 
 /// Persist one visible review outcome, successful or not.
-fn append_review_message(
+async fn append_review_message(
     app: &AppHandle,
     state: &AppState,
     review: &ReviewMessageContext<'_>,
@@ -10931,8 +10952,9 @@ fn append_review_message(
         .tables
         .message
         .insert(row.clone())
+        .await
         .map_err(|error| error.to_string())?;
-    store_body(&state.tables, &message_id, review.project_id, &body);
+    store_body(&state.tables, &message_id, review.project_id, &body).await;
     let mut appended = MessageDto::from(row);
     appended.body = body;
     let _ = app.emit("message:appended", &appended);
@@ -12345,7 +12367,8 @@ async fn drive_run(
                             &directive_turn_id,
                             agent_wire_name(agent),
                             &done,
-                        );
+                        )
+                        .await;
                     }
                 }
 
@@ -12486,7 +12509,7 @@ async fn drive_run(
                     finished_at,
                 };
 
-                if let Err(error) = tables.task_log.insert(TaskLogRow::from(&entry)) {
+                if let Err(error) = tables.task_log.insert(TaskLogRow::from(&entry)).await {
                     crate::log!(
                         crate::log::Level::Error,
                         "tasks",
@@ -13077,7 +13100,7 @@ async fn drive_run(
             // Record a turn whenever it reported a cost or any token figures.
             // The same path is used for interrupted turns below, so a stop on
             // an approval cannot erase work already reported by the provider.
-            record_turn_usage(&tables, &project_id, agent, &model, &outcome.usage);
+            record_turn_usage(&tables, &project_id, agent, &model, &outcome.usage).await;
 
             /*
              * One reverse-channel parser for Home and project tabs. The
@@ -13132,7 +13155,8 @@ async fn drive_run(
                     &directive_turn_id,
                     agent_wire_name(agent),
                     &done,
-                );
+                )
+                .await;
             }
             // Apply the child's state directives first. A terminal parent item
             // makes the separate prose handback redundant, so the helper above
@@ -13228,7 +13252,7 @@ async fn drive_run(
                 {
                     Ok(appended) => {
                         let _ = app.emit("message:appended", appended);
-                        record_turn_usage(&tables, &project_id, agent, &model, &turn_usage);
+                        record_turn_usage(&tables, &project_id, agent, &model, &turn_usage).await;
                         clear_partial_reply(&tables, &project_id).await;
                     }
                     // The insert failing is the one case the checkpoint is
@@ -13362,7 +13386,7 @@ async fn drive_run(
                 {
                     Ok(appended) => {
                         let _ = app.emit("message:appended", appended);
-                        record_turn_usage(&tables, &project_id, agent, &model, &turn_usage);
+                        record_turn_usage(&tables, &project_id, agent, &model, &turn_usage).await;
                         clear_partial_reply(&tables, &project_id).await;
                     }
                     // Left in place deliberately: the checkpoint is what the
@@ -13633,7 +13657,7 @@ async fn checkpoint_if_due(
                     ),
                     created_at: now(),
                 };
-                match tables.message.insert(row.clone()) {
+                match tables.message.insert(row.clone()).await {
                     Ok(_) => {
                         let _ = app.emit("message:appended", &MessageDto::from(row));
                     }
@@ -13714,6 +13738,7 @@ mod tests {
                     forked_from: String::new(),
                     last_activity_at: (*created).into(),
                 })
+                .await
                 .expect("project row inserts");
         }
 
@@ -14193,6 +14218,7 @@ mod tests {
         tables
             .project
             .insert(project_row("project-a", "Project A"))
+            .await
             .expect("project inserts");
 
         let durable_body = format!("{}\n\nThe finished tail.", "verified history ".repeat(40));
@@ -14211,8 +14237,8 @@ mod tests {
             body: body_head(&durable_body),
             created_at: "2026-08-07T00:00:00Z".into(),
         };
-        tables.message.insert(row).expect("chunk inserts");
-        store_body(&tables, "durable-chunk", "project-a", &durable_body);
+        tables.message.insert(row).await.expect("chunk inserts");
+        store_body(&tables, "durable-chunk", "project-a", &durable_body).await;
 
         let legacy = serde_json::to_string(&PartialReply {
             version: 1,
@@ -14259,6 +14285,7 @@ mod tests {
         tables
             .project
             .insert(project_row("project-a", "Project A"))
+            .await
             .expect("project inserts");
 
         let durable_body = format!("{} the durable tail", "Tracked reply prefix ".repeat(8));
@@ -14293,6 +14320,7 @@ mod tests {
                     body: body.clone(),
                     created_at: created_at.into(),
                 })
+                .await
                 .expect("message inserts");
         }
 
@@ -14517,7 +14545,7 @@ mod tests {
         let tables = Tables::open(&store).await.expect("scope store opens");
         let mut row = project_row("proj-cwd", "Cwd");
         row.dirs = serde_json::to_string(&vec!["/repo/work"]).unwrap();
-        tables.project.insert(row).expect("project inserts");
+        tables.project.insert(row).await.expect("project inserts");
 
         // No transcript exists for this id, so the session cannot name a home
         // directory and the project's own directory stands. The point of the
@@ -14556,6 +14584,7 @@ mod tests {
         tables
             .project
             .insert(project_row("proj-reset", "Reset"))
+            .await
             .expect("project inserts");
         tables
             .kv_put(
@@ -14791,7 +14820,7 @@ mod tests {
         let tables = Tables::open(&store).await.expect("scope store opens");
         let mut row = project_row("proj-roots", "Roots");
         row.dirs = serde_json::to_string(&vec!["/repo-a", "/repo-b"]).unwrap();
-        tables.project.insert(row).expect("project inserts");
+        tables.project.insert(row).await.expect("project inserts");
 
         let scope = invocation_scope(
             &tables,
@@ -14857,7 +14886,7 @@ mod tests {
         let tables = Tables::open(&store).await.expect("scope store opens");
         let mut row = project_row("proj-resume", "Resume roots");
         row.dirs = serde_json::to_string(&vec!["/repo-a"]).unwrap();
-        tables.project.insert(row).expect("project inserts");
+        tables.project.insert(row).await.expect("project inserts");
         tables
             .kv_put(
                 &agent_session_key("proj-resume", Agent::Codex),
@@ -14927,7 +14956,7 @@ mod tests {
         let tables = Tables::open(&store).await.expect("scope store opens");
         let mut row = project_row("proj-claude", "Claude roots");
         row.dirs = serde_json::to_string(&vec!["/repo-a", "/repo-b"]).unwrap();
-        tables.project.insert(row).expect("project inserts");
+        tables.project.insert(row).await.expect("project inserts");
 
         let scope = invocation_scope(
             &tables,
@@ -15405,7 +15434,8 @@ mod tests {
             Agent::Codex,
             "gpt-5.6-sol",
             &usage,
-        );
+        )
+        .await;
 
         let ledger = tables
             .usage_ledger
@@ -15470,6 +15500,7 @@ mod tests {
                 body: "prior answer".into(),
                 created_at: "2026-08-08T00:00:00Z".into(),
             })
+            .await
             .expect("prior answer inserts");
 
         assert_eq!(
@@ -15641,6 +15672,7 @@ mod tests {
                 body: "Imported response".into(),
                 created_at: "2026-08-07T01:02:03Z".into(),
             })
+            .await
             .expect("imported message inserts");
         tables
             .kv_put(
@@ -15704,6 +15736,7 @@ mod tests {
         tables
             .project_item
             .insert(row.clone())
+            .await
             .expect("legacy-shaped item inserts");
         assert!(
             item_dto(row.clone(), &tables).updated_at.is_empty(),
@@ -15829,7 +15862,11 @@ mod tests {
             body: "change course".into(),
             created_at: now(),
         };
-        tables.message.insert(row).expect("visible row inserts");
+        tables
+            .message
+            .insert(row)
+            .await
+            .expect("visible row inserts");
         let input = SendMessageInput {
             project_id: "proj-steer".into(),
             body: "change course".into(),
@@ -15906,8 +15943,8 @@ mod tests {
             body: body_head(&body),
             created_at: now(),
         };
-        tables.message.insert(row).expect("head row inserts");
-        store_body(&tables, "msg-big", "proj-big", &body);
+        tables.message.insert(row).await.expect("head row inserts");
+        store_body(&tables, "msg-big", "proj-big", &body).await;
 
         // The inline head alone is capped; the whole body comes back only once
         // the chunks are stitched on.
@@ -15967,6 +16004,7 @@ mod tests {
             created_at: "2026-08-07T00:00:01Z".into(),
         };
         persist_message_body(&tables, before, "Before the reply")
+            .await
             .expect("continued chunk persists");
         tables
             .message
@@ -15985,6 +16023,7 @@ mod tests {
                 body: "Owner reply".into(),
                 created_at: "2026-08-07T00:00:02Z".into(),
             })
+            .await
             .expect("owner reply persists");
         persist_terminal_agent_chunk(
             &tables,
@@ -16047,6 +16086,7 @@ mod tests {
             created_at: "2026-08-07T00:00:01Z".into(),
         };
         persist_message_body(&tables, row, "Nothing followed this")
+            .await
             .expect("continued chunk persists");
 
         let finalized = persist_terminal_agent_chunk(
@@ -16506,6 +16546,7 @@ mod tests {
                 reference: String::new(),
                 priority: 0,
             })
+            .await
             .expect("item inserts");
 
         let target = study_target_before(
@@ -16562,7 +16603,11 @@ mod tests {
                 updated_at: "2026-08-04T00:00:00Z".into(),
             },
         ] {
-            tables.pull_request.insert(row).expect("PR row inserts");
+            tables
+                .pull_request
+                .insert(row)
+                .await
+                .expect("PR row inserts");
         }
 
         let snapshot = state_snapshot(&tables, "project-private", Some("item-focused"), true, true);
@@ -16625,6 +16670,7 @@ mod tests {
                     reference: String::new(),
                     priority: NORMAL_PRIORITY,
                 })
+                .await
                 .expect("item row inserts");
             tables
                 .kv_put(
@@ -16695,7 +16741,11 @@ mod tests {
             project_row("project-a", "AgencyZero"),
             project_row("project-b", "WorkTable"),
         ] {
-            tables.project.insert(project).expect("project inserts");
+            tables
+                .project
+                .insert(project)
+                .await
+                .expect("project inserts");
         }
         for item in [
             ProjectItemRow {
@@ -16717,7 +16767,11 @@ mod tests {
                 priority: 0,
             },
         ] {
-            tables.project_item.insert(item).expect("item inserts");
+            tables
+                .project_item
+                .insert(item)
+                .await
+                .expect("item inserts");
         }
         tables
             .kv_put(
@@ -16790,7 +16844,7 @@ mod tests {
                 "2026-08-07T02:00:00Z",
             ),
         ] {
-            tables.message.insert(row).expect("message inserts");
+            tables.message.insert(row).await.expect("message inserts");
         }
 
         let delivered = state_snapshot(&tables, "project-review", None, false, true);
@@ -16830,6 +16884,7 @@ mod tests {
                 "Continue",
                 "2026-08-07T03:00:00Z",
             ))
+            .await
             .expect("later owner message inserts");
         let already_delivered = state_snapshot(&tables, "project-review", None, false, true);
         assert!(!already_delivered.contains("REVIEW_FINDING_123"));
@@ -16865,6 +16920,7 @@ mod tests {
                 reference: String::new(),
                 priority: 0,
             })
+            .await
             .expect("adaptive item inserts");
         tables
             .kv_put(
@@ -16897,6 +16953,7 @@ mod tests {
                 body: "Seen".into(),
                 created_at: "2026-08-07T01:00:00Z".into(),
             })
+            .await
             .expect("agent message inserts");
         tables
             .message
@@ -16915,6 +16972,7 @@ mod tests {
                 body: "Fork handback result".into(),
                 created_at: "2026-08-07T01:30:00Z".into(),
             })
+            .await
             .expect("handback inserts");
 
         let unchanged = state_snapshot(&tables, "project-adaptive", None, false, true);
@@ -16940,6 +16998,7 @@ mod tests {
                 body: "Handback received".into(),
                 created_at: "2026-08-07T01:45:00Z".into(),
             })
+            .await
             .expect("handback acknowledgement inserts");
         let acknowledged = state_snapshot(&tables, "project-adaptive", None, false, true);
         assert!(!acknowledged.contains("Fork handback result"));
@@ -17065,6 +17124,7 @@ mod tests {
                 reference: "119".into(),
                 priority: 0,
             })
+            .await
             .expect("item inserts");
 
         let written = write_item_status(&tables, "item-delete-now", "finished", true, None)
@@ -17138,6 +17198,7 @@ mod tests {
                     reference: String::new(),
                     priority: 0,
                 })
+                .await
                 .expect("item inserts");
         }
 
@@ -17229,7 +17290,7 @@ mod tests {
                 last_activity_at: now(),
             },
         ] {
-            tables.project.insert(row).expect("project inserts");
+            tables.project.insert(row).await.expect("project inserts");
         }
         tables
             .project_item
@@ -17242,6 +17303,7 @@ mod tests {
                 reference: String::new(),
                 priority: 0,
             })
+            .await
             .expect("item inserts");
         schedule_finished_retirement(&tables, "item-anchor")
             .await
@@ -17302,6 +17364,7 @@ mod tests {
                 reference: String::new(),
                 priority: 0,
             })
+            .await
             .expect("item inserts");
         schedule_finished_retirement(&tables, "item-retire-later")
             .await
@@ -17368,6 +17431,7 @@ mod tests {
                 reference: String::new(),
                 priority: 0,
             })
+            .await
             .expect("legacy finished item inserts");
         assert!(
             tables
@@ -17413,6 +17477,7 @@ mod tests {
                 reference: String::new(),
                 priority: 0,
             })
+            .await
             .expect("item inserts");
         schedule_finished_retirement(&tables, "item-two-halves")
             .await
@@ -17494,6 +17559,7 @@ mod tests {
                 "first request",
                 "2026-08-06T01:00:00Z",
             ))
+            .await
             .expect("first message writes");
         tables
             .message
@@ -17504,6 +17570,7 @@ mod tests {
                 "first answer",
                 "2026-08-06T01:01:00Z",
             ))
+            .await
             .expect("answer writes");
         tables
             .message
@@ -17514,6 +17581,7 @@ mod tests {
                 "review finding carried across providers",
                 "2026-08-06T01:01:30Z",
             ))
+            .await
             .expect("review writes");
         tables
             .message
@@ -17524,6 +17592,7 @@ mod tests {
                 "current request",
                 "2026-08-06T01:02:00Z",
             ))
+            .await
             .expect("current message writes");
 
         let handoff = provider_handoff(&tables, "project-a", "current", Agent::Codex);
@@ -17592,6 +17661,7 @@ mod tests {
         tables
             .project_item
             .insert(row)
+            .await
             .expect("review item inserts");
 
         let proposed = propose_item_delete(&tables, "item-review-delete")

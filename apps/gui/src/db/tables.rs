@@ -158,19 +158,18 @@ impl Tables {
     /// Failing here is deliberate: running with no persistence would let every
     /// write appear to succeed and vanish on the next launch, which is a worse
     /// failure than refusing to start.
-    pub async fn open(dir: &Path) -> Result<Tables, Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn open(dir: &Path) -> eyre::Result<Tables> {
         let open_file_limit = raise_open_file_limit()?;
         if open_file_limit < 356 {
-            return Err(format!(
+            return Err(eyre::eyre!(
                 "open-file limit {open_file_limit} leaves fewer than 100 descriptors above the 256-descriptor failure boundary"
-            )
-            .into());
+            ));
         }
         let open_store_permit = open_store_gate()
             .clone()
             .acquire_owned()
             .await
-            .map_err(|_| "the full-store descriptor gate closed")?;
+            .map_err(|_| eyre::eyre!("the full-store descriptor gate closed"))?;
         std::fs::create_dir_all(dir)?;
         let data_dir = dir.to_path_buf();
         let dir = dir.to_string_lossy().to_string();
@@ -709,6 +708,7 @@ mod restart_tests {
                     dismissed: false,
                     updated_at: "initial".into(),
                 })
+                .await
                 .expect("should insert");
             tables
                 .pull_request
@@ -788,6 +788,7 @@ mod restart_tests {
         tables
             .pull_request
             .insert(row.clone())
+            .await
             .expect("first insert");
         tables
             .pull_request
@@ -796,7 +797,7 @@ mod restart_tests {
             .expect("first insert should drain");
 
         assert!(
-            tables.pull_request.insert(row).is_err(),
+            tables.pull_request.insert(row).await.is_err(),
             "the duplicate should be rejected"
         );
         tables
@@ -862,7 +863,7 @@ mod restart_tests {
                     body: format!("reply {n}, already on screen"),
                     created_at: format!("2026-07-31T00:00:{:02}Z", n % 60),
                 };
-                tables.message.insert(row).expect("should insert");
+                tables.message.insert(row).await.expect("should insert");
             }
             // Dropped without a drain, standing in for a process that died.
         }
@@ -912,7 +913,11 @@ mod restart_tests {
 
         {
             let tables = Tables::open(&dir).await.expect("should open");
-            tables.task_log.insert(row.clone()).expect("should insert");
+            tables
+                .task_log
+                .insert(row.clone())
+                .await
+                .expect("should insert");
             // Without the drain the process can end mid-write, which is how a
             // page ends up half written rather than merely stale.
             tables.shutdown().await.expect("tables drain");

@@ -60,7 +60,7 @@ async fn write_projects(dir: &Path, rows: Vec<ProjectRow>) {
     let engine = ProjectPersistenceEngine::new(config).await.unwrap();
     let table = ProjectWorkTable::load(engine).await.unwrap();
     for row in rows {
-        table.insert(row).unwrap();
+        table.insert(row).await.unwrap();
     }
     table.wait_for_ops().await.expect("project rows persist");
 }
@@ -74,7 +74,7 @@ async fn write_items(dir: &Path, rows: Vec<ProjectItemRow>) {
     let engine = ProjectItemPersistenceEngine::new(config).await.unwrap();
     let table = ProjectItemWorkTable::load(engine).await.unwrap();
     for row in rows {
-        table.insert(row).unwrap();
+        table.insert(row).await.unwrap();
     }
     table
         .wait_for_ops()
@@ -91,7 +91,7 @@ async fn write_descriptions(dir: &Path, rows: Vec<KvRow>) {
     let engine = KvPersistenceEngine::new(config).await.unwrap();
     let table = KvWorkTable::load(engine).await.unwrap();
     for row in rows {
-        table.insert(row).unwrap();
+        table.insert(row).await.unwrap();
     }
     table.wait_for_ops().await.expect("descriptions persist");
 }
@@ -281,7 +281,10 @@ async fn reads_while_a_writer_holds_the_store() {
     );
     let engine = ProjectPersistenceEngine::new(config).await.unwrap();
     let writer = ProjectWorkTable::load(engine).await.unwrap();
-    writer.insert(project("proj-live", "Live", 1)).unwrap();
+    writer
+        .insert(project("proj-live", "Live", 1))
+        .await
+        .unwrap();
     writer.wait_for_ops().await.expect("project rows persist");
 
     // Writer still open, exactly like a running GUI.

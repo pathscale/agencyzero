@@ -222,12 +222,12 @@ fn row(setting: &StudyAnalytics, record: Record) -> StudyEventRow {
 /// Instrumentation never changes the product operation's result. A failed
 /// study write is logged loudly and the requested task or PR mutation still
 /// stands, because research collection must not become application authority.
-pub fn record(tables: &Tables, record: Record) {
+pub async fn record(tables: &Tables, record: Record) {
     let setting = current_setting(tables);
     if !setting.enabled || setting.session_id.is_empty() {
         return;
     }
-    if let Err(error) = tables.study_event.insert(row(&setting, record)) {
+    if let Err(error) = tables.study_event.insert(row(&setting, record)).await {
         crate::log!(
             crate::log::Level::Error,
             "study",
@@ -241,7 +241,7 @@ pub fn record(tables: &Tables, record: Record) {
 /// The caller removes this row if the settings write fails, giving the two
 /// WorkTable writes transaction-like cleanup without claiming cross-table
 /// transactions the engine does not provide.
-pub fn record_boundary(
+pub async fn record_boundary(
     tables: &Tables,
     setting: &StudyAnalytics,
     boundary: Boundary,
@@ -269,6 +269,7 @@ pub fn record_boundary(
     tables
         .study_event
         .insert(row)
+        .await
         .map_err(|error| error.to_string())?;
     Ok(id)
 }
@@ -488,7 +489,7 @@ mod tests {
     #[tokio::test]
     async fn disabled_collection_writes_nothing() {
         let tables = tables("off").await;
-        record(&tables, sample());
+        record(&tables, sample()).await;
         assert!(rows(&tables).is_empty());
     }
 
@@ -511,7 +512,7 @@ mod tests {
             .await
             .expect("settings persist");
 
-        record(&tables, sample());
+        record(&tables, sample()).await;
         let kept = rows(&tables);
         assert_eq!(kept.len(), 1);
         assert_eq!(kept[0].operation, "items.state");
@@ -531,8 +532,12 @@ mod tests {
             ..enabled.clone()
         };
 
-        record_boundary(&tables, &enabled, Boundary::Enabled).expect("enable boundary inserts");
-        record_boundary(&tables, &disabled, Boundary::Disabled).expect("disable boundary inserts");
+        record_boundary(&tables, &enabled, Boundary::Enabled)
+            .await
+            .expect("enable boundary inserts");
+        record_boundary(&tables, &disabled, Boundary::Disabled)
+            .await
+            .expect("disable boundary inserts");
 
         let kept = rows(&tables);
         assert_eq!(kept.len(), 2);
@@ -552,6 +557,7 @@ mod tests {
         tables
             .study_event
             .insert(row(&setting, sample()))
+            .await
             .expect("sample inserts");
 
         clear_rows(&tables).await.expect("rows clear");

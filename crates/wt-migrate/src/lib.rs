@@ -113,7 +113,7 @@ mod profile_repair_tests {
             message("other-project", "other", "2026-08-09T20:03:00+00:00"),
             message("after", "project", "2026-08-09T20:20:00+00:00"),
         ] {
-            source_table.insert(row).unwrap();
+            source_table.insert(row).await.unwrap();
         }
         source_table.wait_for_ops().await.unwrap();
         source_table.close().await.unwrap();
@@ -689,6 +689,7 @@ pub async fn salvage_items(source: &Path, target: &Path) -> eyre::Result<(usize,
         }
         target_table
             .insert(row)
+            .await
             .map_err(|error| eyre::eyre!("{error}"))?;
         salvaged += 1;
     }
@@ -749,13 +750,21 @@ async fn scrub_items(target: &Path) -> eyre::Result<usize> {
 pub mod app_schema {
     pub mod agent_io;
     pub mod approval_rule;
+    pub mod item_completion;
     pub mod kv;
     pub mod message;
+    pub mod message_chunk;
     pub mod project;
     pub mod project_item;
     pub mod pull_request;
+    pub mod question;
+    pub mod question_reply;
+    pub mod reply_checkpoint;
+    pub mod study_event;
     pub mod task_log;
+    pub mod usage_cache;
     pub mod usage_ledger;
+    pub mod usage_session;
 }
 
 /// Merge one project's bounded message window into an existing store.
@@ -809,6 +818,7 @@ pub async fn merge_message_window(
         if target_ids.insert(row.id.clone()) {
             target_table
                 .insert(row.clone())
+                .await
                 .map_err(|error| eyre::eyre!("message {}: {error}", row.id))?;
             inserted += 1;
         }
@@ -988,47 +998,79 @@ pub async fn clear_fresh_session(target: &Path, project_id: &str, agent: &str) -
 pub async fn rebuild_store(source: &Path, target: &Path) -> eyre::Result<Vec<(String, usize)>> {
     macro_rules! carry {
         ($module:ident, $engine:ident, $table:ident) => {{
-            // Progress to stderr before the scan, so the one line a fatal
-            // signal cuts off names the table that killed it.
-            eprintln!(
-                "scanning {}...",
-                app_schema::$module::$table::name_snake_case()
-            );
-            let open = |dir: &Path| {
-                let config = worktable::prelude::DiskConfig::new_with_table_name(
-                    dir.to_string_lossy().into_owned(),
-                    app_schema::$module::$table::name_snake_case(),
-                    app_schema::$module::$table::version(),
-                );
-                async move {
-                    let engine = app_schema::$module::$engine::new(config).await?;
-                    app_schema::$module::$table::load(engine).await
+            let table_name = app_schema::$module::$table::name_snake_case();
+            if !source.join(table_name).is_dir() {
+                None
+            } else {
+                // Progress to stderr before the scan, so the one line a fatal
+                // signal cuts off names the table that killed it.
+                eprintln!("scanning {table_name}...");
+                let open = |dir: &Path, mode| {
+                    let config = worktable::prelude::DiskConfig::new_with_table_name(
+                        dir.to_string_lossy().into_owned(),
+                        table_name,
+                        app_schema::$module::$table::version(),
+                    );
+                    async move {
+                        let engine = Box::pin(app_schema::$module::$engine::new(config)).await?;
+                        Box::pin(app_schema::$module::$table::load_with(engine, mode)).await
+                    }
+                };
+                let rows = {
+                    // A rebuild is the explicit offline recovery boundary. Beta 17
+                    // correctly refuses stale cross-index state in normal strict
+                    // opens, but the primary index can still supply individually
+                    // validated rows for a clean destination.
+                    let table = open(source, worktable::prelude::LoadMode::Recovery).await?;
+                    let rows = table.select_all().execute()?;
+                    table.close().await.map_err(|error| {
+                        eyre::eyre!(
+                            "{} source close failed: {error}",
+                            app_schema::$module::$table::name_snake_case()
+                        )
+                    })?;
+                    rows
+                };
+                let count = rows.len();
+                let fresh = open(target, worktable::prelude::LoadMode::Strict).await?;
+                for row in rows {
+                    fresh.insert(row).await.map_err(|error| {
+                        eyre::eyre!(
+                            "{}: {error}",
+                            app_schema::$module::$table::name_snake_case()
+                        )
+                    })?;
                 }
-            };
-            let rows = {
-                let table = open(source).await?;
-                table.select_all().execute()?
-            };
-            let count = rows.len();
-            let fresh = open(target).await?;
-            for row in rows {
-                fresh.insert(row).map_err(|error| {
+                fresh.wait_for_ops().await.map_err(|error| {
                     eyre::eyre!(
-                        "{}: {error}",
+                        "{} persistence failed: {error}",
                         app_schema::$module::$table::name_snake_case()
                     )
                 })?;
+                fresh.close().await.map_err(|error| {
+                    eyre::eyre!(
+                        "{} target close failed: {error}",
+                        app_schema::$module::$table::name_snake_case()
+                    )
+                })?;
+
+                // Recovery is complete only when the rebuilt table passes the
+                // same strict audit used by normal application startup.
+                let verified = open(target, worktable::prelude::LoadMode::Strict).await?;
+                let verified_count = verified.select_all().execute()?.len();
+                verified.close().await.map_err(|error| {
+                    eyre::eyre!(
+                        "{} verification close failed: {error}",
+                        app_schema::$module::$table::name_snake_case()
+                    )
+                })?;
+                eyre::ensure!(
+                    verified_count == count,
+                    "{} strict verification found {verified_count} of {count} rows",
+                    table_name
+                );
+                Some((table_name.to_string(), count))
             }
-            fresh.wait_for_ops().await.map_err(|error| {
-                eyre::eyre!(
-                    "{} persistence failed: {error}",
-                    app_schema::$module::$table::name_snake_case()
-                )
-            })?;
-            (
-                app_schema::$module::$table::name_snake_case().to_string(),
-                count,
-            )
         }};
     }
 
@@ -1040,13 +1082,33 @@ pub async fn rebuild_store(source: &Path, target: &Path) -> eyre::Result<Vec<(St
             ProjectItemPersistenceEngine,
             ProjectItemWorkTable
         ),
+        carry!(
+            item_completion,
+            ItemCompletionPersistenceEngine,
+            ItemCompletionWorkTable
+        ),
         carry!(message, MessagePersistenceEngine, MessageWorkTable),
+        carry!(
+            message_chunk,
+            MessageChunkPersistenceEngine,
+            MessageChunkWorkTable
+        ),
         carry!(task_log, TaskLogPersistenceEngine, TaskLogWorkTable),
         carry!(agent_io, AgentIoRowPersistenceEngine, AgentIoRowWorkTable),
         carry!(
             usage_ledger,
             UsageLedgerPersistenceEngine,
             UsageLedgerWorkTable
+        ),
+        carry!(
+            usage_cache,
+            UsageCachePersistenceEngine,
+            UsageCacheWorkTable
+        ),
+        carry!(
+            usage_session,
+            UsageSessionPersistenceEngine,
+            UsageSessionWorkTable
         ),
         carry!(
             approval_rule,
@@ -1058,7 +1120,26 @@ pub async fn rebuild_store(source: &Path, target: &Path) -> eyre::Result<Vec<(St
             PullRequestPersistenceEngine,
             PullRequestWorkTable
         ),
-    ])
+        carry!(question, QuestionPersistenceEngine, QuestionWorkTable),
+        carry!(
+            question_reply,
+            QuestionReplyPersistenceEngine,
+            QuestionReplyWorkTable
+        ),
+        carry!(
+            reply_checkpoint,
+            ReplyCheckpointPersistenceEngine,
+            ReplyCheckpointWorkTable
+        ),
+        carry!(
+            study_event,
+            StudyEventPersistenceEngine,
+            StudyEventWorkTable
+        ),
+    ]
+    .into_iter()
+    .flatten()
+    .collect())
 }
 
 /// Rebuild `task_log` row by row into a fresh table, discarding the old
@@ -1110,6 +1191,7 @@ pub async fn rebuild_task_log(source: &Path, target: &Path) -> eyre::Result<(usi
         if row.id.starts_with("log-") && row.project_id.starts_with("proj-") {
             target_table
                 .insert(row)
+                .await
                 .map_err(|error| eyre::eyre!("{error}"))?;
             rebuilt += 1;
         } else {
@@ -1203,6 +1285,7 @@ pub async fn recover_task_log_index(
     for row in rows.values().cloned() {
         fresh
             .insert(row)
+            .await
             .map_err(|error| eyre::eyre!("task_log: {error}"))?;
     }
     fresh
@@ -1260,7 +1343,7 @@ pub async fn recover_message_index(
     let mut data_file = tokio::fs::File::open(table_path.join(".wt.data")).await?;
     let mut rows = BTreeMap::new();
     for (id, link) in primary_index.iter() {
-        worktable::data_bucket::seek_by_link(&mut data_file, *link).await?;
+        worktable::data_bucket::seek_by_link(&mut data_file, link).await?;
         let mut bytes = vec![0u8; link.length as usize];
         data_file.read_exact(&mut bytes).await?;
         let stored = rkyv::from_bytes::<StoredMessage, rkyv::rancor::Error>(&bytes)
@@ -1294,6 +1377,7 @@ pub async fn recover_message_index(
     for row in rows.values().cloned() {
         fresh
             .insert(row)
+            .await
             .map_err(|error| eyre::eyre!("message: {error}"))?;
     }
     fresh
@@ -1418,6 +1502,7 @@ pub async fn restore_items_from_json(target: &Path, json: &str) -> eyre::Result<
         };
         table
             .insert(row)
+            .await
             .map_err(|error| eyre::eyre!("project_item: {error}"))?;
         inserted += 1;
     }
@@ -1478,7 +1563,7 @@ pub async fn salvage_item_index(source: &Path, target: &Path) -> eyre::Result<It
      * then swept independently below.
      */
     for (id, link) in primary_index.iter() {
-        if worktable::data_bucket::seek_by_link(&mut data_file, *link)
+        if worktable::data_bucket::seek_by_link(&mut data_file, link)
             .await
             .is_err()
         {
@@ -1590,6 +1675,7 @@ pub async fn salvage_item_index(source: &Path, target: &Path) -> eyre::Result<It
     for row in rows.into_values() {
         fresh
             .insert(row)
+            .await
             .map_err(|error| eyre::eyre!("project_item: {error}"))?;
     }
     fresh
@@ -1642,7 +1728,7 @@ async fn rebuild_pull_request_index(
     let mut rows = BTreeMap::new();
     let mut skipped = Vec::new();
     for (id, link) in primary_index.iter() {
-        if let Err(error) = worktable::data_bucket::seek_by_link(&mut data_file, *link).await {
+        if let Err(error) = worktable::data_bucket::seek_by_link(&mut data_file, link).await {
             if skip_corrupt {
                 skipped.push(id.clone());
                 continue;
@@ -1706,6 +1792,7 @@ async fn rebuild_pull_request_index(
     for row in rows.values().cloned() {
         fresh
             .insert(row)
+            .await
             .map_err(|error| eyre::eyre!("pull_request: {error}"))?;
     }
     fresh
@@ -1758,9 +1845,80 @@ async fn rebuild_pull_request_index(
 mod recovery_tests {
     use super::*;
     use app_schema::message::{MessagePersistenceEngine, MessageRow, MessageWorkTable};
+    use app_schema::project::{ProjectPersistenceEngine, ProjectRow, ProjectWorkTable};
     use app_schema::pull_request::{
         PullRequestPersistenceEngine, PullRequestRow, PullRequestWorkTable,
     };
+
+    #[tokio::test]
+    async fn rebuild_store_repairs_a_secondary_index_rejected_by_strict_load() {
+        let root = tempfile::tempdir().expect("temporary rebuild store");
+        let source = root.path().join("source");
+        let target = root.path().join("target");
+        let empty = root.path().join("empty");
+
+        let open = |dir: &Path| {
+            let config = DiskConfig::new_with_table_name(
+                dir.to_string_lossy().into_owned(),
+                ProjectWorkTable::name_snake_case(),
+                ProjectWorkTable::version(),
+            );
+            async move {
+                let engine = ProjectPersistenceEngine::new(config).await?;
+                ProjectWorkTable::load(engine).await
+            }
+        };
+
+        let table = open(&source).await.expect("source project table");
+        table
+            .insert(ProjectRow {
+                id: "project-1".into(),
+                name: "kept".into(),
+                status: "active".into(),
+                position: 1,
+                dirs: "[]".into(),
+                pinned: false,
+                moderator_enabled: false,
+                forked_from: String::new(),
+                last_activity_at: "2026-09-04T00:00:00Z".into(),
+            })
+            .await
+            .expect("project inserts");
+        table.close().await.expect("source project closes");
+
+        let empty_table = open(&empty).await.expect("empty project table");
+        empty_table.close().await.expect("empty project closes");
+        std::fs::copy(
+            empty.join("project/status_idx.wt.idx"),
+            source.join("project/status_idx.wt.idx"),
+        )
+        .expect("replace the secondary index with a valid but stale one");
+
+        let error = open(&source)
+            .await
+            .expect_err("strict load must reject a missing secondary entry");
+        assert!(error.to_string().contains("status_idx"));
+
+        assert_eq!(
+            rebuild_store(&source, &target)
+                .await
+                .expect("recovery rebuild succeeds"),
+            vec![("project".to_string(), 1)]
+        );
+
+        let rebuilt = open(&target)
+            .await
+            .expect("rebuilt store passes strict load");
+        assert_eq!(
+            rebuilt
+                .select_by_status("active".into())
+                .execute()
+                .expect("rebuilt secondary index selects")
+                .len(),
+            1
+        );
+        rebuilt.close().await.expect("rebuilt project closes");
+    }
 
     fn item(id: &str, project_id: &str) -> ProjectItemRow {
         ProjectItemRow {
@@ -1803,7 +1961,7 @@ mod recovery_tests {
             ("item-four", "proj-2"),
             ("item-five", "proj-3"),
         ] {
-            table.insert(item(id, project)).expect("row inserts");
+            table.insert(item(id, project)).await.expect("row inserts");
         }
         table.close().await.expect("source closes cleanly");
 
@@ -1903,9 +2061,18 @@ mod recovery_tests {
         );
         let engine = TaskLogPersistenceEngine::new(config).await.expect("engine");
         let table = TaskLogWorkTable::load(engine).await.expect("table");
-        table.insert(task("log-1", "proj-1")).expect("first row");
-        table.insert(task("log-2", "proj-1")).expect("second row");
-        table.insert(task("log-3", "proj-2")).expect("third row");
+        table
+            .insert(task("log-1", "proj-1"))
+            .await
+            .expect("first row");
+        table
+            .insert(task("log-2", "proj-1"))
+            .await
+            .expect("second row");
+        table
+            .insert(task("log-3", "proj-2"))
+            .await
+            .expect("third row");
         table.close().await.expect("source closes cleanly");
 
         std::fs::write(source.join("task_log/primary.wt.idx"), b"torn primary")
@@ -1956,7 +2123,7 @@ mod recovery_tests {
         let engine = TaskLogPersistenceEngine::new(config).await.expect("engine");
         let table = TaskLogWorkTable::load(engine).await.expect("table");
         let id = "log-corrupt".to_string();
-        let primary_key = table.insert(task(&id, "proj-1")).expect("row");
+        let primary_key = table.insert(task(&id, "proj-1")).await.expect("row");
         let link = table
             .0
             .primary_index
@@ -2009,11 +2176,18 @@ mod recovery_tests {
         );
         let engine = MessagePersistenceEngine::new(config).await.expect("engine");
         let table = MessageWorkTable::load(engine).await.expect("table");
-        table.insert(message("msg-1", "proj-1")).expect("first row");
+        table
+            .insert(message("msg-1", "proj-1"))
+            .await
+            .expect("first row");
         table
             .insert(message("msg-2", "proj-1"))
+            .await
             .expect("second row");
-        table.insert(message("msg-3", "proj-2")).expect("third row");
+        table
+            .insert(message("msg-3", "proj-2"))
+            .await
+            .expect("third row");
         table.close().await.expect("source closes cleanly");
 
         std::fs::write(source.join("message/project_idx.wt.idx"), b"torn secondary")
@@ -2075,12 +2249,15 @@ mod recovery_tests {
         let table = PullRequestWorkTable::load(engine).await.expect("table");
         table
             .insert(pull_request("pr-1", "proj-1"))
+            .await
             .expect("first row");
         table
             .insert(pull_request("pr-2", "proj-1"))
+            .await
             .expect("second row");
         table
             .insert(pull_request("pr-3", "proj-2"))
+            .await
             .expect("third row");
         table.close().await.expect("source closes cleanly");
 
@@ -2149,12 +2326,15 @@ mod recovery_tests {
         let table = PullRequestWorkTable::load(engine).await.expect("table");
         table
             .insert(pull_request("pr-good-1", "proj-1"))
+            .await
             .expect("first row");
         table
             .insert(pull_request("pr-corrupt", "proj-1"))
+            .await
             .expect("corrupt row");
         table
             .insert(pull_request("pr-good-2", "proj-2"))
+            .await
             .expect("third row");
         table.close().await.expect("source closes cleanly");
 
@@ -2170,7 +2350,7 @@ mod recovery_tests {
         let primary_index = primary.parse_indexset().await.expect("primary rows");
         let corrupt_link = primary_index
             .iter()
-            .find_map(|(id, link)| (id == "pr-corrupt").then_some(*link))
+            .find_map(|(id, link)| (id == "pr-corrupt").then_some(link))
             .expect("corrupt row link");
         drop(primary);
 
@@ -2575,19 +2755,25 @@ mod scrub_tests {
                 .expect("engine");
             let table = ProjectItemWorkTable::load(engine).await.expect("table");
 
-            table.insert(item("item-1", "proj-846b")).expect("good row");
+            table
+                .insert(item("item-1", "proj-846b"))
+                .await
+                .expect("good row");
             table
                 .insert(item("item-2", "home-task-manager"))
+                .await
                 .expect("tm row");
             let mut odd = item("item-3", "proj-846b");
             odd.status = "someday-maybe".into();
-            table.insert(odd).expect("odd status row");
+            table.insert(odd).await.expect("odd status row");
             // The real debris shapes, verbatim from the incident.
             table
                 .insert(item("proj-6cf80cb0", "Recover the item list"))
+                .await
                 .expect("shifted row");
             table
                 .insert(item("ment)", "item-03fd09c6"))
+                .await
                 .expect("worse row");
             table.wait_for_ops().await.expect("items persist");
         }
