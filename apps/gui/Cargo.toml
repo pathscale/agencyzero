@@ -114,15 +114,14 @@ tauri-runtime-blitz = { version = "^0.3", optional = true, features = ["macos-pr
 # resolved anyrender from crates.io at 0.12.0, and the build stopped at
 # "failed to select a version".
 #
-# A caret is what was meant. `cargo update` moves it, `Cargo.lock` records what
-# was resolved, and anything else asking for the same range gets the same crate
-# rather than a second copy of the engine - which is the failure that reads as
-# `expected ScriptDocument, found ScriptDocument` with both types naming one
-# file. Working against a local checkout stays possible through the `[patch]`
-# entries in `.cargo/config.toml`, so the default exercises what a release
-# actually resolves.
-blitz-dom = { package = "ps-blitz-dom", version = "^0.3", features = ["system-fonts", "parallel-construct"], optional = true }
-blitz-script = { package = "ps-blitz-script", version = "^0.3", features = ["system-fonts"], optional = true }
+# A caret is what was meant. Every lockless build resolves the compatible family
+# afresh, and anything else asking for the same range gets the same crate rather
+# than a second copy of the engine. Two incompatible families produce the failure
+# that reads as `expected ScriptDocument, found ScriptDocument` with both types
+# naming one file. Local renderer work uses `.cargo/local-renderer.toml` through
+# `scripts/local-renderer.sh`, so the default exercises the published graph.
+blitz-dom = { package = "ps-blitz-dom", version = "^0.4", features = ["system-fonts", "parallel-construct"], optional = true }
+blitz-script = { package = "ps-blitz-script", version = "^0.4", features = ["system-fonts"], optional = true }
 brotli = { version = "8.0.4", default-features = false, features = ["std"], optional = true }
 url = { version = "2.5.8", optional = true }
 tauri-plugin-updater = "2"

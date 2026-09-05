@@ -1,7 +1,3 @@
-// `Document` provides `inner_mut` and `poll`, which both the capture path
-// and the inspection host call. Unconditional: it is used in every
-// configuration now.
-use blitz_dom::Document;
 use blitz_dom::DocumentConfig;
 use blitz_script::{DefaultScriptFetcher, FetchError, ScriptDocument, ScriptFetcher};
 #[cfg(all(not(test), feature = "capture"))]
@@ -530,6 +526,7 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use blitz_dom::Document;
 
     #[test]
     fn embedded_assets_are_compressed_and_round_trip() {
