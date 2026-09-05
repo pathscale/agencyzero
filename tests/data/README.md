@@ -1,7 +1,7 @@
 # The committed QA profile
 
 `qa-profile.tar.zst` is the fixture `ps-qa` drives. It expands to a ~30 MB
-WorkTable store: 294 projects, two of them deep enough to time against.
+WorkTable store: 248 projects, two of them deep enough to time against.
 
 ```sh
 scripts/qa-profile-restore.sh            # -> /tmp/qa-profile-db
