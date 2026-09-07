@@ -334,7 +334,7 @@ function IoPersistToggle(props: { projectId: string }): JSX.Element {
       id={`project-${props.projectId}-agent-io-persist`}
       checked={enabled()}
       state={!isLive("setIoPersist") ? "disabled" : undefined}
-      onChange={(event) => void toggle(event.currentTarget.checked)}
+      onChange={(checked) => void toggle(checked)}
       title={tx(
         "Keep this project's raw exchange in the database, so it survives a restart. Off by default: a long run writes thousands of rows.",
       )}
@@ -624,7 +624,11 @@ function SettingsSection(props: { project: Project; agent: Agent }): JSX.Element
               >
                 <Icon name="folder-plus" class="text-ui-body" />
               </Button>
+              {/* `md` spelled out: 3.0 moved the `Input` default to `sm`, and
+                  these fields set no height of their own, so the implicit `md`
+                  is what their rows are currently built on. */}
               <Input.Field
+                size="md"
                 id={`project-${props.project.id}-dir-path`}
                 autofocus
                 value={path()}
@@ -658,9 +662,7 @@ function SettingsSection(props: { project: Project; agent: Agent }): JSX.Element
               disabled
               flavor="accent"
               size="sm"
-              onChange={(event) =>
-                void actions.setProjectModerator(props.project.id, event.currentTarget.checked)
-              }
+              onChange={(checked) => void actions.setProjectModerator(props.project.id, checked)}
             />
           </div>
 
@@ -1016,6 +1018,7 @@ function ResumeSession(props: {
         </span>
       </div>
       <Input.Field
+        size="md"
         id={`project-${props.projectId}-resume-session-id`}
         value={id()}
         disabled={busy() || props.running}
@@ -1414,6 +1417,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
           <div class="mb-1 flex items-center gap-2 border-az-hairline-soft border-b bg-az-inset px-2.5 py-1.5">
             <Icon name="search" class="shrink-0 text-primary/70 text-ui-label" />
             <Input.Field
+              size="md"
               id={`project-${props.projectId}-items-filter`}
               type="text"
               value={query()}
@@ -1462,6 +1466,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
               fallback={
                 <Show when={editingId() === item.id}>
                   <Input.Field
+                    size="md"
                     id={`project-${props.projectId}-item-${item.id}-title-edit`}
                     autofocus
                     value={editTitle()}
@@ -1876,6 +1881,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                   {(draft) => (
                     <section class="flex items-center gap-2 rounded-b-[9px] border-primary/24 border-t bg-az-inset px-3 py-2.5 shadow-[inset_2px_0_0_color-mix(in_srgb,var(--color-primary)_55%,transparent)]">
                       <Input.Field
+                        size="md"
                         id={`project-${props.projectId}-item-${item.id}-issue-url`}
                         ref={(element: HTMLInputElement) => {
                           issueField = element;
@@ -1994,6 +2000,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
         }
       >
         <Input.Field
+          size="md"
           id={`project-${props.projectId}-item-new-title`}
           autofocus
           value={title()}
@@ -2478,7 +2485,7 @@ function CheckpointToggle(props: { projectId: string }): JSX.Element {
           flavor="accent"
           size="sm"
           disabled={!isLive("setCheckpoints")}
-          onChange={(event) => void toggle(event.currentTarget.checked)}
+          onChange={(checked) => void toggle(checked)}
         />
       </div>
       {/*

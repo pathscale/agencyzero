@@ -515,7 +515,11 @@ export function SettingsTab(): JSX.Element {
         */}
         <div class="flex items-center gap-2.5 rounded-[11px] border border-primary/11 bg-az-inset px-3 py-2.5 focus-within:border-primary/40">
           <Icon name="search" class="shrink-0 text-primary/70 text-ui-control" />
+          {/* `md` spelled out: 3.0 moved the `Input` default to `sm`, and these
+              fields set no height of their own, so the implicit `md` is what
+              their rows are currently built on. */}
           <Input.Field
+            size="md"
             id="settings-search"
             type="search"
             value={settingsQuery()}
@@ -1377,9 +1381,9 @@ export function SettingsTab(): JSX.Element {
                 checked={current().theme.glassEnabled !== false}
                 flavor="accent"
                 class="shrink-0"
-                onChange={(event) =>
+                onChange={(checked) =>
                   actions.saveSettings({
-                    theme: { glassEnabled: event.currentTarget.checked },
+                    theme: { glassEnabled: checked },
                   })
                 }
               />
@@ -2591,6 +2595,7 @@ function TaskManagerDirs(props: { taskManager: TaskManagerSettings }): JSX.Eleme
         )}
       </For>
       <Input.Field
+        size="md"
         id="settings-task-manager-dir-add"
         value={path()}
         placeholder={tx("~/code/…")}
@@ -3807,7 +3812,9 @@ function SettingToggle(props: {
       disabled={props.disabled}
       flavor="accent"
       class="shrink-0"
-      onChange={(event) => props.onChange(event.currentTarget.checked)}
+      // `Switch` reports the new checked state directly, which is already this
+      // component's own contract, so there is nothing left to unwrap.
+      onChange={(checked) => props.onChange(checked)}
     />
   );
 }
@@ -3957,9 +3964,7 @@ function ModelRow(props: {
         checked={props.isEnabled}
         state={props.isLastEnabled ? "disabled" : undefined}
         aria-label={tx("Offer {name}", { name: props.model.name })}
-        onChange={(event) =>
-          void actions.toggleModel(props.agent, props.model.id, event.currentTarget.checked)
-        }
+        onChange={(checked) => void actions.toggleModel(props.agent, props.model.id, checked)}
       />
 
       <div class="flex min-w-0 flex-1 flex-col leading-tight">
