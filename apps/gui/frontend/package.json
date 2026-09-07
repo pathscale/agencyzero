@@ -23,7 +23,7 @@
   },
   "license": "MIT",
   "dependencies": {
-    "@pathscale/ui": "^4.0.0",
+    "@pathscale/ui": "^3.1.0",
     "@solidjs/web": "next",
     "@tauri-apps/api": "^2.1.1",
     "clsx": "^2.1.1",
