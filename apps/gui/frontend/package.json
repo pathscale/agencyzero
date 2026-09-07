@@ -24,12 +24,12 @@
   "license": "MIT",
   "dependencies": {
     "@pathscale/ui": "^3.1.0",
-    "@solidjs/web": "next",
+    "@solidjs/web": "2.0.0-rc.4",
     "@tauri-apps/api": "^2.1.1",
     "clsx": "^2.1.1",
     "popmotion": "^11.0.5",
     "promptsyntax": "^0.1.0",
-    "solid-js": "next",
+    "solid-js": "2.0.0-rc.4",
     "solid-layouts": "^0.2.1",
     "tailwind-merge": "^3.6.0"
   },
