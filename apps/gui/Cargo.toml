@@ -27,6 +27,7 @@ blitz-runtime = [
     "dep:blitz-script",
     "dep:brotli",
     "dep:tauri-runtime-blitz",
+    "dep:blitz-control-protocol",
     "dep:url",
 ]
 # Compile the full diagnostics capability into the binary. The engine-wide
@@ -101,7 +102,12 @@ tauri = { version = "2", default-features = false, features = ["macos-private-ap
 # 0.1.0 the runtime's own feature forwards to `tauri` and `tauri-runtime`, so
 # naming it here agrees with that rather than being the only thing holding the
 # two sides together.
-tauri-runtime-blitz = { version = "^0.3", optional = true, features = ["macos-private-api"] }
+# The window runtime. AgencyZero opens one, so this stays; only the control
+# surface left it, and that now comes from `blitz-control-protocol` directly.
+tauri-runtime-blitz = { version = "^0.4", optional = true, features = ["macos-private-api"] }
+# The control surface agents drive AgencyZero through. Default features only:
+# the vocabulary and the lifecycle handler, no engine and no transport.
+blitz-control-protocol = { version = "^0.5", optional = true, default-features = false }
 #
 # The engine by version, not by branch. Same move `chuzz` made, for the same
 # reasons its manifest records.
