@@ -334,6 +334,7 @@
         open: Some("Settings"),
         hover: None,
         click: None,
+        reveal_before_capture: Some("button:Task manager effort: low"),
         subject: "button:Task manager effort: low",
         expect: PaintsNamed,
     ),

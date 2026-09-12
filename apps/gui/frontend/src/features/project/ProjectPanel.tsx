@@ -1239,6 +1239,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
             // the persisted row by its unique backend ID so its actions do
             // not disappear between reveal and click.
             setLastCreatedId(item.id);
+            actions.revealItem(item.id);
           }),
         )
         .catch(

@@ -463,6 +463,16 @@ export function SettingsTab(): JSX.Element {
     });
   };
 
+  const updateSettingsQuery = (value: string): void => {
+    const wasFiltering = settingsQuery().trim() !== "";
+    setSettingsQuery(value);
+    if (wasFiltering && value.trim() === "") {
+      requestAnimationFrame(() => {
+        page.scrollTop = 0;
+      });
+    }
+  };
+
   return (
     <div
       ref={page}
@@ -523,7 +533,7 @@ export function SettingsTab(): JSX.Element {
             id="settings-search"
             type="search"
             value={settingsQuery()}
-            onInput={(event) => setSettingsQuery(event.currentTarget.value)}
+            onInput={(event) => updateSettingsQuery(event.currentTarget.value)}
             placeholder={tx("Search settings…")}
             aria-label={tx("Search settings")}
             class="min-w-0 flex-1 bg-transparent text-base-content text-ui-label-lg placeholder:text-az-muted focus:outline-none"

@@ -72,7 +72,11 @@ export function PillMenu<T extends string>(props: PillMenuProps<T>): JSX.Element
       <Dropdown.Menu
         id={`${props.id}--menu`}
         align="start"
-        class="min-w-[190px] rounded-xl border border-az-hairline bg-base-100 p-1 shadow-[0_18px_40px_rgba(0,0,0,.5)]"
+        // The native retained renderer appended another shadow paint whenever
+        // pointer feedback invalidated this hoisted fixed subtree. The menu
+        // grew darker on every visit even though its DOM stayed flat. Its
+        // opaque fill and border already separate it from the composer.
+        class="min-w-[190px] rounded-xl border border-az-hairline bg-base-100 p-1"
       >
         <For each={props.options}>
           {(option) => (
