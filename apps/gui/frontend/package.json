@@ -5,6 +5,7 @@
   "type": "module",
   "private": true,
   "overrides": {
+    "@solidjs/signals": "2.0.0-rc.4",
     "babel-preset-solid": "^2.0.0-rc.0"
   },
   "scripts": {
