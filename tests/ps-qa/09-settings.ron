@@ -83,7 +83,7 @@
         prepare: Some("Agent-finished retention"),
         hover: None,
         click: Some("menuitem:2 turns"),
-        subject: "Agent-finished retention",
+        subject: "#settings-agent-finished-retention--trigger",
         expect: NameChanges,
         covers: ["button:Agent-finished retention:"],
     ),
@@ -107,7 +107,7 @@
         prepare: Some("Agent restart authority"),
         hover: None,
         click: Some("menuitem:Restart only"),
-        subject: "Agent restart authority",
+        subject: "#settings-agent-restart-authority--trigger",
         expect: NameChanges,
     ),
     (
@@ -120,8 +120,8 @@
         // The fixture starts at the maximum. Move toward a value that can
         // change rather than asking a correct slider to exceed its range.
         key: Some("Left"),
-        key_on: Some("Response verbosity for this project"),
-        subject: "Response verbosity for this project",
+        key_on: Some("slider:Response verbosity for this project"),
+        subject: "slider:Response verbosity for this project",
         expect: ValueChanges,
     ),
     (
@@ -133,7 +133,7 @@
         click: None,
         type_into: Some("PR review prompt"),
         text: Some("QA review prompt persistence check"),
-        subject: "PR review prompt",
+        subject: "#settings-review-prompt",
         expect: ValueChanges,
     ),
     (

@@ -127,7 +127,7 @@
         click: None,
         key: Some("Right"),
         key_on: Some("Projected turn warning threshold"),
-        subject: "Projected turn warning threshold",
+        subject: "#settings-cost-warning-threshold",
         expect: ValueChanges,
     ),
     (
@@ -137,8 +137,8 @@
         open: Some("Settings"),
         hover: None,
         click: Some("Show projected-cost warnings"),
-        subject: "Show projected-cost warnings",
-        expect: ValueChanges,
+        subject: "#settings-cost-warnings-enabled",
+        expect: SelectionChanges,
     ),
     (
         id: "settings-update-check-completes",
@@ -179,8 +179,8 @@
         open: Some("Settings"),
         hover: None,
         click: Some("PS deployment study"),
-        subject: "PS deployment study",
-        expect: ValueChanges,
+        subject: "#settings-study-enabled",
+        expect: SelectionChanges,
     ),
     (
         id: "settings-study-delete-enabled-after-stop",
@@ -301,7 +301,7 @@
         prepare: Some("Completed items"),
         hover: None,
         click: Some("menuitem:Delete"),
-        subject: "Completed items",
+        subject: "#settings-completed-items--trigger",
         expect: NameChanges,
     ),
     (
@@ -312,7 +312,7 @@
         prepare: Some("Agent-finished retention"),
         hover: None,
         click: Some("menuitem:1 turn"),
-        subject: "Agent-finished retention",
+        subject: "#settings-agent-finished-retention--trigger",
         expect: NameChanges,
     ),
     (
@@ -323,7 +323,7 @@
         prepare: Some("Agent restart authority"),
         hover: None,
         click: Some("menuitem:Restart & update"),
-        subject: "Agent restart authority",
+        subject: "#settings-agent-restart-authority--trigger",
         expect: NameChanges,
         covers: ["#settings-agent-restart-authority--trigger"],
     ),
@@ -378,7 +378,7 @@
         click: None,
         type_into: Some("PR review prompt"),
         text: Some("QA restoration sentinel"),
-        subject: "PR review prompt",
+        subject: "#settings-review-prompt",
         expect: ValueChanges,
     ),
     (
@@ -390,7 +390,7 @@
         click: None,
         type_into: Some("PR review prompt"),
         text: Some(""),
-        subject: "PR review prompt",
+        subject: "#settings-review-prompt",
         expect: ValueChanges,
     ),
     (
@@ -402,7 +402,7 @@
         click: None,
         key: Some("Left"),
         key_on: Some("Projected turn warning threshold"),
-        subject: "Projected turn warning threshold",
+        subject: "#settings-cost-warning-threshold",
         expect: ValueChanges,
     ),
     (
@@ -412,8 +412,8 @@
         open: Some("Settings"),
         hover: None,
         click: Some("Show projected-cost warnings"),
-        subject: "Show projected-cost warnings",
-        expect: ValueChanges,
+        subject: "#settings-cost-warnings-enabled",
+        expect: SelectionChanges,
     ),
     (
         id: "settings-study-restores",
@@ -422,8 +422,8 @@
         open: Some("Settings"),
         hover: None,
         click: Some("PS deployment study"),
-        subject: "PS deployment study",
-        expect: ValueChanges,
+        subject: "#settings-study-enabled",
+        expect: SelectionChanges,
     ),
     (
         id: "settings-context-detail-restores",
@@ -444,8 +444,8 @@
         hover: None,
         click: None,
         key: Some("Right"),
-        key_on: Some("Response verbosity for this project"),
-        subject: "Response verbosity for this project",
+        key_on: Some("slider:Response verbosity for this project"),
+        subject: "slider:Response verbosity for this project",
         expect: ValueChanges,
     ),
 ]

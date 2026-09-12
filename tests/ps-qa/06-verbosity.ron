@@ -13,9 +13,9 @@
         type_into: None,
         text: None,
         key: Some("Right"),
-        key_on: Some("Response verbosity for this project"),
+        key_on: Some("slider:Response verbosity for this project"),
         compare: None,
-        subject: "Response verbosity for this project",
+        subject: "slider:Response verbosity for this project",
         expect: ValueChanges,
     ),
     (
@@ -28,9 +28,9 @@
         type_into: None,
         text: None,
         key: Some("Left"),
-        key_on: Some("Response verbosity for this project"),
+        key_on: Some("slider:Response verbosity for this project"),
         compare: None,
-        subject: "Response verbosity for this project",
+        subject: "slider:Response verbosity for this project",
         expect: ValueChanges,
     ),
 ]
