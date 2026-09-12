@@ -53,14 +53,10 @@ describe("the window can be seen through", () => {
   it.each(WINDOW_CONFIGS)("keeps %s compatible with the transparent base window", (file) => {
     const window = JSON.parse(readFileSync(join(GUI, file), "utf8")).app.windows[0];
     expect(window.backgroundColor).toBeUndefined();
-    if (file === "tauri.conf.json") {
-      expect(window.transparent).toBe(true);
-    } else {
-      // Variant configs merge over the base. An explicit false here silently
-      // turns only that profile opaque while the frontend still attaches the
-      // native glass backdrop, which washes a dark theme white at opacity 0.
-      expect(window.transparent).not.toBe(false);
-    }
+    // Tauri replaces the base window entry with the variant entry rather than
+    // merging each field by label. Every profile must therefore repeat this
+    // native precondition or it silently becomes opaque.
+    expect(window.transparent).toBe(true);
   });
 
   /*

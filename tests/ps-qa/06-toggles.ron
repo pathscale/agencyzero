@@ -1,5 +1,5 @@
-// Standard value-bearing controls are verified through their semantic value,
-// not their unchanged geometry. The disposable QA profile absorbs the writes.
+// Checkboxes expose a value; switches expose their selected state, rather than
+// changing geometry. The disposable QA profile absorbs the writes.
 [
     (
         id: "toggles-moderator",
@@ -17,8 +17,8 @@
         what: "raw Agent I/O persistence changes",
         open: Some("theta theta north indi"),
         hover: None,
-        click: Some("Keep this project's raw exchange in the database"),
-        subject: "Keep this project's raw exchange in the database",
+        click: Some("checkbox:Keep across restarts"),
+        subject: "checkbox:Keep across restarts",
         expect: ValueChanges,
     ),
     (
@@ -27,8 +27,8 @@
         what: "raw Agent I/O persistence can be restored on the same checkbox",
         open: Some("theta theta north indi"),
         hover: None,
-        click: Some("Keep this project's raw exchange in the database"),
-        subject: "Keep this project's raw exchange in the database",
+        click: Some("checkbox:Keep across restarts"),
+        subject: "checkbox:Keep across restarts",
         expect: ValueChanges,
     ),
     (
@@ -39,7 +39,7 @@
         hover: None,
         click: Some("Knowledge checkpoints for this project"),
         subject: "Knowledge checkpoints for this project",
-        expect: ValueChanges,
+        expect: SelectionChanges,
     ),
     (
         id: "toggles-checkpoints-restores",
@@ -49,7 +49,7 @@
         hover: None,
         click: Some("Knowledge checkpoints for this project"),
         subject: "Knowledge checkpoints for this project",
-        expect: ValueChanges,
+        expect: SelectionChanges,
     ),
     (
         id: "toggles-profiling",
@@ -57,9 +57,9 @@
         what: "deep profiling permission changes",
         open: Some("Settings"),
         hover: None,
-        click: Some("Allow deep intrusive profiling"),
-        subject: "Allow deep intrusive profiling",
-        expect: ValueChanges,
+        click: Some("#settings-deep-profiling"),
+        subject: "#settings-deep-profiling",
+        expect: SelectionChanges,
     ),
     (
         id: "toggles-update-checks",
@@ -68,8 +68,8 @@
         open: Some("Settings"),
         hover: None,
         click: Some("Check for updates at launch"),
-        subject: "Check for updates at launch",
-        expect: ValueChanges,
+        subject: "#settings-update-checks-at-launch",
+        expect: SelectionChanges,
     ),
     (
         id: "toggles-prompt-syntax",
@@ -78,8 +78,8 @@
         open: Some("Settings"),
         hover: None,
         click: Some("Inject AgencyZero and Prompt Syntax per turn"),
-        subject: "Inject AgencyZero and Prompt Syntax per turn",
-        expect: ValueChanges,
+        subject: "#settings-per-turn-injection",
+        expect: SelectionChanges,
     ),
     (
         id: "toggles-agent-settings-updates",
@@ -87,9 +87,9 @@
         what: "agent permission to update application settings changes on its exact switch",
         open: Some("Settings"),
         hover: None,
-        click: Some("#settings-agent-settings-updates"),
+        click: Some("Allow agents to update app settings"),
         subject: "#settings-agent-settings-updates",
-        expect: ValueChanges,
+        expect: SelectionChanges,
     ),
     (
         id: "toggles-profiling-restores",
@@ -97,9 +97,9 @@
         what: "deep profiling permission returns to the fixture value",
         open: Some("Settings"),
         hover: None,
-        click: Some("Allow deep intrusive profiling"),
-        subject: "Allow deep intrusive profiling",
-        expect: ValueChanges,
+        click: Some("#settings-deep-profiling"),
+        subject: "#settings-deep-profiling",
+        expect: SelectionChanges,
     ),
     (
         id: "toggles-update-checks-restores",
@@ -108,8 +108,8 @@
         open: Some("Settings"),
         hover: None,
         click: Some("Check for updates at launch"),
-        subject: "Check for updates at launch",
-        expect: ValueChanges,
+        subject: "#settings-update-checks-at-launch",
+        expect: SelectionChanges,
     ),
     (
         id: "toggles-prompt-syntax-restores",
@@ -118,8 +118,8 @@
         open: Some("Settings"),
         hover: None,
         click: Some("Inject AgencyZero and Prompt Syntax per turn"),
-        subject: "Inject AgencyZero and Prompt Syntax per turn",
-        expect: ValueChanges,
+        subject: "#settings-per-turn-injection",
+        expect: SelectionChanges,
     ),
     (
         id: "toggles-agent-settings-updates-restores",
@@ -127,8 +127,8 @@
         what: "agent settings permission returns to the fixture value",
         open: Some("Settings"),
         hover: None,
-        click: Some("#settings-agent-settings-updates"),
+        click: Some("Allow agents to update app settings"),
         subject: "#settings-agent-settings-updates",
-        expect: ValueChanges,
+        expect: SelectionChanges,
     ),
 ]
