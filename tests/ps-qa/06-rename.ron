@@ -67,6 +67,7 @@
         key: Some("Enter"),
         subject: "textbox:Rename project theta theta north indi",
         expect: Vanishes,
+        covers: ["button:Rename project ", "textbox:Rename project "],
     ),
     (
         id: "rename-home-search-follows-new-name",

@@ -127,6 +127,7 @@ AppProfile(
         // disconnected-agent gate; an owner launches and verifies every entry
         // point into a real provider turn locally.
         (label: "Send",                                 command: "authenticated provider turn (local manual)"),
+        (label: "Review project items and mark proposed deletions", command: "authenticated cleanup provider turn (local manual)"),
         (label: "Run ",                                 command: "authenticated item run (local manual)"),
         (label: "Reply to the question for ",           command: "authenticated item reply (local manual)"),
         (label: "Refresh provider usage",               command: "authenticated provider usage (local manual)"),
