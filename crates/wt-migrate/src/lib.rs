@@ -1226,7 +1226,7 @@ pub async fn recover_task_log_index(
     let scratch = tempfile::tempdir()?;
     let scratch_store = scratch.path().join("store");
     let scratch_table = scratch_store.join("task_log");
-    copy_dir(&source.join("task_log"), &scratch_table).await?;
+    copy_dir(&source.join("task_log"), &scratch_table)?;
 
     // Read the surviving secondary index directly to discover every key,
     // including projects that may since have been deleted from the project
@@ -1252,7 +1252,7 @@ pub async fn recover_task_log_index(
     // Preserve the bad file inside the disposable scratch directory. Recovery
     // mode permits the now-empty primary index to disagree with project_idx,
     // but still validates every surviving project-index key and row link.
-    tokio::fs::rename(
+    nagoya::io::rename(
         scratch_table.join("primary.wt.idx"),
         scratch_table.join("primary.wt.idx.corrupt"),
     )
@@ -1618,7 +1618,7 @@ pub async fn salvage_item_index(source: &Path, target: &Path) -> eyre::Result<It
      * recovers a fraction of the table and calls it the whole thing.
      */
     {
-        let bytes = tokio::fs::read(table_path.join(".wt.data")).await?;
+        let bytes = nagoya::io::read(table_path.join(".wt.data")).await?;
         /*
          * Bounded twice, because the search is quadratic in the window.
          *
@@ -2434,7 +2434,7 @@ pub async fn carry_forward(
     stored: &str,
     current: &str,
 ) -> eyre::Result<Report> {
-    tokio::fs::create_dir_all(target).await?;
+    nagoya::io::create_dir_all(target).await?;
     let safe = unchanged(stored, current);
     let mut report = Report::default();
 
@@ -2453,10 +2453,10 @@ pub async fn carry_forward(
              * the same loss, one branch over: an unreadable `agent_io_row`
              * sorts first and would cost `message`, `project` and the rest.
              */
-            match copy_dir(&from, &target.join(&table)).await {
+            match copy_dir(&from, &target.join(&table)) {
                 Ok(()) => report.copied.push(table),
                 Err(error) => {
-                    let _ = tokio::fs::remove_dir_all(target.join(&table)).await;
+                    let _ = nagoya::io::remove_dir_all(target.join(&table)).await;
                     report
                         .failed
                         .push((table.clone(), format!("could not copy: {error}")));
@@ -2493,7 +2493,7 @@ pub async fn carry_forward(
                             report.migrated.push(table);
                         }
                         Err(error) => {
-                            let _ = tokio::fs::remove_dir_all(target.join(&table)).await;
+                            let _ = nagoya::io::remove_dir_all(target.join(&table)).await;
                             report
                                 .failed
                                 .push((table.clone(), format!("could not scrub: {error}")));
@@ -2539,7 +2539,7 @@ pub async fn carry_forward(
                  * unreadable in both shapes is lost, and it is counted.
                  */
                 Err(error) => {
-                    let _ = tokio::fs::remove_dir_all(target.join(&table)).await;
+                    let _ = nagoya::io::remove_dir_all(target.join(&table)).await;
                     match salvage_items(source, target).await {
                         Ok((salvaged, _, unreadable)) if salvaged > 0 => {
                             if unreadable > 0 {
@@ -2556,7 +2556,7 @@ pub async fn carry_forward(
                         }
                         salvage => {
                             if let Err(salvage_error) = salvage {
-                                let _ = tokio::fs::remove_dir_all(target.join(&table)).await;
+                                let _ = nagoya::io::remove_dir_all(target.join(&table)).await;
                                 report.failed.push((
                                     table.clone(),
                                     format!("{error}; salvage also failed: {salvage_error}"),
@@ -2578,16 +2578,16 @@ pub async fn carry_forward(
 }
 
 /// Copy a directory, contents and all.
-async fn copy_dir(from: &Path, to: &Path) -> eyre::Result<()> {
-    tokio::fs::create_dir_all(to).await?;
-    let mut entries = tokio::fs::read_dir(from).await?;
-    while let Some(entry) = entries.next_entry().await? {
+fn copy_dir(from: &Path, to: &Path) -> eyre::Result<()> {
+    std::fs::create_dir_all(to)?;
+    for entry in std::fs::read_dir(from)? {
+        let entry = entry?;
         let source = entry.path();
         let target = to.join(entry.file_name());
-        if entry.file_type().await?.is_dir() {
-            Box::pin(copy_dir(&source, &target)).await?;
+        if entry.file_type()?.is_dir() {
+            copy_dir(&source, &target)?;
         } else {
-            tokio::fs::copy(&source, &target).await?;
+            std::fs::copy(&source, &target)?;
         }
     }
     Ok(())
