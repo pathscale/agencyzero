@@ -12,7 +12,7 @@ use tauri::Emitter;
 use worktable::prelude::*;
 
 use crate::AppHandle;
-use crate::db::schema::question::{QuestionAnsweredByIdQuery, QuestionRow};
+use crate::db::schema::question::{QuestionColumns, QuestionRow};
 use crate::db::tables::Tables;
 
 #[derive(Serialize, Clone)]
@@ -120,7 +120,7 @@ pub async fn answer_question(
     state
         .tables
         .question
-        .update_question_answered_by_id(QuestionAnsweredByIdQuery { answered }, id.clone())
+        .update_by_id(id.clone(), QuestionColumns::ANSWERED, answered)
         .await
         .map_err(|error| format!("WRITE_FAILED: {error}"))?;
     if let Some(row) = state.tables.question.select(id) {
@@ -183,10 +183,7 @@ async fn mark_for_reply(
     }
     if let Err(error) = tables
         .question
-        .update_question_answered_by_id(
-            QuestionAnsweredByIdQuery { answered: true },
-            question_id.to_owned(),
-        )
+        .update_by_id(question_id.to_owned(), QuestionColumns::ANSWERED, true)
         .await
     {
         crate::log!(

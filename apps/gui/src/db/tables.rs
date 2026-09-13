@@ -678,7 +678,9 @@ mod restart_tests {
     /// mutation shape concurrently, then require both a clean drain and reopen.
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn concurrent_pull_request_refreshes_drain_without_event_gaps() {
-        use crate::db::schema::pull_request::{PrFactsByIdQuery, PullRequestRow};
+        use crate::db::schema::pull_request::{
+            PrFactsByIdQuery, PullRequestColumns, PullRequestRow,
+        };
 
         const TASKS: usize = 16;
         const UPDATES_PER_TASK: usize = 64;
@@ -719,7 +721,9 @@ mod restart_tests {
                 tasks.push(tokio::spawn(async move {
                     for update in 0..UPDATES_PER_TASK {
                         table
-                            .update_pr_facts_by_id(
+                            .update_by_id(
+                                id.clone(),
+                                PullRequestColumns::BRANCH_AND_STATE_AND_ADDITIONS_AND_DELETIONS_AND_CI_AND_UPDATED_AT,
                                 PrFactsByIdQuery {
                                     branch: format!("task-{task}"),
                                     state: "OPEN".into(),
@@ -728,7 +732,6 @@ mod restart_tests {
                                     ci: "pending".into(),
                                     updated_at: format!("{task}-{update}"),
                                 },
-                                id.clone(),
                             )
                             .await
                             .expect("concurrent update should succeed");
@@ -762,7 +765,9 @@ mod restart_tests {
     /// two ids, the shape an attempted indexed replacement can emit.
     #[tokio::test]
     async fn rejected_duplicate_pull_request_insert_does_not_create_an_event_gap() {
-        use crate::db::schema::pull_request::{PrFactsByIdQuery, PullRequestRow};
+        use crate::db::schema::pull_request::{
+            PrFactsByIdQuery, PullRequestColumns, PullRequestRow,
+        };
 
         let dir = std::env::temp_dir().join(format!("az-pr-duplicate-gap-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
@@ -798,7 +803,9 @@ mod restart_tests {
         );
         tables
             .pull_request
-            .update_pr_facts_by_id(
+            .update_by_id(
+                "pr-duplicate-gap".to_string(),
+                PullRequestColumns::BRANCH_AND_STATE_AND_ADDITIONS_AND_DELETIONS_AND_CI_AND_UPDATED_AT,
                 PrFactsByIdQuery {
                     branch: "updated-branch-name".into(),
                     state: "MERGED".into(),
@@ -807,7 +814,6 @@ mod restart_tests {
                     ci: "pass".into(),
                     updated_at: "updated".into(),
                 },
-                "pr-duplicate-gap".to_string(),
             )
             .await
             .expect("update should succeed");
