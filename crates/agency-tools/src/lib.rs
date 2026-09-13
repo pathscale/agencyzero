@@ -145,7 +145,7 @@ macro_rules! open_read_only {
             let mut last_error = None;
             for attempt in 0..OPEN_ATTEMPTS {
                 if attempt > 0 {
-                    tokio::time::sleep(std::time::Duration::from_millis(
+                    nagoya::sleep(std::time::Duration::from_millis(
                         RETRY_BASE_MS * u64::from(attempt),
                     ))
                     .await;

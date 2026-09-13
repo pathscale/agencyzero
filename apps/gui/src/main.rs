@@ -2420,14 +2420,7 @@ fn main() {
         };
         let source = std::path::PathBuf::from(source);
         let destination = std::path::PathBuf::from(destination);
-        let runtime = match tokio::runtime::Runtime::new() {
-            Ok(runtime) => runtime,
-            Err(error) => {
-                eprintln!("could not start a runtime: {error}");
-                std::process::exit(1);
-            }
-        };
-        match runtime.block_on(qa_profile::build(&source, &destination)) {
+        match nagoya::block_on(qa_profile::build(&source, &destination)) {
             Ok(rows) => {
                 println!("scrubbed {rows} rows into {}", destination.display());
                 return;

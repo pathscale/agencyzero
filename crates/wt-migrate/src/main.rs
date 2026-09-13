@@ -41,12 +41,7 @@ fn main() -> ExitCode {
                 return ExitCode::FAILURE;
             }
         };
-        let runtime = tokio::runtime::Builder::new_multi_thread()
-            .worker_threads(2)
-            .enable_time()
-            .build()
-            .expect("runtime");
-        return match runtime.block_on(wt_migrate::merge_message_window(
+        return match nagoya::block_on(wt_migrate::merge_message_window(
             &source, &target, project, after, before,
         )) {
             Ok(report) => {
@@ -79,12 +74,7 @@ fn main() -> ExitCode {
                 return ExitCode::FAILURE;
             }
         };
-        let runtime = tokio::runtime::Builder::new_multi_thread()
-            .worker_threads(2)
-            .enable_time()
-            .build()
-            .expect("runtime");
-        return match runtime.block_on(wt_migrate::clear_fresh_session(&target, project, agent)) {
+        return match nagoya::block_on(wt_migrate::clear_fresh_session(&target, project, agent)) {
             Ok(()) => ExitCode::SUCCESS,
             Err(error) => {
                 eprintln!("could not clear the pending reset: {error:#}");
@@ -111,12 +101,7 @@ fn main() -> ExitCode {
                 return ExitCode::FAILURE;
             }
         };
-        let runtime = tokio::runtime::Builder::new_multi_thread()
-            .worker_threads(2)
-            .enable_time()
-            .build()
-            .expect("runtime");
-        return match runtime.block_on(wt_migrate::restore_provider_session_forced(
+        return match nagoya::block_on(wt_migrate::restore_provider_session_forced(
             &target, project, agent, session, force,
         )) {
             Ok(()) => {
@@ -163,12 +148,7 @@ fn main() -> ExitCode {
                 return ExitCode::FAILURE;
             }
         };
-        let runtime = tokio::runtime::Builder::new_multi_thread()
-            .worker_threads(2)
-            .enable_time()
-            .build()
-            .expect("runtime");
-        return match runtime.block_on(wt_migrate::salvage_pull_request_index(&source, &target)) {
+        return match nagoya::block_on(wt_migrate::salvage_pull_request_index(&source, &target)) {
             Ok(report) => {
                 println!(
                     "salvaged {} pull-request row(s) across {} project key(s) into {}; skipped {} corrupt row(s): {}",
@@ -225,18 +205,7 @@ fn main() -> ExitCode {
                 return ExitCode::from(2);
             }
         };
-        let runtime = match tokio::runtime::Builder::new_multi_thread()
-            .worker_threads(2)
-            .enable_time()
-            .build()
-        {
-            Ok(runtime) => runtime,
-            Err(error) => {
-                eprintln!("could not start a runtime: {error}");
-                return ExitCode::FAILURE;
-            }
-        };
-        return match runtime.block_on(wt_migrate::restore_items_from_json(&target, &json)) {
+        return match nagoya::block_on(wt_migrate::restore_items_from_json(&target, &json)) {
             Ok((inserted, skipped)) => {
                 println!("restored {inserted} item(s), {skipped} already present");
                 ExitCode::SUCCESS
@@ -273,18 +242,7 @@ fn main() -> ExitCode {
             eprintln!("could not create {}: {error}", target.display());
             return ExitCode::FAILURE;
         }
-        let runtime = match tokio::runtime::Builder::new_multi_thread()
-            .worker_threads(2)
-            .enable_time()
-            .build()
-        {
-            Ok(runtime) => runtime,
-            Err(error) => {
-                eprintln!("could not start a runtime: {error}");
-                return ExitCode::FAILURE;
-            }
-        };
-        return match runtime.block_on(wt_migrate::salvage_item_index(&source, &target)) {
+        return match nagoya::block_on(wt_migrate::salvage_item_index(&source, &target)) {
             Ok(report) => {
                 println!(
                     "recovered {} item row(s) across {} project(s) into {}",
@@ -344,12 +302,7 @@ fn main() -> ExitCode {
                 return ExitCode::FAILURE;
             }
         };
-        let runtime = tokio::runtime::Builder::new_multi_thread()
-            .worker_threads(2)
-            .enable_time()
-            .build()
-            .expect("runtime");
-        return match runtime.block_on(wt_migrate::recover_pull_request_index(&source, &target)) {
+        return match nagoya::block_on(wt_migrate::recover_pull_request_index(&source, &target)) {
             Ok(report) => {
                 println!(
                     "recovered {} pull-request row(s) across {} project key(s) into {}",
@@ -399,12 +352,7 @@ fn main() -> ExitCode {
                 return ExitCode::FAILURE;
             }
         };
-        let runtime = tokio::runtime::Builder::new_multi_thread()
-            .worker_threads(2)
-            .enable_time()
-            .build()
-            .expect("runtime");
-        return match runtime.block_on(wt_migrate::recover_message_index(&source, &target)) {
+        return match nagoya::block_on(wt_migrate::recover_message_index(&source, &target)) {
             Ok(report) => {
                 println!(
                     "recovered {} message row(s) across {} project key(s) into {}",
@@ -460,12 +408,7 @@ fn main() -> ExitCode {
                 return ExitCode::FAILURE;
             }
         };
-        let runtime = tokio::runtime::Builder::new_multi_thread()
-            .worker_threads(2)
-            .enable_time()
-            .build()
-            .expect("runtime");
-        return match runtime.block_on(wt_migrate::recover_task_log_index(&source, &target)) {
+        return match nagoya::block_on(wt_migrate::recover_task_log_index(&source, &target)) {
             Ok(report) => {
                 println!(
                     "recovered {} task-log row(s) across {} project key(s) into {}",
@@ -537,12 +480,7 @@ fn main() -> ExitCode {
                 return ExitCode::FAILURE;
             }
         };
-        let runtime = tokio::runtime::Builder::new_multi_thread()
-            .worker_threads(2)
-            .enable_time()
-            .build()
-            .expect("runtime");
-        return match runtime.block_on(wt_migrate::salvage_items(&source, &target)) {
+        return match nagoya::block_on(wt_migrate::salvage_items(&source, &target)) {
             Ok((salvaged, skipped, unreadable)) => {
                 println!(
                     "salvaged {salvaged} row(s), {skipped} already present, {unreadable} unreadable in both shapes"
@@ -595,12 +533,7 @@ fn main() -> ExitCode {
                 return ExitCode::FAILURE;
             }
         };
-        let runtime = tokio::runtime::Builder::new_multi_thread()
-            .worker_threads(2)
-            .enable_time()
-            .build()
-            .expect("runtime");
-        return match runtime.block_on(wt_migrate::rebuild_store(&source, &target)) {
+        return match nagoya::block_on(wt_migrate::rebuild_store(&source, &target)) {
             Ok(report) => {
                 for (table, rows) in report {
                     println!("rebuilt {table}: {rows} row(s)");
@@ -664,12 +597,7 @@ fn main() -> ExitCode {
                 return ExitCode::FAILURE;
             }
         };
-        let runtime = tokio::runtime::Builder::new_multi_thread()
-            .worker_threads(2)
-            .enable_time()
-            .build()
-            .expect("runtime");
-        return match runtime.block_on(wt_migrate::rebuild_task_log(&source, &target)) {
+        return match nagoya::block_on(wt_migrate::rebuild_task_log(&source, &target)) {
             Ok((rebuilt, dropped)) => {
                 println!("rebuilt {rebuilt} row(s), dropped {dropped} debris row(s)");
                 ExitCode::SUCCESS
@@ -748,19 +676,7 @@ fn main() -> ExitCode {
         }
     };
 
-    let runtime = match tokio::runtime::Builder::new_multi_thread()
-        .worker_threads(2)
-        .enable_time()
-        .build()
-    {
-        Ok(runtime) => runtime,
-        Err(error) => {
-            eprintln!("could not start a runtime: {error}");
-            return ExitCode::FAILURE;
-        }
-    };
-
-    match runtime.block_on(wt_migrate::carry_forward(
+    match nagoya::block_on(wt_migrate::carry_forward(
         &source,
         &target,
         &stored,

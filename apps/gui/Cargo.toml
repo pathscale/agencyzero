@@ -87,12 +87,17 @@ eyre = "0.6"
 rkyv = { version = "0.8.9", features = ["uuid-1"] }
 derive_more = { version = "2.0.1", features = ["from", "error", "display", "debug", "into"] }
 futures = "0.3"
+nagoya = "^0.1"
 backon = { version = "1.6.0", default-features = false }
 libc = "0.2"
 dirs = "6"
 uuid = "1"
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde", "std"] }
-tokio = { version = "1", features = ["process", "rt-multi-thread", "time"] }
+# Tauri owns the live GUI runtime and exposes Tokio-native tasks. AgencyProxy's
+# Unix sockets plus git/gh child processes also require Tokio's concrete I/O
+# types, so this compatibility boundary remains direct and declares every API
+# this crate calls instead of borrowing transitive features.
+tokio = { version = "1", features = ["fs", "io-util", "net", "process", "rt-multi-thread", "signal", "sync", "time"] }
 # Default features are off; see `webview-runtime` for why.
 tauri = { version = "2", default-features = false, features = ["macos-private-api", "compression"] }
 # `macos-private-api` must match the `tauri` dependency above. Tauri's
