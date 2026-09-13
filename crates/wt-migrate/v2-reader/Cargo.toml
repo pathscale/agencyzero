@@ -1,0 +1,28 @@
+[package]
+name = "agencyzero-wt-v2-reader"
+description = "Private reader for AgencyZero's final WorkTable v2 page format"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+# Resolve the v2 reader independently from the parent WorkTable 1.9 graph.
+[workspace]
+
+[dependencies]
+# This private compatibility boundary exists to read one historical on-disk
+# format. It must not drift to WorkTable 1.9, whose reader correctly refuses
+# v2 pages. beta19 codegen is compatible with beta18.1 DSL; the beta19 DSL
+# added FxHash before beta19 codegen had matching generator arms.
+worktable = "=1.0.0-beta.19"
+worktable_dsl = "=1.0.0-beta.18.1"
+eyre = "0.6"
+rkyv = { version = "0.8.9", features = ["uuid-1"] }
+derive_more = { version = "2.0.1", features = ["from", "error", "display", "debug", "into"] }
+futures = "0.3"
+uuid = "1"
+chrono = "0.4"
+sha2 = "0.10"
+# The final v2 generated load path uses Tokio's concrete file/runtime APIs.
+# This dependency is isolated here; the beta runtime and migration coordinator
+# use Nagoya.
+tokio = { version = "1", features = ["fs", "macros", "rt-multi-thread", "sync", "time"] }

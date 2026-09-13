@@ -40,7 +40,8 @@
   "bundle": {
     "active": true,
     "externalBin": [
-      "binaries/agency-proxy"
+      "binaries/agency-proxy",
+      "binaries/agencyzero-wt-v2-reader"
     ],
     "targets": [
       "app"

@@ -767,6 +767,498 @@ pub mod app_schema {
     pub mod usage_session;
 }
 
+/// One table verified during a v2 page-format conversion.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct V2TableImport {
+    pub table: String,
+    pub rows: usize,
+    pub source_digest: [u8; 32],
+    pub v3_digest: [u8; 32],
+}
+
+const V2_EXPORT_MAGIC: &[u8; 10] = b"AZWT2ROWS\0";
+const MAX_EXPORTED_ROW_BYTES: usize = 64 * 1024 * 1024;
+
+struct ExportedRows {
+    rows: Vec<Vec<u8>>,
+    source_digest: [u8; 32],
+}
+
+fn digest_archives(rows: &mut [Vec<u8>]) -> [u8; 32] {
+    use sha2::{Digest as _, Sha256};
+
+    rows.sort_unstable();
+    let mut digest = Sha256::new();
+    for row in rows {
+        digest.update((row.len() as u64).to_le_bytes());
+        digest.update(row);
+    }
+    digest.finalize().into()
+}
+
+fn read_v2_export(directory: &Path, table: &str) -> eyre::Result<ExportedRows> {
+    use std::io::Read as _;
+
+    let path = directory.join(format!("{table}.rows"));
+    let mut input = std::io::BufReader::new(std::fs::File::open(&path)?);
+    let mut magic = [0; V2_EXPORT_MAGIC.len()];
+    input.read_exact(&mut magic)?;
+    eyre::ensure!(
+        &magic == V2_EXPORT_MAGIC,
+        "{} is not an AgencyZero v2 row export",
+        path.display()
+    );
+    let mut number = [0; 8];
+    input.read_exact(&mut number)?;
+    let count = usize::try_from(u64::from_le_bytes(number))?;
+    let mut source_digest = [0; 32];
+    input.read_exact(&mut source_digest)?;
+
+    let mut rows = Vec::new();
+    rows.try_reserve_exact(count)?;
+    for ordinal in 0..count {
+        input.read_exact(&mut number)?;
+        let len = usize::try_from(u64::from_le_bytes(number))?;
+        eyre::ensure!(
+            len <= MAX_EXPORTED_ROW_BYTES,
+            "{table} row {ordinal} claims {len} bytes"
+        );
+        let mut row = vec![0; len];
+        input.read_exact(&mut row)?;
+        rows.push(row);
+    }
+    let mut trailing = [0];
+    eyre::ensure!(
+        input.read(&mut trailing)? == 0,
+        "{} has trailing bytes",
+        path.display()
+    );
+    let calculated = digest_archives(&mut rows);
+    eyre::ensure!(
+        calculated == source_digest,
+        "{table} export digest does not match its rows"
+    );
+    Ok(ExportedRows {
+        rows,
+        source_digest,
+    })
+}
+
+/// Import the neutral output of the separately resolved WorkTable v2 reader.
+///
+/// Every v2 archive is checked before decoding. Each decoded row is then
+/// re-archived with the current schema, inserted into a new v3 table, drained,
+/// cold-opened in strict mode, and compared by count and full-row digest. A
+/// successful report therefore proves the primary keys and every row field
+/// survived; WorkTable's strict open separately proves the persisted indexes.
+///
+/// # Errors
+/// The export is incomplete or corrupt, a row no longer matches AgencyZero's
+/// schema, an insert fails, or cold verification differs. `target` is staging
+/// data and may be deleted by the caller; this function never touches the v2
+/// source store.
+pub async fn import_v2_export(export: &Path, target: &Path) -> eyre::Result<Vec<V2TableImport>> {
+    eyre::ensure!(
+        !target.exists(),
+        "target {} already exists",
+        target.display()
+    );
+    std::fs::create_dir(target)?;
+
+    macro_rules! import {
+        ($module:ident, $Row:ident, $Engine:ident, $Table:ident) => {{
+            let table = app_schema::$module::$Table::name_snake_case();
+            let exported = read_v2_export(export, table)?;
+            let mut decoded = Vec::new();
+            decoded.try_reserve_exact(exported.rows.len())?;
+            let mut canonical = Vec::new();
+            canonical.try_reserve_exact(exported.rows.len())?;
+            for (ordinal, archive) in exported.rows.iter().enumerate() {
+                let row =
+                    rkyv::from_bytes::<app_schema::$module::$Row, rkyv::rancor::Error>(archive)
+                        .map_err(|error| {
+                            eyre::eyre!("v2 {table} row {ordinal} would not decode: {error}")
+                        })?;
+                canonical.push(
+                    rkyv::to_bytes::<rkyv::rancor::Error>(&row)
+                        .map_err(|error| {
+                            eyre::eyre!("v3 {table} row {ordinal} would not archive: {error}")
+                        })?
+                        .to_vec(),
+                );
+                decoded.push(row);
+            }
+            let expected_digest = digest_archives(&mut canonical);
+            let config = DiskConfig::new_with_table_name(
+                target.to_string_lossy().into_owned(),
+                table,
+                app_schema::$module::$Table::version(),
+            );
+            let engine = app_schema::$module::$Engine::new(config).await?;
+            let fresh = app_schema::$module::$Table::load(engine).await?;
+            for row in decoded {
+                fresh
+                    .insert(row)
+                    .await
+                    .map_err(|error| eyre::eyre!("v3 {table} insert failed: {error}"))?;
+            }
+            fresh
+                .wait_for_ops()
+                .await
+                .map_err(|error| eyre::eyre!("v3 {table} persistence failed: {error}"))?;
+            fresh
+                .close()
+                .await
+                .map_err(|error| eyre::eyre!("v3 {table} close failed: {error}"))?;
+
+            let config = DiskConfig::new_with_table_name(
+                target.to_string_lossy().into_owned(),
+                table,
+                app_schema::$module::$Table::version(),
+            );
+            let engine = app_schema::$module::$Engine::new(config).await?;
+            let verified = app_schema::$module::$Table::load(engine).await?;
+            let mut verified_archives = Vec::new();
+            for row in verified.select_all().execute()? {
+                verified_archives.push(
+                    rkyv::to_bytes::<rkyv::rancor::Error>(&row)
+                        .map_err(|error| {
+                            eyre::eyre!("verified v3 {table} row would not archive: {error}")
+                        })?
+                        .to_vec(),
+                );
+            }
+            let count = verified_archives.len();
+            let verified_digest = digest_archives(&mut verified_archives);
+            verified
+                .close()
+                .await
+                .map_err(|error| eyre::eyre!("verified v3 {table} close failed: {error}"))?;
+            eyre::ensure!(
+                count == exported.rows.len(),
+                "v3 {table} cold open found {count} of {} rows",
+                exported.rows.len()
+            );
+            eyre::ensure!(
+                verified_digest == expected_digest,
+                "v3 {table} cold-open digest differs from the decoded v2 rows"
+            );
+            V2TableImport {
+                table: table.to_string(),
+                rows: count,
+                source_digest: exported.source_digest,
+                v3_digest: verified_digest,
+            }
+        }};
+    }
+
+    Ok(vec![
+        import!(kv, KvRow, KvPersistenceEngine, KvWorkTable),
+        import!(
+            project,
+            ProjectRow,
+            ProjectPersistenceEngine,
+            ProjectWorkTable
+        ),
+        import!(
+            project_item,
+            ProjectItemRow,
+            ProjectItemPersistenceEngine,
+            ProjectItemWorkTable
+        ),
+        import!(
+            item_completion,
+            ItemCompletionRow,
+            ItemCompletionPersistenceEngine,
+            ItemCompletionWorkTable
+        ),
+        import!(
+            message,
+            MessageRow,
+            MessagePersistenceEngine,
+            MessageWorkTable
+        ),
+        import!(
+            message_chunk,
+            MessageChunkRow,
+            MessageChunkPersistenceEngine,
+            MessageChunkWorkTable
+        ),
+        import!(
+            task_log,
+            TaskLogRow,
+            TaskLogPersistenceEngine,
+            TaskLogWorkTable
+        ),
+        import!(
+            agent_io,
+            AgentIoRowRow,
+            AgentIoRowPersistenceEngine,
+            AgentIoRowWorkTable
+        ),
+        import!(
+            usage_ledger,
+            UsageLedgerRow,
+            UsageLedgerPersistenceEngine,
+            UsageLedgerWorkTable
+        ),
+        import!(
+            usage_cache,
+            UsageCacheRow,
+            UsageCachePersistenceEngine,
+            UsageCacheWorkTable
+        ),
+        import!(
+            usage_session,
+            UsageSessionRow,
+            UsageSessionPersistenceEngine,
+            UsageSessionWorkTable
+        ),
+        import!(
+            approval_rule,
+            ApprovalRuleRow,
+            ApprovalRulePersistenceEngine,
+            ApprovalRuleWorkTable
+        ),
+        import!(
+            pull_request,
+            PullRequestRow,
+            PullRequestPersistenceEngine,
+            PullRequestWorkTable
+        ),
+        import!(
+            question,
+            QuestionRow,
+            QuestionPersistenceEngine,
+            QuestionWorkTable
+        ),
+        import!(
+            question_reply,
+            QuestionReplyRow,
+            QuestionReplyPersistenceEngine,
+            QuestionReplyWorkTable
+        ),
+        import!(
+            reply_checkpoint,
+            ReplyCheckpointRow,
+            ReplyCheckpointPersistenceEngine,
+            ReplyCheckpointWorkTable
+        ),
+        import!(
+            study_event,
+            StudyEventRow,
+            StudyEventPersistenceEngine,
+            StudyEventWorkTable
+        ),
+    ])
+}
+
+#[derive(Debug)]
+struct PageMigrationPaths {
+    stage: std::path::PathBuf,
+    export: std::path::PathBuf,
+    backup: std::path::PathBuf,
+    state: std::path::PathBuf,
+}
+
+impl PageMigrationPaths {
+    fn for_store(store: &Path) -> Self {
+        Self {
+            stage: sibling_with_suffix(store, "v3-migration-stage"),
+            export: sibling_with_suffix(store, "v2-migration-export"),
+            backup: sibling_with_suffix(store, "v2-preserved"),
+            state: sibling_with_suffix(store, "v3-migration-state"),
+        }
+    }
+}
+
+fn sibling_with_suffix(path: &Path, suffix: &str) -> std::path::PathBuf {
+    let mut name = path.file_name().unwrap_or(path.as_os_str()).to_os_string();
+    name.push(".");
+    name.push(suffix);
+    path.with_file_name(name)
+}
+
+/// Result of the automatic first-load page-format migration.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct V2MigrationReport {
+    pub tables: Vec<V2TableImport>,
+}
+
+fn sync_parent(path: &Path) -> eyre::Result<()> {
+    let parent = path
+        .parent()
+        .ok_or_else(|| eyre::eyre!("{} has no parent directory", path.display()))?;
+    std::fs::File::open(parent)?.sync_all()?;
+    Ok(())
+}
+
+fn write_migration_phase(path: &Path, phase: &str) -> eyre::Result<()> {
+    let temporary = sibling_with_suffix(path, "next");
+    {
+        use std::io::Write as _;
+        let mut file = std::fs::File::create(&temporary)?;
+        writeln!(file, "{phase}")?;
+        file.sync_all()?;
+    }
+    std::fs::rename(&temporary, path)?;
+    sync_parent(path)
+}
+
+fn remove_derived(path: &Path) -> eyre::Result<()> {
+    match std::fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.is_dir() => std::fs::remove_dir_all(path)?,
+        Ok(_) => std::fs::remove_file(path)?,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error.into()),
+    }
+    Ok(())
+}
+
+fn finish_page_format_promotion(store: &Path, paths: &PageMigrationPaths) -> eyre::Result<()> {
+    // The stage rename may have reached disk before the final phase marker.
+    // In that state the live v3 directory and retained v2 backup are already
+    // exactly where they belong; only the durable state needs catching up.
+    if store.is_dir() && paths.backup.is_dir() && !paths.stage.exists() {
+        write_migration_phase(&paths.state, "complete")?;
+        remove_derived(&paths.backup)?;
+        remove_derived(&paths.export)?;
+        sync_parent(store)?;
+        return Ok(());
+    }
+    if store.is_dir() {
+        eyre::ensure!(
+            !paths.backup.exists(),
+            "refusing to overwrite existing v2 backup {}",
+            paths.backup.display()
+        );
+        std::fs::rename(store, &paths.backup)?;
+        sync_parent(store)?;
+    } else {
+        eyre::ensure!(
+            paths.backup.is_dir(),
+            "migration source and preserved backup are both absent"
+        );
+    }
+    write_migration_phase(&paths.state, "source-preserved")?;
+
+    if paths.stage.is_dir() {
+        if let Err(error) = std::fs::rename(&paths.stage, store) {
+            if !store.exists() {
+                let _ = std::fs::rename(&paths.backup, store);
+                let _ = sync_parent(store);
+            }
+            return Err(eyre::eyre!("could not promote staged v3 store: {error}"));
+        }
+        sync_parent(store)?;
+    } else {
+        eyre::ensure!(
+            store.is_dir() && paths.backup.is_dir(),
+            "migration has neither a staged nor promoted v3 store"
+        );
+    }
+    write_migration_phase(&paths.state, "complete")?;
+    remove_derived(&paths.backup)?;
+    remove_derived(&paths.export)?;
+    sync_parent(store)?;
+    Ok(())
+}
+
+/// Resume an interrupted page-format promotion before any table is opened.
+///
+/// Returns `true` when a prior migration is already complete or was completed
+/// by this call. An interrupted export/import is discarded because it contains
+/// only derived bytes; the untouched v2 source will be exported again.
+///
+/// # Errors
+/// Durable state and filesystem contents disagree, or a rename/sync fails.
+pub fn resume_page_format_migration(store: &Path) -> eyre::Result<bool> {
+    let paths = PageMigrationPaths::for_store(store);
+    let phase = match std::fs::read_to_string(&paths.state) {
+        Ok(phase) => phase.trim().to_string(),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+        Err(error) => return Err(error.into()),
+    };
+    match phase.as_str() {
+        "exporting" => {
+            eyre::ensure!(
+                store.is_dir() && !paths.backup.exists(),
+                "interrupted export no longer has its sole v2 source"
+            );
+            remove_derived(&paths.stage)?;
+            remove_derived(&paths.export)?;
+            std::fs::remove_file(&paths.state)?;
+            sync_parent(store)?;
+            Ok(false)
+        }
+        "validated" | "source-preserved" => {
+            finish_page_format_promotion(store, &paths)?;
+            Ok(true)
+        }
+        "complete" => {
+            eyre::ensure!(
+                store.is_dir() && !paths.stage.exists(),
+                "completed migration state does not match the live v3 store"
+            );
+            remove_derived(&paths.backup)?;
+            remove_derived(&paths.export)?;
+            sync_parent(store)?;
+            Ok(true)
+        }
+        other => Err(eyre::eyre!("unknown v3 migration phase {other:?}")),
+    }
+}
+
+/// Automatically convert and promote one v2 AgencyZero store.
+///
+/// The bundled `reader` is a separately resolved, read-only WorkTable v2
+/// executable. It emits neutral row archives. This process imports those rows
+/// into a sibling v3 staging directory, drains and cold-verifies every table,
+/// then preserves the original directory before two same-filesystem renames
+/// publish v3. On any pre-promotion failure the source is untouched.
+///
+/// # Errors
+/// The reader is missing/fails, import or cold validation fails, durable state
+/// cannot be synced, or promotion cannot be completed or rolled back.
+pub fn migrate_page_format_v2(store: &Path, reader: &Path) -> eyre::Result<V2MigrationReport> {
+    eyre::ensure!(store.is_dir(), "v2 store {} is absent", store.display());
+    eyre::ensure!(reader.is_file(), "v2 reader {} is absent", reader.display());
+    let paths = PageMigrationPaths::for_store(store);
+    eyre::ensure!(
+        !paths.backup.exists(),
+        "refusing to overwrite existing v2 backup {}",
+        paths.backup.display()
+    );
+    remove_derived(&paths.stage)?;
+    remove_derived(&paths.export)?;
+    write_migration_phase(&paths.state, "exporting")?;
+
+    let status = std::process::Command::new(reader)
+        .arg(store)
+        .arg(&paths.export)
+        .status()
+        .map_err(|error| eyre::eyre!("could not start v2 reader: {error}"))?;
+    if !status.success() {
+        remove_derived(&paths.stage)?;
+        remove_derived(&paths.export)?;
+        std::fs::remove_file(&paths.state)?;
+        return Err(eyre::eyre!("v2 reader exited with {status}"));
+    }
+
+    let tables = match nagoya::block_on(import_v2_export(&paths.export, &paths.stage)) {
+        Ok(report) => report,
+        Err(error) => {
+            remove_derived(&paths.stage)?;
+            remove_derived(&paths.export)?;
+            std::fs::remove_file(&paths.state)?;
+            return Err(error);
+        }
+    };
+    write_migration_phase(&paths.state, "validated")?;
+    finish_page_format_promotion(store, &paths)?;
+    Ok(V2MigrationReport { tables })
+}
+
 /// Merge one project's bounded message window into an existing store.
 ///
 /// Rows retain their original ids and timestamps. Existing ids are skipped,

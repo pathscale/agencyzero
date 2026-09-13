@@ -2288,9 +2288,9 @@ fn is_persistence_load_refusal(error: &eyre::Report) -> bool {
         .is_some()
 }
 
-/// Page format v3 deliberately refuses a v2 store instead of interpreting or
-/// deleting it. This is a release boundary, not evidence that the old bytes
-/// are corrupt, and the recovery instruction must name the old reader.
+/// Page format v3 deliberately refuses a v2 store, which is the typed signal
+/// for the automatic read-only export and staged conversion. This is a release
+/// boundary rather than evidence that the old bytes are corrupt.
 fn is_v2_page_format_refusal(error: &eyre::Report) -> bool {
     error
         .downcast_ref::<worktable::prelude::PersistenceLoadError>()
@@ -2298,6 +2298,36 @@ fn is_v2_page_format_refusal(error: &eyre::Report) -> bool {
             error.reason().contains("unsupported page format v2")
                 && error.reason().contains("this build requires v3")
         })
+}
+
+fn v2_reader_binary() -> Result<PathBuf, String> {
+    if let Some(path) = std::env::var_os("AZ_WT_V2_READER_BIN") {
+        let path = PathBuf::from(path);
+        return path
+            .is_file()
+            .then_some(path.clone())
+            .ok_or_else(|| format!("AZ_WT_V2_READER_BIN points at missing {path:?}"));
+    }
+    let executable = std::env::current_exe()
+        .map_err(|error| format!("could not locate this executable: {error}"))?;
+    if let Some(parent) = executable.parent() {
+        let bundled = parent.join("agencyzero-wt-v2-reader");
+        if bundled.is_file() {
+            return Ok(bundled);
+        }
+    }
+    let staged = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("binaries")
+        .join(format!(
+            "agencyzero-wt-v2-reader-{}",
+            env!("AZ_BUILD_TARGET")
+        ));
+    staged.is_file().then_some(staged.clone()).ok_or_else(|| {
+        format!(
+            "the WorkTable v2 migration reader is missing; expected the bundled executable or \
+             {staged:?}"
+        )
+    })
 }
 
 fn rebuild_rejected_store(
@@ -2774,7 +2804,71 @@ fn main() {
              * row through the wrong layout on the way to saying "mismatched",
              * which is somewhere between garbage and a bus error.
              */
-            let peeked = tauri::async_runtime::block_on(Tables::peek_fingerprint(&location.path));
+            match wt_migrate::resume_page_format_migration(&location.path) {
+                Ok(true) => crate::log!(
+                    log::Level::Info,
+                    "boot",
+                    "completed or recovered the WorkTable v3 promotion at {:?}",
+                    location.path
+                ),
+                Ok(false) => {}
+                Err(error) => {
+                    let message = format!(
+                        "could not recover the interrupted WorkTable v3 migration at {:?}: \
+                         {error:#}. No table was opened; the v2 backup and staged v3 data were \
+                         left in place.",
+                        location.path
+                    );
+                    crate::log!(log::Level::Error, "boot", "{message}");
+                    return Err(message.into());
+                }
+            }
+
+            let mut peeked = tauri::async_runtime::block_on(Tables::peek_fingerprint(&location.path));
+            if peeked
+                .as_ref()
+                .is_err_and(is_v2_page_format_refusal)
+                && !no_migration
+            {
+                let reader = v2_reader_binary().map_err(|error| {
+                    let message = format!(
+                        "the store at {:?} uses WorkTable page format v2, but {error}. The v2 \
+                         store is unchanged and startup stopped before any table opened.",
+                        location.path
+                    );
+                    crate::log!(log::Level::Error, "boot", "{message}");
+                    message
+                })?;
+                crate::log!(
+                    log::Level::Warn,
+                    "boot",
+                    "converting WorkTable page format v2 at {:?} through {reader:?}",
+                    location.path
+                );
+                let report = wt_migrate::migrate_page_format_v2(&location.path, &reader)
+                    .map_err(|error| {
+                        let message = format!(
+                            "WorkTable v2 to v3 migration failed at {:?}: {error:#}. Startup \
+                             stopped without opening a partial store; the original v2 data is \
+                             unchanged or retained at its durable v2-preserved path.",
+                            location.path
+                        );
+                        crate::log!(log::Level::Error, "boot", "{message}");
+                        message
+                    })?;
+                crate::log!(
+                    log::Level::Info,
+                    "boot",
+                    "converted WorkTable v2 to v3: [{}]. Promotion is committed and the displaced v2 directory was removed",
+                    report
+                        .tables
+                        .iter()
+                        .map(|table| format!("{}: {}", table.table, table.rows))
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                );
+                peeked = tauri::async_runtime::block_on(Tables::peek_fingerprint(&location.path));
+            }
             let tables = match peeked {
                 /*
                  * kv is the one table whose shape has never changed, so if it
@@ -2789,20 +2883,27 @@ fn main() {
                  * So: touch nothing, run on scratch, and say where the store
                  * is and what can read it.
                  */
-                Err(error) if is_v2_page_format_refusal(&error) => {
+                Err(error) if is_v2_page_format_refusal(&error) && no_migration => {
                     crate::log!(
-                        log::Level::Error,
+                        log::Level::Warn,
                         "boot",
-                        "the store at {:?} uses WorkTable page format v2. This build requires v3 \
-                         and will not reinterpret, convert, or delete the old store. The old \
-                         store is unchanged and this session runs on scratch, keeping nothing. \
-                         Use the previous WorkTable v2 build to export retained data before \
-                         creating an explicitly empty v3 store.",
+                        "the store at {:?} uses WorkTable page format v2 and \
+                         AZ_NO_DB_MIGRATION is set. The old store is unchanged and this session \
+                         runs on scratch, keeping nothing.",
                         location.path
                     );
                     location = ephemeral_location();
                     tauri::async_runtime::block_on(Tables::open(&location.path))
                         .map_err(|error| format!("could not open a scratch store: {error}"))?
+                }
+                Err(error) if is_v2_page_format_refusal(&error) => {
+                    let message = format!(
+                        "the store at {:?} still reports WorkTable page format v2 after its \
+                         converter completed. Startup stopped before opening any table: {error}",
+                        location.path
+                    );
+                    crate::log!(log::Level::Error, "boot", "{message}");
+                    return Err(message.into());
                 }
                 Err(error) => {
                     let reason = error.to_string();

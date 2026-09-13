@@ -170,6 +170,10 @@ fn strip_unused_frameworks() {
 }
 
 fn main() {
+    println!(
+        "cargo:rustc-env=AZ_BUILD_TARGET={}",
+        std::env::var("TARGET").expect("Cargo supplies TARGET")
+    );
     strip_unused_frameworks();
     stamp_build();
     if std::env::var_os("CARGO_FEATURE_BLITZ_RUNTIME").is_some() {
