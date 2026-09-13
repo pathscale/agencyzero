@@ -31,16 +31,9 @@ use tokio::io::{AsyncRead, AsyncReadExt};
 // `execute` on a select builder is a trait method.
 use worktable::prelude::*;
 
-use crate::db::schema::message::{FinalizeByIdQuery, MessageRow};
-use crate::db::schema::project::{
-    DirsByIdQuery, LastActivityByIdQuery, ModeratorByIdQuery, NameByIdQuery, PinnedByIdQuery,
-    PositionByIdQuery, ProjectRow,
-};
-use crate::db::schema::project_item::{
-    PositionByIdQuery as ItemPositionByIdQuery, ProjectItemRow,
-    ReferenceByIdQuery as ItemReferenceByIdQuery, StatusByIdQuery as ItemStatusByIdQuery,
-    TitleByIdQuery as ItemTitleByIdQuery,
-};
+use crate::db::schema::message::{FinalizeByIdQuery, MessageColumns, MessageRow};
+use crate::db::schema::project::{ProjectColumns, ProjectRow};
+use crate::db::schema::project_item::{ProjectItemColumns, ProjectItemRow};
 use crate::db::schema::reply_checkpoint::ReplyCheckpointRow;
 use crate::db::schema::task_log::TaskLogRow;
 use crate::db::tables::Tables;
@@ -325,11 +318,10 @@ async fn touch_item(tables: &Tables, item_id: &str) {
 async fn touch_project(tables: &Tables, project_id: &str) {
     if let Err(error) = tables
         .project
-        .update_last_activity_by_id(
-            LastActivityByIdQuery {
-                last_activity_at: now(),
-            },
+        .update_by_id(
             project_id.to_string(),
+            ProjectColumns::LAST_ACTIVITY_AT,
+            now(),
         )
         .await
     {
@@ -983,13 +975,14 @@ pub async fn backfill_imported_usage(tables: &Tables) -> usize {
             }
             if let Err(error) = tables
                 .message
-                .update_finalize_by_id(
+                .update_by_id(
+                    row.id.clone(),
+                    MessageColumns::USAGE_AND_STOP_AND_EXIT_CODE,
                     FinalizeByIdQuery {
                         usage: recovered.usage.clone(),
                         stop: row.stop.clone(),
                         exit_code: row.exit_code,
                     },
-                    row.id.clone(),
                 )
                 .await
             {
@@ -1801,13 +1794,14 @@ async fn finalize_agent_chunk(
 ) -> Result<MessageDto, String> {
     tables
         .message
-        .update_finalize_by_id(
+        .update_by_id(
+            message_id.to_string(),
+            MessageColumns::USAGE_AND_STOP_AND_EXIT_CODE,
             FinalizeByIdQuery {
                 usage,
                 stop,
                 exit_code,
             },
-            message_id.to_string(),
         )
         .await
         .map_err(|error| error.to_string())?;
@@ -2214,7 +2208,7 @@ async fn write_item_positions(
     futures::future::try_join_all(changes.into_iter().map(|(item_id, position)| async move {
         tables
             .project_item
-            .update_position_by_id(ItemPositionByIdQuery { position }, item_id)
+            .update_by_id(item_id, ProjectItemColumns::POSITION, position)
             .await
             .map_err(|error| error.to_string())
     }))
@@ -2481,11 +2475,10 @@ async fn write_item_status(
 
     tables
         .project_item
-        .update_status_by_id(
-            ItemStatusByIdQuery {
-                status: status.to_string(),
-            },
+        .update_by_id(
             id.to_string(),
+            ProjectItemColumns::STATUS,
+            status.to_string(),
         )
         .await
         .map_err(|error| error.to_string())?;
@@ -2834,7 +2827,7 @@ pub async fn update_item(
         state
             .tables
             .project_item
-            .update_title_by_id(ItemTitleByIdQuery { title }, id.clone()),
+            .update_by_id(id.clone(), ProjectItemColumns::TITLE, title),
         touch_item(&state.tables, &id),
     );
     write.map_err(|error| error.to_string())?;
@@ -2891,11 +2884,10 @@ async fn link_item_issue_inner(
         github_issue_url(authored_url).map_err(|reason| format!("ENTITY_NOT_FOUND: {reason}"))?;
     let reference = format!("issue:{url}");
     let (write, ()) = tokio::join!(
-        tables.project_item.update_reference_by_id(
-            ItemReferenceByIdQuery {
-                reference: reference.clone(),
-            },
+        tables.project_item.update_by_id(
             id.to_string(),
+            ProjectItemColumns::REFERENCE,
+            reference.clone(),
         ),
         touch_item(tables, id),
     );
@@ -3858,11 +3850,10 @@ async fn apply_directive(
             if let Some(number) = pr_number.as_deref()
                 && let Err(error) = tables
                     .project_item
-                    .update_reference_by_id(
-                        ItemReferenceByIdQuery {
-                            reference: number.to_string(),
-                        },
+                    .update_by_id(
                         resolved.clone(),
+                        ProjectItemColumns::REFERENCE,
+                        number.to_string(),
                     )
                     .await
             {
@@ -4296,11 +4287,10 @@ async fn apply_directive(
             };
             match tables
                 .project_item
-                .update_reference_by_id(
-                    ItemReferenceByIdQuery {
-                        reference: number.clone(),
-                    },
+                .update_by_id(
                     resolved.clone(),
+                    ProjectItemColumns::REFERENCE,
+                    number.clone(),
                 )
                 .await
             {
@@ -8771,7 +8761,7 @@ async fn write_project_dirs(
     let encoded = serde_json::to_string(&dirs).map_err(|error| error.to_string())?;
     tables
         .project
-        .update_dirs_by_id(DirsByIdQuery { dirs: encoded }, id.to_string())
+        .update_by_id(id.to_string(), ProjectColumns::DIRS, encoded)
         .await
         .map_err(|error| error.to_string())?;
     let row = tables
@@ -8877,7 +8867,7 @@ pub async fn rename_project(
     state
         .tables
         .project
-        .update_name_by_id(NameByIdQuery { name: name.clone() }, id.clone())
+        .update_by_id(id.clone(), ProjectColumns::NAME, name.clone())
         .await
         .map_err(|error| {
             crate::log!(
@@ -8926,7 +8916,7 @@ pub async fn set_project_pinned(
     state
         .tables
         .project
-        .update_pinned_by_id(PinnedByIdQuery { pinned }, id.clone())
+        .update_by_id(id.clone(), ProjectColumns::PINNED, pinned)
         .await
         .map_err(|error| {
             crate::log!(
@@ -8971,12 +8961,7 @@ pub async fn set_project_moderator(
     state
         .tables
         .project
-        .update_moderator_by_id(
-            ModeratorByIdQuery {
-                moderator_enabled: enabled,
-            },
-            id.clone(),
-        )
+        .update_by_id(id.clone(), ProjectColumns::MODERATOR_ENABLED, enabled)
         .await
         .map_err(|error| {
             crate::log!(
@@ -9027,7 +9012,7 @@ pub async fn reorder_projects(
         state
             .tables
             .project
-            .update_position_by_id(PositionByIdQuery { position }, id.clone())
+            .update_by_id(id.clone(), ProjectColumns::POSITION, position)
             .await
             .map_err(|error| error.to_string())?;
     }
@@ -10286,11 +10271,10 @@ pub async fn send_message(
         match state
             .tables
             .project_item
-            .update_status_by_id(
-                ItemStatusByIdQuery {
-                    status: "active".into(),
-                },
+            .update_by_id(
                 item.to_string(),
+                ProjectItemColumns::STATUS,
+                "active".to_string(),
             )
             .await
         {
