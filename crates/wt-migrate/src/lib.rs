@@ -1093,6 +1093,33 @@ fn sync_parent(path: &Path) -> eyre::Result<()> {
     Ok(())
 }
 
+/// Make an internally-created store tree durable before publishing any state
+/// that permits it to replace the source.
+///
+/// WorkTable's `close` drains the writer and closes its files, which makes a
+/// strict cold reopen meaningful, but closing a file is not an fsync. Sync
+/// files before their containing directories, then the stage root before its
+/// parent: after the durable `validated` phase exists, crash recovery is
+/// allowed to promote this tree and delete the v2 source.
+fn sync_store_tree(path: &Path) -> eyre::Result<()> {
+    for entry in std::fs::read_dir(path)? {
+        let entry = entry?;
+        let file_type = entry.file_type()?;
+        if file_type.is_dir() {
+            sync_store_tree(&entry.path())?;
+        } else if file_type.is_file() {
+            std::fs::File::open(entry.path())?.sync_all()?;
+        } else {
+            eyre::bail!(
+                "staged v3 store contains unsupported filesystem entry {}",
+                entry.path().display()
+            );
+        }
+    }
+    std::fs::File::open(path)?.sync_all()?;
+    Ok(())
+}
+
 fn write_migration_phase(path: &Path, phase: &str) -> eyre::Result<()> {
     let temporary = sibling_with_suffix(path, "next");
     {
@@ -1254,6 +1281,8 @@ pub fn migrate_page_format_v2(store: &Path, reader: &Path) -> eyre::Result<V2Mig
             return Err(error);
         }
     };
+    sync_store_tree(&paths.stage)?;
+    sync_parent(&paths.stage)?;
     write_migration_phase(&paths.state, "validated")?;
     finish_page_format_promotion(store, &paths)?;
     Ok(V2MigrationReport { tables })
