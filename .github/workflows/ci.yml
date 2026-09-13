@@ -96,6 +96,9 @@ jobs:
       - name: Build the AgencyProxy sidecar
         run: scripts/stage-agency-proxy-sidecar.sh
 
+      - name: Build the WorkTable v2 migration reader
+        run: scripts/stage-wt-v2-reader-sidecar.sh
+
       - run: cargo fmt --all --check
       # Blitz is currently a macOS preview runtime. Enabling every feature on
       # this Linux runner asks it to implement Tauri's GTK-only runtime traits,

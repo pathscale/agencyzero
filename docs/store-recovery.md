@@ -11,17 +11,29 @@ stores use v2. The new reader deliberately refuses those pages; this boundary
 is independent of AgencyZero's `SCHEMA_FINGERPRINT`, so an unchanged table
 schema does not make the files compatible.
 
-Do not point the current `agency-tools` or `wt-migrate` binaries at a v2 store
-and expect conversion. They compile the same WorkTable 1.9 reader as the GUI.
-Until an application-specific converter exists, retained data must be exported
-with the previous WorkTable v2 build. A raw `.azbackup` preserves the old bytes
-for rollback, but it is not a v2-to-v3 conversion.
+The first WorkTable 1.9 launch converts the profile automatically, before any
+application table opens. Stable and Experimental run the same code; only the
+resolved store path differs. A bundled private reader, resolved independently
+against the final WorkTable v2 release, scans all 17 tables read-only and emits
+checksummed row archives. The current `wt-migrate` code decodes those archives
+through the current AgencyZero schema and writes a separate v3 staging store.
 
-The rollout is therefore explicit: preserve the v2 directory, export anything
-that must survive with the old reader, then start the WorkTable 1.9 build on an
-empty destination. The new build never reinterprets or deletes the old store.
-If it encounters v2, it leaves the directory untouched, records the format
-refusal in the log, and runs the session on scratch.
+Every staged table is drained, cold-opened under WorkTable's strict checks, and
+compared by row count and full-row digest. That proves every primary-keyed row
+and field survived, while strict open proves each persisted index agrees. Only
+then is the original directory renamed to temporary `db.v2-preserved` and
+staging renamed to `db`. Once the v3 promotion marker is durably committed,
+the displaced v2 directory is deleted. A failed promotion restores or retains
+v2; a successful production migration does not leave a stale database copy.
+
+Promotion has a durable `db.v3-migration-state` phase marker. A crash during
+export/import discards only derived staging and retries from the untouched v2
+source. A crash between the two same-filesystem renames resumes promotion on
+the next launch. `complete` plus a v3 live store makes every later launch skip
+the converter and removes a temporary v2 directory left by a crash after the
+commit. Any failure stops startup instead of opening partial v3 data;
+`AZ_NO_DB_MIGRATION=1` remains the explicit way to leave v2 untouched and run
+that session on scratch.
 
 ## The engine bug at the bottom of it
 

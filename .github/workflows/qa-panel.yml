@@ -91,6 +91,9 @@ jobs:
       - name: Stage the agency-proxy sidecar
         run: scripts/stage-agency-proxy-sidecar.sh
 
+      - name: Stage the WorkTable v2 migration reader
+        run: scripts/stage-wt-v2-reader-sidecar.sh
+
       # blitz-inspector, NOT blitz-runtime: a blitz-runtime build answers every
       # inspector call with diagnosticsUnavailable, so the run would fail with
       # every check unable to see anything rather than with a real verdict.

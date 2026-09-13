@@ -17,6 +17,47 @@ use std::process::ExitCode;
 fn main() -> ExitCode {
     let mut args: Vec<String> = std::env::args().skip(1).collect();
 
+    if args.first().map(String::as_str) == Some("migrate-v2-store") {
+        args.remove(0);
+        let [store, reader] = args.as_slice() else {
+            eprintln!("usage: wt-migrate migrate-v2-store <v2-store> <v2-reader>");
+            return ExitCode::from(2);
+        };
+        let store = PathBuf::from(store);
+        let reader = PathBuf::from(reader);
+        let _lock = match wt_migrate::lock_store(&store) {
+            Ok(lock) => lock,
+            Err(message) => {
+                eprintln!("{message}");
+                return ExitCode::FAILURE;
+            }
+        };
+        match wt_migrate::resume_page_format_migration(&store) {
+            Ok(true) => {
+                println!("v3 migration already complete; skipped");
+                return ExitCode::SUCCESS;
+            }
+            Ok(false) => {}
+            Err(error) => {
+                eprintln!("could not resume v3 migration: {error:#}");
+                return ExitCode::FAILURE;
+            }
+        }
+        return match wt_migrate::migrate_page_format_v2(&store, &reader) {
+            Ok(report) => {
+                for table in report.tables {
+                    println!("verified {}: {} row(s)", table.table, table.rows);
+                }
+                println!("v3 promotion committed; displaced v2 staging removed");
+                ExitCode::SUCCESS
+            }
+            Err(error) => {
+                eprintln!("v2 migration failed: {error:#}");
+                ExitCode::FAILURE
+            }
+        };
+    }
+
     if args.first().map(String::as_str) == Some("merge-message-window") {
         args.remove(0);
         let [source, target, project, after, before] = args.as_slice() else {
