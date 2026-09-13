@@ -4,6 +4,25 @@ What protects the WorkTable store, what to do when a launch fails anyway,
 and how the pieces earned their existence on 2026-08-01, when a botched
 migration plus a second writer turned every launch into a silent bus error.
 
+## The WorkTable 1.9 page-format boundary
+
+WorkTable 1.9 and DataBucket 0.7 write page format v3. Existing AgencyZero
+stores use v2. The new reader deliberately refuses those pages; this boundary
+is independent of AgencyZero's `SCHEMA_FINGERPRINT`, so an unchanged table
+schema does not make the files compatible.
+
+Do not point the current `agency-tools` or `wt-migrate` binaries at a v2 store
+and expect conversion. They compile the same WorkTable 1.9 reader as the GUI.
+Until an application-specific converter exists, retained data must be exported
+with the previous WorkTable v2 build. A raw `.azbackup` preserves the old bytes
+for rollback, but it is not a v2-to-v3 conversion.
+
+The rollout is therefore explicit: preserve the v2 directory, export anything
+that must survive with the old reader, then start the WorkTable 1.9 build on an
+empty destination. The new build never reinterprets or deletes the old store.
+If it encounters v2, it leaves the directory untouched, records the format
+refusal in the log, and runs the session on scratch.
+
 ## The engine bug at the bottom of it
 
 The August 4 message failure isolated a second loaded-index defect:

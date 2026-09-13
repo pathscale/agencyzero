@@ -1231,13 +1231,16 @@ pub async fn recover_task_log_index(
     // Read the surviving secondary index directly to discover every key,
     // including projects that may since have been deleted from the project
     // table. This handle writes nothing because no events are applied.
-    let mut project_index =
-        <SpaceIndexUnsized<String, { INNER_PAGE_SIZE as u32 }> as SpaceIndexOps<String>>::secondary_from_table_files_path(
-            scratch_table.to_string_lossy().into_owned(),
-            "project_idx",
-            TaskLogWorkTable::version(),
-        )
-        .await?;
+    let mut project_index = <SpaceIndexUnsized<
+        String,
+        { INNER_PAGE_SIZE as u32 },
+        { PAGE_SIZE as u32 },
+    > as SpaceIndexOps<String>>::secondary_from_table_files_path(
+        scratch_table.to_string_lossy().into_owned(),
+        "project_idx",
+        TaskLogWorkTable::version(),
+    )
+    .await?;
     let project_ids: BTreeSet<String> = project_index
         .parse_indexset()
         .await?
@@ -1326,13 +1329,13 @@ pub async fn recover_message_index(
     target: &Path,
 ) -> eyre::Result<MessageRecoveryReport> {
     use app_schema::message::{MessagePersistenceEngine, MessageRow, MessageWorkTable};
+    use nagoya::io::Read as _;
     use std::collections::HashSet;
-    use tokio::io::AsyncReadExt;
 
     type StoredMessage = <MessageRow as StorableRow>::WrappedRow;
 
     let table_path = source.join("message");
-    let mut primary = <SpaceIndexUnsized<String, { INNER_PAGE_SIZE as u32 }> as SpaceIndexOps<
+    let mut primary = <SpaceIndexUnsized<String, { INNER_PAGE_SIZE as u32 }, { PAGE_SIZE as u32 }> as SpaceIndexOps<
         String,
     >>::primary_from_table_files_path(
         table_path.to_string_lossy().into_owned(),
@@ -1340,10 +1343,10 @@ pub async fn recover_message_index(
     )
     .await?;
     let primary_index = primary.parse_indexset().await?;
-    let mut data_file = tokio::fs::File::open(table_path.join(".wt.data")).await?;
+    let mut data_file = worktable::fsx::open_read_only(table_path.join(".wt.data")).await?;
     let mut rows = BTreeMap::new();
     for (id, link) in primary_index.iter() {
-        worktable::data_bucket::seek_by_link(&mut data_file, link).await?;
+        worktable::data_bucket::seek_by_link::<{ PAGE_SIZE as u32 }>(&mut data_file, link).await?;
         let mut bytes = vec![0u8; link.length as usize];
         data_file.read_exact(&mut bytes).await?;
         let stored = rkyv::from_bytes::<StoredMessage, rkyv::rancor::Error>(&bytes)
@@ -1534,12 +1537,12 @@ pub async fn salvage_item_index(source: &Path, target: &Path) -> eyre::Result<It
     use app_schema::project_item::{
         ProjectItemPersistenceEngine, ProjectItemRow, ProjectItemWorkTable,
     };
-    use tokio::io::AsyncReadExt;
+    use nagoya::io::Read as _;
 
     type StoredItem = <ProjectItemRow as StorableRow>::WrappedRow;
 
     let table_path = source.join("project_item");
-    let mut primary = <SpaceIndexUnsized<String, { INNER_PAGE_SIZE as u32 }> as SpaceIndexOps<
+    let mut primary = <SpaceIndexUnsized<String, { INNER_PAGE_SIZE as u32 }, { PAGE_SIZE as u32 }> as SpaceIndexOps<
         String,
     >>::primary_from_table_files_path(
         table_path.to_string_lossy().into_owned(),
@@ -1547,7 +1550,7 @@ pub async fn salvage_item_index(source: &Path, target: &Path) -> eyre::Result<It
     )
     .await?;
     let primary_index = primary.parse_indexset().await?;
-    let mut data_file = tokio::fs::File::open(table_path.join(".wt.data")).await?;
+    let mut data_file = worktable::fsx::open_read_only(table_path.join(".wt.data")).await?;
     let mut rows = BTreeMap::new();
     let mut skipped = Vec::new();
     /*
@@ -1563,7 +1566,7 @@ pub async fn salvage_item_index(source: &Path, target: &Path) -> eyre::Result<It
      * then swept independently below.
      */
     for (id, link) in primary_index.iter() {
-        if worktable::data_bucket::seek_by_link(&mut data_file, link)
+        if worktable::data_bucket::seek_by_link::<{ PAGE_SIZE as u32 }>(&mut data_file, link)
             .await
             .is_err()
         {
@@ -1711,12 +1714,12 @@ async fn rebuild_pull_request_index(
     use app_schema::pull_request::{
         PullRequestPersistenceEngine, PullRequestRow, PullRequestWorkTable,
     };
-    use tokio::io::AsyncReadExt;
+    use nagoya::io::Read as _;
 
     type StoredPullRequest = <PullRequestRow as StorableRow>::WrappedRow;
 
     let table_path = source.join("pull_request");
-    let mut primary = <SpaceIndexUnsized<String, { INNER_PAGE_SIZE as u32 }> as SpaceIndexOps<
+    let mut primary = <SpaceIndexUnsized<String, { INNER_PAGE_SIZE as u32 }, { PAGE_SIZE as u32 }> as SpaceIndexOps<
         String,
     >>::primary_from_table_files_path(
         table_path.to_string_lossy().into_owned(),
@@ -1724,16 +1727,18 @@ async fn rebuild_pull_request_index(
     )
     .await?;
     let primary_index = primary.parse_indexset().await?;
-    let mut data_file = tokio::fs::File::open(table_path.join(".wt.data")).await?;
+    let mut data_file = worktable::fsx::open_read_only(table_path.join(".wt.data")).await?;
     let mut rows = BTreeMap::new();
     let mut skipped = Vec::new();
     for (id, link) in primary_index.iter() {
-        if let Err(error) = worktable::data_bucket::seek_by_link(&mut data_file, link).await {
+        if let Err(error) =
+            worktable::data_bucket::seek_by_link::<{ PAGE_SIZE as u32 }>(&mut data_file, link).await
+        {
             if skip_corrupt {
                 skipped.push(id.clone());
                 continue;
             }
-            return Err(error);
+            return Err(error.into());
         }
         let mut bytes = vec![0u8; link.length as usize];
         if let Err(error) = data_file.read_exact(&mut bytes).await {
@@ -2111,7 +2116,7 @@ mod recovery_tests {
     }
 
     #[tokio::test]
-    async fn task_log_recovery_refuses_a_corrupt_row_reached_through_the_secondary_index() {
+    async fn task_log_recovery_refuses_a_corrupt_v3_data_page() {
         let root = tempfile::tempdir().expect("temporary recovery store");
         let source = root.path().join("source");
         let target = root.path().join("target");
@@ -2158,8 +2163,7 @@ mod recovery_tests {
             .expect_err("recovery must reject a corrupt row reached through project_idx");
         let reason = format!("{error:#}");
         assert!(
-            reason.contains("project_idx")
-                && (reason.contains("invalid row") || reason.contains("key does not match")),
+            reason.contains("v3 data page checksum"),
             "unexpected recovery refusal: {reason}"
         );
     }
@@ -2339,9 +2343,11 @@ mod recovery_tests {
         table.close().await.expect("source closes cleanly");
 
         let table_path = source.join("pull_request");
-        let mut primary = <SpaceIndexUnsized<String, { INNER_PAGE_SIZE as u32 }> as SpaceIndexOps<
+        let mut primary = <SpaceIndexUnsized<
             String,
-        >>::primary_from_table_files_path(
+            { INNER_PAGE_SIZE as u32 },
+            { PAGE_SIZE as u32 },
+        > as SpaceIndexOps<String>>::primary_from_table_files_path(
             table_path.to_string_lossy().into_owned(),
             PullRequestWorkTable::version(),
         )

@@ -18,6 +18,7 @@ eyre = "0.6"
 rkyv = { version = "0.8.9", features = ["uuid-1"] }
 derive_more = { version = "2.0.1", features = ["from", "error", "display", "debug", "into"] }
 futures = "0.3"
+nagoya = "^0.1"
 uuid = "1"
 chrono = "0.4"
 # The recovery verbs read an extracted item list.

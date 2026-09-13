@@ -43,7 +43,6 @@ fn main() -> ExitCode {
         };
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .worker_threads(2)
-            .enable_io()
             .enable_time()
             .build()
             .expect("runtime");
@@ -82,7 +81,6 @@ fn main() -> ExitCode {
         };
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .worker_threads(2)
-            .enable_io()
             .enable_time()
             .build()
             .expect("runtime");
@@ -115,7 +113,6 @@ fn main() -> ExitCode {
         };
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .worker_threads(2)
-            .enable_io()
             .enable_time()
             .build()
             .expect("runtime");
@@ -168,7 +165,6 @@ fn main() -> ExitCode {
         };
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .worker_threads(2)
-            .enable_io()
             .enable_time()
             .build()
             .expect("runtime");
@@ -231,7 +227,6 @@ fn main() -> ExitCode {
         };
         let runtime = match tokio::runtime::Builder::new_multi_thread()
             .worker_threads(2)
-            .enable_io()
             .enable_time()
             .build()
         {
@@ -280,7 +275,6 @@ fn main() -> ExitCode {
         }
         let runtime = match tokio::runtime::Builder::new_multi_thread()
             .worker_threads(2)
-            .enable_io()
             .enable_time()
             .build()
         {
@@ -352,7 +346,6 @@ fn main() -> ExitCode {
         };
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .worker_threads(2)
-            .enable_io()
             .enable_time()
             .build()
             .expect("runtime");
@@ -408,7 +401,6 @@ fn main() -> ExitCode {
         };
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .worker_threads(2)
-            .enable_io()
             .enable_time()
             .build()
             .expect("runtime");
@@ -470,7 +462,6 @@ fn main() -> ExitCode {
         };
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .worker_threads(2)
-            .enable_io()
             .enable_time()
             .build()
             .expect("runtime");
@@ -548,7 +539,6 @@ fn main() -> ExitCode {
         };
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .worker_threads(2)
-            .enable_io()
             .enable_time()
             .build()
             .expect("runtime");
@@ -607,7 +597,6 @@ fn main() -> ExitCode {
         };
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .worker_threads(2)
-            .enable_io()
             .enable_time()
             .build()
             .expect("runtime");
@@ -677,7 +666,6 @@ fn main() -> ExitCode {
         };
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .worker_threads(2)
-            .enable_io()
             .enable_time()
             .build()
             .expect("runtime");
@@ -762,7 +750,6 @@ fn main() -> ExitCode {
 
     let runtime = match tokio::runtime::Builder::new_multi_thread()
         .worker_threads(2)
-        .enable_io()
         .enable_time()
         .build()
     {

@@ -2288,6 +2288,18 @@ fn is_persistence_load_refusal(error: &eyre::Report) -> bool {
         .is_some()
 }
 
+/// Page format v3 deliberately refuses a v2 store instead of interpreting or
+/// deleting it. This is a release boundary, not evidence that the old bytes
+/// are corrupt, and the recovery instruction must name the old reader.
+fn is_v2_page_format_refusal(error: &eyre::Report) -> bool {
+    error
+        .downcast_ref::<worktable::prelude::PersistenceLoadError>()
+        .is_some_and(|error| {
+            error.reason().contains("unsupported page format v2")
+                && error.reason().contains("this build requires v3")
+        })
+}
+
 fn rebuild_rejected_store(
     location: &mut location::DataLocation,
     refusal: &str,
@@ -2784,7 +2796,23 @@ fn main() {
                  * So: touch nothing, run on scratch, and say where the store
                  * is and what can read it.
                  */
-                Err(reason) => {
+                Err(error) if is_v2_page_format_refusal(&error) => {
+                    crate::log!(
+                        log::Level::Error,
+                        "boot",
+                        "the store at {:?} uses WorkTable page format v2. This build requires v3 \
+                         and will not reinterpret, convert, or delete the old store. The old \
+                         store is unchanged and this session runs on scratch, keeping nothing. \
+                         Use the previous WorkTable v2 build to export retained data before \
+                         creating an explicitly empty v3 store.",
+                        location.path
+                    );
+                    location = ephemeral_location();
+                    tauri::async_runtime::block_on(Tables::open(&location.path))
+                        .map_err(|error| format!("could not open a scratch store: {error}"))?
+                }
+                Err(error) => {
+                    let reason = error.to_string();
                     crate::log!(
                         log::Level::Error,
                         "boot",
