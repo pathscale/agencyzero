@@ -298,18 +298,14 @@ impl Tables {
     /// then erase the evidence that they had ever disagreed. An unreadable
     /// store is the case with the most to lose, and it was the case with no
     /// error path at all.
-    pub async fn peek_fingerprint(dir: &std::path::Path) -> Result<Option<String>, String> {
+    pub async fn peek_fingerprint(dir: &std::path::Path) -> eyre::Result<Option<String>> {
         let config = DiskConfig::new_with_table_name(
             dir.to_string_lossy().into_owned(),
             KvWorkTable::name_snake_case(),
             KvWorkTable::version(),
         );
-        let engine = KvPersistenceEngine::new(config)
-            .await
-            .map_err(|error| format!("kv would not open: {error}"))?;
-        let kv = KvWorkTable::load(engine)
-            .await
-            .map_err(|error| format!("kv would not load: {error}"))?;
+        let engine = KvPersistenceEngine::new(config).await?;
+        let kv = KvWorkTable::load(engine).await?;
         Ok(kv.select(FINGERPRINT_KEY.to_string()).map(|row| row.value))
     }
 
@@ -969,7 +965,7 @@ impl Tables {
         }
 
         // Independent tables must not make quit ten serial waits. WorkTable
-        // 1.0 reports a terminal persistence failure immediately; the local
+        // 1.9 reports a terminal persistence failure immediately; the local
         // timeout is the last boundary if a future engine regresses to a
         // parked worker. Each result keeps the table name that needs repair.
         let results = tokio::join!(
