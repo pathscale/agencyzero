@@ -2920,8 +2920,8 @@ fn main() {
             #[cfg(feature = "blitz-runtime")]
             {
                 let relaunch_handle = app.handle().clone();
-                tauri_runtime_blitz::set_agent_control_handler(move |request| match request {
-                    tauri_runtime_blitz::control_protocol::AgentControlRequest::Relaunch => {
+                blitz_control_protocol::lifecycle::set_lifecycle_handler(move |request| match request {
+                    blitz_control_protocol::AgentControlRequest::Relaunch => {
                         let handle = relaunch_handle.clone();
                         tauri::async_runtime::spawn(async move {
                             let state = handle.state::<AppState>();
@@ -2933,10 +2933,10 @@ fn main() {
                                 );
                             }
                         });
-                        tauri_runtime_blitz::control_protocol::DebugResponse::Ack
+                        blitz_control_protocol::DebugResponse::Ack
                     }
-                    _ => tauri_runtime_blitz::control_protocol::DebugResponse::Error(
-                        tauri_runtime_blitz::control_protocol::DebugError {
+                    _ => blitz_control_protocol::DebugResponse::Error(
+                        blitz_control_protocol::DebugError {
                             code: "unsupportedEmbedderAction".into(),
                             message: "AgencyZero delegates only relaunch to its restart Angel"
                                 .into(),
