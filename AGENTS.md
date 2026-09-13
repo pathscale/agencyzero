@@ -41,6 +41,11 @@ hardens into procedure moves here; the reasoning stays in memory.
 
 Run what you build before calling it done. **If you can't run it, say so.**
 
+- **Do not introduce Node.js, npm, npx, pnpm, Yarn or Deno.** The existing
+  frontend uses Bun; keep its install and script paths on Bun. New repository
+  tooling and harnesses are Rust binaries or plain shell around repository
+  binaries, not JavaScript runtime scripts.
+
 - Compare against the base branch: a pre-existing failure is not yours, and saying so
   requires checking.
 - A suspiciously fast build was cached. Force a rebuild when the rebuild is the point.
