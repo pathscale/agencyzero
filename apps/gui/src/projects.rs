@@ -8303,6 +8303,33 @@ fn last_run_permission(tables: &Tables, project_id: &str, agent: Agent) -> Optio
         .map(|row| row.permission)
 }
 
+/// Why a compaction happened, which decides whether the turn resumes itself.
+///
+/// Compaction interrupts work that was already in flight *only* when the app
+/// started it. Grok is compacted by AgencyZero before the 200k price cliff,
+/// mid-task and unasked, so leaving the conversation summarised and idle
+/// strands the work that triggered it: that case resumes.
+///
+/// An owner pressing Compact is the opposite. They chose the moment, and the
+/// next instruction is theirs to give. Resuming there spends a turn nobody
+/// asked for, which is what this exists to prevent. The distinction is the
+/// trigger and not the agent, so an owner-driven compaction of a Grok project
+/// stays silent too.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CompactTrigger {
+    /// The owner pressed Compact. Say nothing afterwards.
+    Owner,
+    /// The app compacted to stay under a provider limit, interrupting a turn.
+    Automatic,
+}
+
+impl CompactTrigger {
+    /// Whether the interrupted work should be picked back up.
+    const fn resumes(self) -> bool {
+        matches!(self, Self::Automatic)
+    }
+}
+
 fn spawn_resume_after_compact(app: AppHandle, project_id: String, agent: Agent, model: String) {
     spawn_host_resume(
         app,
@@ -8402,6 +8429,18 @@ pub async fn compact_project(
     app: AppHandle,
     project_id: String,
     agent: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    // The command is the owner's own hand on the button. Anything the app
+    // starts by itself calls `compact_project_with` and says so.
+    compact_project_with(app, project_id, agent, CompactTrigger::Owner, state).await
+}
+
+pub async fn compact_project_with(
+    app: AppHandle,
+    project_id: String,
+    agent: Option<String>,
+    trigger: CompactTrigger,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let agent = parse_agent(agent.as_deref())?;
@@ -8892,7 +8931,9 @@ pub async fn compact_project(
     );
 
     if ok {
-        spawn_resume_after_compact(app.clone(), project_id.clone(), agent, compact_model);
+        if trigger.resumes() {
+            spawn_resume_after_compact(app.clone(), project_id.clone(), agent, compact_model);
+        }
         Ok(())
     } else {
         Err(why.unwrap_or_else(|| "the compaction did not complete".into()))
@@ -14047,7 +14088,14 @@ async fn drive_run(
         tauri::async_runtime::spawn(async move {
             let state = app.state::<crate::AppState>();
             if let Err(error) =
-                compact_project(app.clone(), project_id.clone(), Some("grok".into()), state).await
+                compact_project_with(
+                    app.clone(),
+                    project_id.clone(),
+                    Some("grok".into()),
+                    CompactTrigger::Automatic,
+                    state,
+                )
+                .await
             {
                 crate::log!(
                     crate::log::Level::Warn,
@@ -17014,6 +17062,17 @@ mod tests {
     fn compact_resume_prompt_tells_the_agent_to_continue() {
         assert!(compact_resume_prompt().contains("Compaction finished"));
         assert!(compact_resume_prompt().contains("Continue"));
+    }
+
+    /// Compaction the owner asked for must not spend a turn afterwards.
+    ///
+    /// Only an app-started compaction interrupts work that was already in
+    /// flight. Pressing Compact is a deliberate stopping point, and resuming
+    /// there answers a question nobody asked.
+    #[test]
+    fn only_an_automatic_compaction_resumes_the_interrupted_work() {
+        assert!(CompactTrigger::Automatic.resumes());
+        assert!(!CompactTrigger::Owner.resumes());
     }
 
     /// The reported case: another session sent `<ps @antml:invoke>` and it
