@@ -114,6 +114,10 @@ paraphrases were how the old checkbox contract created near-duplicates. Full con
   mock (`bun run dev`, port 3010) and is drivable by roles and labels:
   [`docs/ui-verification.md`](docs/ui-verification.md). Otherwise build, test, and ask the
   owner to look.
+- **Native OS file dialogs are outside the control tree.** If a flow needs a
+  real folder or file pick, ask the owner to operate the panel, then inspect
+  the in-app result. Typed-path checks are a different control. Guide:
+  [`docs/debugging.md`](docs/debugging.md#native-os-file-dialogs).
 - **Never touch the running System instance**, its process, files or data directory. The
   store is single-writer. Use the Dev instance (`tauri.dev.conf.json`).
   **Check before you decide it is closed, and check by the right name.** The binary is

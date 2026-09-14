@@ -285,7 +285,7 @@ export function HomeTab(): JSX.Element {
                       </span>
                     </div>
                     <span class="ml-auto shrink-0 text-az-faint text-ui-caption">
-                      {state.running[project.id]?.length
+                      {state.running[project.id]?.length || project.id in state.runStatus
                         ? tx("running now")
                         : relativeTime(project.lastActivityAt)}
                     </span>

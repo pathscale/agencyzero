@@ -132,7 +132,7 @@ pub struct GlobalSettings {
 pub struct Review {
     /// The review instruction, prepended to the PR URL. Empty uses the default.
     pub prompt: String,
-    /// Model per reviewer agent (`claude` / `codex` / `copilot`); empty is the
+    /// Model per reviewer agent (`claude` / `codex` / `copilot` / `grok`); empty is the
     /// agent's default.
     pub models: BTreeMap<String, String>,
 }
@@ -515,6 +515,10 @@ impl Default for GlobalSettings {
                     ),
                 ),
                 ("copilot".to_string(), sel(&["auto"], "auto")),
+                (
+                    "grok".to_string(),
+                    sel(&["grok-4.6", "grok-4.5"], "grok-4.6"),
+                ),
             ]),
             default_permission: "read_only".into(),
             default_effort: "high".into(),
@@ -644,7 +648,7 @@ pub fn normalize(settings: &mut GlobalSettings) {
             selection.enabled.push("claude-opus-5".to_string());
         }
     }
-    if !matches!(settings.default_agent.as_str(), "claude" | "codex") {
+    if !matches!(settings.default_agent.as_str(), "claude" | "codex" | "grok") {
         settings.default_agent = defaults.default_agent;
     }
     if !valid_permission(&settings.default_permission) {
@@ -712,7 +716,7 @@ pub fn normalize(settings: &mut GlobalSettings) {
 /// agent because different providers may expose the same model id and the
 /// moderator picker now spans every configured provider.
 fn normalize_moderator_model(settings: &mut GlobalSettings) {
-    const AGENTS: [&str; 3] = ["claude", "codex", "copilot"];
+    const AGENTS: [&str; 4] = ["claude", "codex", "copilot", "grok"];
 
     let configured = settings.moderator.model.clone();
     let canonical = if let Some((agent, model)) = configured.split_once(':') {
