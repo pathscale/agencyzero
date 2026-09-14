@@ -16,7 +16,7 @@ use std::path::{Path, PathBuf};
 pub const KEY: &str = "agents";
 
 /// Every agent this build can drive.
-pub const AGENTS: [Agent; 3] = [Agent::Claude, Agent::Codex, Agent::Copilot];
+pub const AGENTS: [Agent; 4] = [Agent::Claude, Agent::Codex, Agent::Copilot, Agent::Grok];
 
 /// Add conventional GUI-invisible agent executable directories to `PATH`.
 ///
@@ -36,9 +36,13 @@ pub(crate) fn with_user_local_bin(path: &OsStr, home: Option<&Path>) -> OsString
         ]);
     }
     #[cfg(target_os = "macos")]
-    candidates.push(PathBuf::from(
-        "/Applications/cmux.app/Contents/Resources/bin",
-    ));
+    {
+        candidates.push(PathBuf::from("/opt/homebrew/bin"));
+        candidates.push(PathBuf::from("/usr/local/bin"));
+        candidates.push(PathBuf::from(
+            "/Applications/cmux.app/Contents/Resources/bin",
+        ));
+    }
     for candidate in candidates {
         if !entries.contains(&candidate) {
             entries.push(candidate);
@@ -129,17 +133,41 @@ pub struct ProviderCapabilitiesDto {
 /// Probe every agent concurrently.
 ///
 /// Concurrent because each probe spawns a process and waits on `--version` plus
-/// an auth check; run in series, three agents make Settings visibly slow to
+/// an auth check; run in series, four agents make Settings visibly slow to
 /// open.
 pub async fn detect_all(
     proxy: &crate::agent_proxy::AgencyProxy,
 ) -> Result<Vec<AgentStatusDto>, String> {
-    proxy
+    let mut statuses: Vec<AgentStatusDto> = proxy
         .probe_providers()
         .await?
         .into_iter()
         .map(status_from_proxy)
-        .collect()
+        .collect::<Result<Vec<_>, _>>()?;
+    for agent in AGENTS {
+        if statuses.iter().any(|status| status.agent == agent) {
+            continue;
+        }
+        statuses.push(status_from_proxy(ProviderStatus {
+            provider: match agent {
+                Agent::Claude => "claude",
+                Agent::Codex => "codex",
+                Agent::Copilot => "copilot",
+                Agent::Grok => "grok",
+            }
+            .into(),
+            installed: false,
+            version: None,
+            outdated: false,
+            auth_state: "unknown".into(),
+            detail: String::new(),
+            auth_method: None,
+            account: None,
+            plan: None,
+            login_hint: String::new(),
+        })?);
+    }
+    Ok(statuses)
 }
 
 fn status_from_proxy(status: ProviderStatus) -> Result<AgentStatusDto, String> {
@@ -147,6 +175,7 @@ fn status_from_proxy(status: ProviderStatus) -> Result<AgentStatusDto, String> {
         "claude" => Agent::Claude,
         "codex" => Agent::Codex,
         "copilot" => Agent::Copilot,
+        "grok" => Agent::Grok,
         other => return Err(format!("AgencyProxy reported an unknown provider: {other}")),
     };
     let checked_at = chrono::Utc::now().to_rfc3339();
@@ -243,8 +272,29 @@ mod tests {
         assert_eq!(entries[3], home.join(".npm-global/bin"));
         assert_eq!(entries[4], home.join(".volta/bin"));
         #[cfg(target_os = "macos")]
+        {
+            assert_eq!(entries[5], Path::new("/usr/local/bin"));
+            assert_eq!(
+                entries[6],
+                Path::new("/Applications/cmux.app/Contents/Resources/bin")
+            );
+        }
+    }
+
+    /// The dedup in the test above hides the macOS candidates: its input PATH
+    /// already contains `/opt/homebrew/bin`, so the appended copy is dropped
+    /// and the indices line up whatever order the candidates are pushed in.
+    /// Start from a PATH holding none of them so the order is actually read.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_candidates_are_appended_in_order() {
+        let amended = with_user_local_bin(OsStr::new("/usr/bin"), None);
+        let entries: Vec<_> = std::env::split_paths(&amended).collect();
+        assert_eq!(entries[0], Path::new("/usr/bin"));
+        assert_eq!(entries[1], Path::new("/opt/homebrew/bin"));
+        assert_eq!(entries[2], Path::new("/usr/local/bin"));
         assert_eq!(
-            entries[5],
+            entries[3],
             Path::new("/Applications/cmux.app/Contents/Resources/bin")
         );
     }
@@ -270,6 +320,7 @@ mod tests {
             ("claude", true, false, "logged_in"),
             ("codex", true, true, "logged_in"),
             ("copilot", false, false, "unknown"),
+            ("grok", true, false, "logged_in"),
         ] {
             let status = status_from_proxy(ProviderStatus {
                 provider: provider.into(),
@@ -332,11 +383,16 @@ mod tests {
     fn structured_caps_distinguish_interactive_providers() {
         let claude = provider_capabilities(Agent::Claude);
         let codex = provider_capabilities(Agent::Codex);
+        let grok = provider_capabilities(Agent::Grok);
         assert!(claude.live_follow_up);
         assert!(claude.approvals);
         assert!(claude.commands);
         assert!(codex.live_follow_up);
         assert!(codex.approvals);
         assert!(!codex.commands);
+        assert!(grok.live_follow_up);
+        assert!(grok.approvals);
+        assert!(grok.commands);
+        assert!(grok.fork);
     }
 }
