@@ -99,8 +99,8 @@ const en = {
   Models: "Models",
   "what each picker offers": "what each picker offers",
   "Re-read from the CLIs": "Re-read from the CLIs",
-  "only Codex can enumerate; the other two stay on the compiled list":
-    "only Codex can enumerate; the other two stay on the compiled list",
+  "Codex and Grok can enumerate; Claude and Copilot stay on the compiled list":
+    "Codex and Grok can enumerate; Claude and Copilot stay on the compiled list",
   "Task Manager": "Task Manager",
   "the Home conversation that keeps the lists in order":
     "the Home conversation that keeps the lists in order",

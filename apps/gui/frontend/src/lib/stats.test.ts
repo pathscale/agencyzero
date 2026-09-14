@@ -224,6 +224,15 @@ describe("the accumulation rule", () => {
     ]);
     expect(contextUsed(totals)).toBe(1);
   });
+
+  it("ignores a billed turn aggregate that cannot be occupancy", () => {
+    const totals = usageTotals([
+      turn("agent", usage({ tokens: 100, contextTokens: 71_933, contextWindow: 500_000 })),
+      turn("agent", usage({ tokens: 7_641_353, contextTokens: 7_641_353, contextWindow: 500_000 })),
+    ]);
+    expect(totals.contextTokens).toBe(71_933);
+    expect(contextUsed(totals)).toBeCloseTo(71_933 / 500_000, 6);
+  });
 });
 
 /*

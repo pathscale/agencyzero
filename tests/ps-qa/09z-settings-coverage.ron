@@ -115,7 +115,9 @@
         open: Some("theta theta north indi"),
         hover: None,
         click: Some("Remove /tmp/qa-project-dir"),
-        subject: "/tmp/qa-project-dir",
+        // Typed path plus this in-app X. The native folder picker is
+        // unreachable to ps-qa; see QA-button-audit-runbook.md.
+        subject: "Remove /tmp/qa-project-dir",
         expect: Vanishes,
     ),
     (

@@ -92,7 +92,7 @@ function deepMerge<T>(target: T, patch: DeepPartial<T>): T {
   return out;
 }
 
-const MODERATOR_AGENTS = ["claude", "codex", "copilot"] as const;
+const MODERATOR_AGENTS = ["claude", "codex", "copilot", "grok"] as const;
 
 /** Mirror Rust's backwards-compatible moderator model normalization. */
 function normalizeModeratorModel(settings: GlobalSettings): string {
@@ -900,7 +900,7 @@ export function createMockApi(): AgencyZeroApi {
      */
     listQuota: () =>
       settle({
-        agents: (["claude", "codex", "copilot"] as const).map((agent) => ({
+        agents: (["claude", "codex", "copilot", "grok"] as const).map((agent) => ({
           agent,
           supported: false,
           windows: [],

@@ -12,14 +12,7 @@ import { AGENT_LABELS } from "~/lib/labels";
 import { describeError, log } from "~/lib/log";
 import { record as recordPerf } from "~/lib/perf";
 import { turnCostTotals } from "~/lib/pricing";
-import {
-  cacheBreak,
-  compactCount,
-  contextUsed,
-  costLabel,
-  usageTotals,
-  withLiveContext,
-} from "~/lib/stats";
+import { cacheBreak, compactCount, costLabel, usageTotals, withLiveContext } from "~/lib/stats";
 import { tx } from "~/stores/i18n";
 import { prefs, setPrefs } from "~/stores/prefs";
 import { QUEUE_REASONS, reviewRunKey, useWorkspace } from "~/stores/workspace";
@@ -246,6 +239,20 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
       };
     }
 
+    if (props.tab.agent === "grok") {
+      const grok = state.rateLimits[props.project.id]?.grok;
+      const percent = grok?.usedPercent;
+      if (percent == null || !Number.isFinite(percent)) return null;
+      const clipped = Math.min(100, Math.max(0, percent));
+      return {
+        label: providerUsageLabel("Grok", clipped, grok?.resetsAt ?? null, usageNow()),
+        title: grok?.resetsAt ?? "",
+        severity: severityFor(clipped),
+      };
+    }
+
+    if (props.tab.agent !== "codex") return null;
+
     const windows = state.quota?.agents.find((entry) => entry.agent === "codex")?.windows ?? [];
     const window = windows.reduce<(typeof windows)[number] | null>(
       (longest, candidate) =>
@@ -275,7 +282,11 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
     const partial =
       it.reported < it.turns ? ` ${it.turns - it.reported} turn(s) reported no usage.` : "";
     const estimate = costs().estimated
-      ? " Codex turns are estimated from their exact input, output, and cache split."
+      ? props.tab.agent === "codex"
+        ? " Codex turns are estimated from their exact input, output, and cache split."
+        : props.tab.agent === "grok"
+          ? " Grok turns are estimated from their exact input, output, and cache split."
+          : " Some turns are estimated from their exact input, output, and cache split."
       : "";
     return `${compactCount(it.tokens)} tokens processed across ${it.turns} turn(s), cache reads included.${partial}${estimate} On a subscription plan this measures consumption, not a bill.`;
   };
@@ -283,14 +294,14 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
   /**
    * How much of the context window this conversation is using.
    *
-   * Only Claude reports a window, so this is absent rather than estimated for
-   * the others — `Usage::context_used` returns nothing without both numbers, and
-   * a context bar drawn from a guess is exactly the figure someone would act on.
+   * Claude reports a window natively. Grok's adapter fills 500k and live
+   * occupancy (not the turn's billed token sum). Without both numbers
+   * `Usage::context_used` returns nothing — a bar drawn from a guess is
+   * exactly the figure someone would act on.
    */
   // The session's history, with the context figures live from the turn in
   // flight — see `withLiveContext`.
   const standing = createMemo(() => withLiveContext(totals(), state.runStatus[props.project.id]));
-  const context = createMemo(() => contextUsed(standing()));
 
   /**
    * What the composer shows where the usage line used to be.
@@ -300,13 +311,19 @@ export function ProjectTab(props: { tab: Tab; project: Project }): JSX.Element {
    * and moved to the header.
    */
   const contextLabel = createMemo(() => {
-    const share = context();
     const it = standing();
-    if (share === null) {
-      // No window reported, so no share can be shown — but the tokens are real.
-      return isCount(it.contextTokens) ? `${compactCount(it.contextTokens)} ctx` : "—";
+    const window =
+      it.contextWindow && it.contextWindow > 0
+        ? it.contextWindow
+        : props.tab.agent === "grok"
+          ? 500_000
+          : null;
+    const tokens = it.contextTokens;
+    if (!isCount(tokens) || window == null) {
+      return isCount(tokens) ? `${compactCount(tokens)} ctx` : "—";
     }
-    return `${compactCount(it.contextTokens ?? 0)} / ${compactCount(it.contextWindow ?? 0)} ctx · ${Math.round(share * 100)}%`;
+    const share = Math.min(1, Math.max(0, tokens / window));
+    return `${compactCount(tokens)} / ${compactCount(window)} ctx · ${Math.round(share * 100)}%`;
   });
 
   return (

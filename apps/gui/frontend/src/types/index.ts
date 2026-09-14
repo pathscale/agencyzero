@@ -55,8 +55,8 @@ export type ProjectStatus =
  */
 export type TabStatus = "running" | "blocked" | "error" | "ready" | "quiet";
 
-/** `Agent` in the crate. Settings covers all three; project tabs expose Claude and Codex. */
-export type Agent = "claude" | "codex" | "copilot";
+/** `Agent` in the crate. Settings covers all four; project tabs expose Claude, Codex, and Grok. */
+export type Agent = "claude" | "codex" | "copilot" | "grok";
 
 /** `Permission` in the crate. `read_only` is the default and widens deliberately. */
 export type Permission = "read_only" | "plan" | "ask" | "edit" | "auto" | "bypass";
@@ -303,7 +303,10 @@ export interface ReviewMetadata {
   headSha: string;
 }
 
-/** Live now — one per `Event::ToolCall` with no result yet. */
+/**
+ * Live now — one per in-flight `Event::ToolCall`, or a derived turn row when
+ * a run is accepted and no tool is open (fast tools often finish same-tick).
+ */
 export interface RunningTask {
   /** The crate's `ToolCall::id`; null when the agent does not give one. */
   toolCallId: string | null;
@@ -675,7 +678,7 @@ export interface WorkspaceTabs {
 export interface ReviewSettings {
   /** The review instruction, prepended to the PR URL. Empty uses the default. */
   prompt: string;
-  /** Model per reviewer agent ("claude" / "codex" / "copilot"); empty is default. */
+  /** Model per reviewer agent ("claude" / "codex" / "copilot" / "grok"); empty is default. */
   models: Record<string, string>;
 }
 
@@ -1220,6 +1223,8 @@ export interface RateLimit {
   message: string;
   /** ISO 8601, or null when the provider does not say. */
   resetsAt: string | null;
+  /** 0–100, when Grok reports weekly window fill. */
+  usedPercent?: number | null;
 }
 
 /** What `create_project` hands back once the first reply lands. */

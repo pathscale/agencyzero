@@ -151,7 +151,7 @@ its claimed failure.
 
 Never activate these unattended:
 
-- a native dialog the harness cannot close;
+- a native OS file dialog (see below);
 - a control that opens a browser, URL or another application;
 - Application Restart or Restart AgencyProxy, whose success can terminate the
   audit's cleanup and continuation path;
@@ -161,6 +161,13 @@ Never activate these unattended:
 List each one in `ps-qa.ron` under `manual_controls`. `inventory` counts them
 without activating them; `cover` also prints the named manual worklist. They
 stay outside automated pass/fail totals and are verified manually per release.
+
+### Native OS file dialogs
+
+See [`debugging.md`](debugging.md#native-os-file-dialogs). The short form for
+this harness: do not activate `manual_controls` that open a system file
+panel; type into the in-app path field and assert the in-app Remove control.
+An owner pick is evidence for the picker, not for that typed-path check.
 
 ### Rare local authenticated-Send check
 

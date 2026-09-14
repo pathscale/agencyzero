@@ -103,7 +103,7 @@ fn main() -> ExitCode {
         args.remove(0);
         let [target, project, agent] = args.as_slice() else {
             eprintln!(
-                "usage: wt-migrate clear-fresh-session <target-store> <project-id> <claude|codex|copilot>"
+                "usage: wt-migrate clear-fresh-session <target-store> <project-id> <claude|codex|copilot|grok>"
             );
             return ExitCode::from(2);
         };

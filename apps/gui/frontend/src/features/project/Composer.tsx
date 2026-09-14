@@ -376,6 +376,13 @@ export function Composer(props: ComposerProps): JSX.Element {
   const compactPressure = () => {
     const tokens = props.contextTokens ?? 0;
     const window = props.contextWindow ?? 0;
+    // Grok 4.6/4.5 double prices at 200k, far below 80% of the 500k window.
+    if (props.agent === "grok") {
+      if (tokens >= 200_000) return "red" as const;
+      if (tokens >= 180_000) return "orange" as const;
+      if (tokens >= 150_000) return "yellow" as const;
+      return null;
+    }
     const share = window > 0 ? tokens / window : null;
     if (share !== null) {
       if (share >= 0.9) return "red" as const;

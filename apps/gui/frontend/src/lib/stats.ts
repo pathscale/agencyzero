@@ -50,6 +50,17 @@ function isNumber(value: unknown): value is number {
 }
 
 /**
+ * Occupancy is how full the window is *now*. Grok's turn `totalTokens` /
+ * multi-call `inputTokens` are billed sums across every model call (7.6M on
+ * a 500k window). Treating those as context makes the header a cumulative
+ * total clipped to 100%. Skip anything larger than twice the window.
+ */
+function isOccupancy(tokens: number, window: number | null): boolean {
+  if (!isNumber(window) || window <= 0) return tokens > 0 && tokens < 1_000_000;
+  return tokens > 0 && tokens <= window * 2;
+}
+
+/**
  * Add up the agent turns in `messages`.
  *
  * # Two kinds of field, and mixing them up inflates the numbers
@@ -88,11 +99,17 @@ export function usageTotals(messages: readonly Message[]): UsageTotals {
      * the conversation totals.
      */
     if (message.author === "system" && message.stop === "completed" && message.usage) {
-      if (isNumber(message.usage.contextTokens)) {
-        totals.contextTokens = message.usage.contextTokens;
-      }
       if (isNumber(message.usage.contextWindow)) {
         totals.contextWindow = message.usage.contextWindow;
+      }
+      if (
+        isNumber(message.usage.contextTokens) &&
+        isOccupancy(
+          message.usage.contextTokens,
+          message.usage.contextWindow ?? totals.contextWindow,
+        )
+      ) {
+        totals.contextTokens = message.usage.contextTokens;
       }
       continue;
     }
@@ -116,8 +133,13 @@ export function usageTotals(messages: readonly Message[]): UsageTotals {
     }
 
     // Latest wins for the context-shaped figures.
-    if (isNumber(usage.contextTokens)) totals.contextTokens = usage.contextTokens;
     if (isNumber(usage.contextWindow)) totals.contextWindow = usage.contextWindow;
+    if (
+      isNumber(usage.contextTokens) &&
+      isOccupancy(usage.contextTokens, usage.contextWindow ?? totals.contextWindow)
+    ) {
+      totals.contextTokens = usage.contextTokens;
+    }
   }
 
   return totals;
@@ -179,10 +201,15 @@ export function withLiveContext(
   live: { contextTokens: number | null; contextWindow: number | null } | undefined,
 ): UsageTotals {
   if (!live) return totals;
+  const window = live.contextWindow ?? totals.contextWindow;
+  const liveContext =
+    isNumber(live.contextTokens) && isOccupancy(live.contextTokens, window)
+      ? live.contextTokens
+      : totals.contextTokens;
   return {
     ...totals,
-    contextTokens: live.contextTokens ?? totals.contextTokens,
-    contextWindow: live.contextWindow ?? totals.contextWindow,
+    contextTokens: liveContext,
+    contextWindow: window,
   };
 }
 

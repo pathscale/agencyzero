@@ -83,7 +83,7 @@ pub struct ProjectPanelData {
 
 /// Attach the project's session id, which lives in `kv` rather than on the row.
 fn with_session(mut dto: ProjectDto, tables: &crate::db::tables::Tables) -> ProjectDto {
-    for agent in [Agent::Claude, Agent::Codex] {
+    for agent in [Agent::Claude, Agent::Codex, Agent::Grok] {
         // The real pointer, not the effective one: a session the owner set
         // aside is still theirs and still resumable, and hiding it is what
         // made a non-destructive reset look exactly like the destructive one.
@@ -409,7 +409,7 @@ async fn record_item_completion(tables: &Tables, row: &ProjectItemRow, actor: Op
         return;
     }
     let agent = actor
-        .filter(|agent| matches!(*agent, "claude" | "codex" | "copilot"))
+        .filter(|agent| matches!(*agent, "claude" | "codex" | "copilot" | "grok"))
         .map(str::to_string)
         .or_else(|| tables.kv_get(&item_agent_key(&row.id)))
         .unwrap_or_else(|| "owner".to_string());
@@ -448,17 +448,19 @@ pub struct UsageDto {
     pub input_tokens: Option<u64>,
     /// Generated tokens across every model call in this turn.
     pub output_tokens: Option<u64>,
-    /// Every input token the turn was charged for, cached or not — the size of
-    /// the conversation as the model saw it.
+    /// Live occupancy: how full the context window is *now*.
     ///
-    /// **Already cumulative.** The agent re-sends the whole conversation each
-    /// turn and reports it, so summing this across turns counts the same
-    /// conversation once per turn and the error grows with the session. The
-    /// crate ships `Usage::accumulate` precisely because the obvious loop is
-    /// wrong; the frontend's `usageTotals` follows the same rule.
+    /// **Already cumulative across the conversation, not across turns.** The
+    /// agent re-sends the whole prompt each turn and reports its size, so
+    /// summing this counts the same conversation once per turn. Grok's turn
+    /// `totalTokens` is a billed sum across model calls and must not land
+    /// here. The crate ships `Usage::accumulate` precisely because the
+    /// obvious loop is wrong; the frontend's `usageTotals` follows the same
+    /// rule.
     pub context_tokens: Option<u64>,
-    /// The model's context window, where the agent reports one. Claude alone
-    /// does, so a share of the limit is only shown when it is there.
+    /// The model's context window, where the agent reports one. Claude reports
+    /// it natively; Grok's adapter fills 500k. Without it a share of the
+    /// limit cannot be shown.
     pub context_window: Option<u64>,
     /// Tokens served from cache during this turn. Additive across turns.
     pub cache_reads: Option<u64>,
@@ -1197,6 +1199,7 @@ fn agent_session_key(project_id: &str, agent: Agent) -> String {
         Agent::Claude => session_key(project_id),
         Agent::Codex => format!("session:codex:{project_id}"),
         Agent::Copilot => format!("session:copilot:{project_id}"),
+        Agent::Grok => format!("session:grok:{project_id}"),
     }
 }
 
@@ -1356,6 +1359,7 @@ fn agent_wire_name(agent: Agent) -> &'static str {
         Agent::Claude => "claude",
         Agent::Codex => "codex",
         Agent::Copilot => "copilot",
+        Agent::Grok => "grok",
     }
 }
 
@@ -1432,8 +1436,14 @@ fn take_incomplete_prompt_syntax_tail(body: &mut String) -> Option<String> {
 /// means this, and opening the channel would replace that mode with `manual`
 /// (see `argv_claude` in agent-abstraction), turning every gated tool call into
 /// a round trip this app would only answer yes to anyway.
+///
+/// Grok Auto is native `--permission-mode auto` *and* still emits ACP
+/// `session/request_permission` for writes outside the workspace. Session
+/// 01a09ca7 sat 30 minutes on `~/.grok/config.toml` because this returned
+/// false and the host never answered. Open the channel and let
+/// [`auto_allows`] supply the yes, same as Codex.
 fn should_route_approvals(permission: &str, agent: Agent) -> bool {
-    permission == "ask" || (permission == "auto" && agent == Agent::Codex)
+    permission == "ask" || (permission == "auto" && matches!(agent, Agent::Codex | Agent::Grok))
 }
 
 /// Whether Auto answers this run's approvals itself rather than asking.
@@ -2013,6 +2023,7 @@ fn parse_agent(raw: Option<&str>) -> Result<Agent, String> {
     match raw.unwrap_or("claude") {
         "claude" => Ok(Agent::Claude),
         "codex" => Ok(Agent::Codex),
+        "grok" => Ok(Agent::Grok),
         "copilot" => Err("Copilot projects are not available yet".into()),
         other => Err(format!("unknown project agent: {other}")),
     }
@@ -2031,6 +2042,7 @@ fn parse_review_agent(raw: Option<&str>) -> Result<Agent, String> {
         "claude" => Ok(Agent::Claude),
         "codex" => Ok(Agent::Codex),
         "copilot" => Ok(Agent::Copilot),
+        "grok" => Ok(Agent::Grok),
         other => Err(format!("unknown review agent: {other}")),
     }
 }
@@ -5910,6 +5922,10 @@ pub struct RateLimitReport {
     pub is_warning: bool,
     /// When this arrived, so a stale report can be recognised as one.
     pub at: String,
+    /// 0–100, when Grok's `x.ai/session/usage` (or similar) reports how full
+    /// the weekly window is.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub used_percent: Option<f64>,
 }
 
 impl RateLimitReport {
@@ -6186,6 +6202,13 @@ fn run_start_timeout(resume: Option<&str>) -> std::time::Duration {
 /// recoverable stall, not a failed run: the session resumes.
 const RUN_IDLE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5 * 60);
 
+/// Grok 4.6/4.5 double input/output prices once the prompt is ≥200k. Compact
+/// at 180k so the next tool-heavy turn stays under the cliff. Native Grok
+/// auto-compact is 85% of 500k (425k), which is already in the 2× zone.
+const GROK_COMPACT_BEFORE_CLIFF: u64 = 180_000;
+/// Second mid-turn steer: stop after the current tool; 200k is next.
+const GROK_CLIFF_URGENT: u64 = 190_000;
+
 /// Home cleanup is one classification request, never an open-ended agent turn.
 const TASK_CLEANUP_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
 
@@ -6235,6 +6258,72 @@ const LIVENESS_PING: &str = "<ps @agency:ping()>\n\nLiveness check, not owner in
      produced no output for a while. Reply with `<ps @agency:pong()>` on its own \
      line to confirm you are still working, then carry on with what you were \
      doing. Do not describe this check to the owner.";
+
+/// In-channel Grok steer at 180k. Compact waits until this turn ends so
+/// in-flight tools are not torn down; this is how unfinished work reaches disk
+/// first. Delivered as a mid-turn user message (`_x.ai/interject`).
+fn grok_cliff_steer(used: u64, urgent: bool) -> String {
+    if urgent {
+        format!(
+            "Context is {used}/500000 — the 200k long-context price doubling is next.\n\
+             Stop after the current tool. Write any unfinished intent to disk now \
+             (the files you were changing, and the next concrete step).\n\
+             Do not open more files, spawn more work, or start a new investigation.\n\
+             After this turn AgencyZero will take durable notes and compact."
+        )
+    } else {
+        format!(
+            "Context is {used}/500000. Grok doubles input/output prices at 200k \
+             for the whole prompt.\n\
+             Checkpoint now: persist unfinished work to disk (files in progress, \
+             next concrete step). Finish the current edit; do not start a new \
+             large investigation or more large reads.\n\
+             After this turn AgencyZero will take durable notes (outside the \
+             conversation) and compact."
+        )
+    }
+}
+
+/// Persist the auto-steer as a user row so the transcript shows what AZ
+/// injected, then deliver it on the same in-channel path as an owner follow-up.
+async fn persist_grok_cliff_steer(
+    app: &AppHandle,
+    tables: &Tables,
+    project_id: &str,
+    agent: Agent,
+    model: &str,
+    body: &str,
+) -> Option<String> {
+    let row = MessageRow {
+        id: id("msg"),
+        project_id: project_id.to_string(),
+        item_id: String::new(),
+        author: "user".into(),
+        agent: agent_wire_name(agent).into(),
+        moderation: String::new(),
+        model: model.to_string(),
+        permission: "auto".into(),
+        usage: String::new(),
+        stop: "completed".into(),
+        exit_code: -1,
+        body: body_head(body),
+        created_at: now(),
+    };
+    if let Err(error) = tables.message.insert(row.clone()).await {
+        crate::log!(
+            crate::log::Level::Warn,
+            "run",
+            "{project_id}: could not persist the Grok cliff steer: {error}"
+        );
+        return None;
+    }
+    store_body(tables, &row.id, project_id, body).await;
+    let mut message = MessageDto::from(row);
+    message.body = body.to_string();
+    let message_id = message.id.clone();
+    let _ = app.emit("message:appended", message);
+    Some(message_id)
+}
 
 /// The live run in each project: a reservation that there is at most one, and
 /// the signal that stops it.
@@ -7890,6 +7979,388 @@ fn compacted_context_tokens(before: u64) -> u64 {
     }
 }
 
+/// Standing occupancy to store on the compact system row.
+///
+/// Learn and `/compact` are 1-call turns whose billed `inputTokens` are the
+/// *old* window (session 01a09ca7: learn 223k, compact 264k, live fill 29k).
+/// Folding that into `context_tokens` made the next prompt look like 260k.
+/// Keep a post-compact `session/info` / `tokens_after` figure when it is
+/// clearly the new fill; otherwise estimate.
+fn post_compact_standing(
+    agent: Agent,
+    learned: Option<&agent_abstraction::Usage>,
+    compact: Option<&agent_abstraction::Usage>,
+) -> agent_abstraction::Usage {
+    let before = learned.and_then(|usage| usage.context_tokens).or_else(|| {
+        compact
+            .and_then(|usage| usage.context_tokens)
+            .filter(|&used| used >= GROK_COMPACT_BEFORE_CLIFF)
+    });
+    let mut standing = agent_abstraction::Usage::default();
+    if let Some(usage) = learned {
+        let mut copy = *usage;
+        copy.context_tokens = None;
+        standing.accumulate(&copy);
+    }
+    if let Some(usage) = compact {
+        let mut copy = *usage;
+        if copy
+            .context_tokens
+            .is_some_and(|used| used >= GROK_COMPACT_BEFORE_CLIFF)
+        {
+            copy.context_tokens = None;
+        }
+        standing.accumulate(&copy);
+    }
+    if agent == Agent::Grok {
+        if standing.context_tokens.is_none() {
+            standing.context_tokens =
+                Some(compacted_context_tokens(before.unwrap_or(0)).max(8_000));
+        }
+        standing.context_window = standing.context_window.or(Some(500_000));
+    } else {
+        standing.context_tokens = standing
+            .context_tokens
+            .or(before)
+            .map(compacted_context_tokens);
+    }
+    standing
+}
+
+/// In-channel continue after compact so unfinished work does not sit idle.
+fn compact_resume_prompt() -> &'static str {
+    "Compaction finished. Continue the in-flight work. Unfinished intent is on \
+     disk in this project's memory directory; notes survived outside the \
+     conversation. Do not recap. Do not wait for another owner message."
+}
+
+/// TUI markup. Grok's interactive client parses `<tool_call>` and runs it;
+/// ACP `session/prompt` does not. The model then `end_turn`s, Running stays
+/// empty, and the XML sits in the transcript (session 01a09ca7 turns 14–15).
+fn grok_leaked_xml_tools(text: &str) -> bool {
+    text.contains("<tool_call>")
+}
+
+/// A `<ps …>` span on its own line whose namespace is not the one this app
+/// declares, captured whole.
+///
+/// # Recognise and record, never dispatch
+///
+/// Two different operations hide under "parse". Prompt Syntax 13.2 makes model
+/// output inert unless it names the declared authoring namespace, and
+/// `directives.rs` refuses a foreign one so it can never reach the executor.
+/// That refusal is a security boundary and does not move: `@antml:invoke` is
+/// the *sending* model's own tool-call vocabulary, and making a foreign
+/// namespace live would let one session's malformed tool call address another
+/// session's executor.
+///
+/// Reading a span to understand and record it is the other operation, and it
+/// grants no authority at all. The span was sent for a purpose: the verb and
+/// arguments are the model's stated intent, and dropping them loses the only
+/// evidence of what the turn meant to do. So the whole span is kept — for the
+/// task log, and to hand back in the correction.
+///
+/// A leaked span is a tool call the model believed it made: it ends the turn
+/// awaiting a result, nothing ran, and the work silently vanishes. The same
+/// failure as [`grok_leaked_xml_tools`], reached through a different grammar.
+///
+/// Deliberately narrow: only a well-formed span alone on its line counts, so
+/// prose *about* Prompt Syntax (this codebase discusses it constantly) and any
+/// quoted or fenced example stay clear of it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ForeignSpan {
+    /// The namespace that is not live here, e.g. `antml`.
+    namespace: String,
+    /// The verb it tried to address, e.g. `invoke`. Empty if unparseable.
+    verb: String,
+    /// The span exactly as the model wrote it, arguments and all.
+    raw: String,
+}
+
+/// Every leaked span in the turn, in the order the model wrote them.
+///
+/// All of them, never just the first. A turn that blended grammars once will
+/// usually do it repeatedly, and each span is a separate call the model
+/// believed it made. Reporting one and dropping the rest would hide the size
+/// of the problem behind the very silence this exists to remove: the owner
+/// must be able to see exactly what was attempted, with no mystery about
+/// which tools were called.
+fn leaked_foreign_namespace_spans(text: &str) -> Vec<ForeignSpan> {
+    let mut fenced = FenceState::default();
+    let mut found = Vec::new();
+    for line in text.lines() {
+        let Some(trimmed) = authored_directive_line(line, &mut fenced) else {
+            continue;
+        };
+        let Some(header) = trimmed.strip_prefix("<ps") else {
+            continue;
+        };
+        if !header.chars().next().is_some_and(char::is_whitespace) || !trimmed.ends_with('>') {
+            continue;
+        }
+        let Some((namespace, rest)) = header
+            .trim_start()
+            .strip_prefix('@')
+            .and_then(|rest| rest.split_once(':'))
+        else {
+            continue;
+        };
+        if namespace.is_empty()
+            || !namespace
+                .chars()
+                .all(|ch| ch.is_ascii_alphanumeric() || ch == '-' || ch == '_')
+            || namespace.eq_ignore_ascii_case(crate::directives::SURFACE.namespace)
+        {
+            continue;
+        }
+        // The verb runs to `(` for a call, or to the closing `>` without one.
+        let verb = rest
+            .split_once('(')
+            .map_or_else(|| rest.trim_end_matches('>').trim(), |(verb, _)| verb.trim())
+            .to_string();
+        found.push(ForeignSpan {
+            namespace: namespace.to_string(),
+            verb,
+            raw: trimmed.to_string(),
+        });
+    }
+    found
+}
+
+/// Render every leaked span as a list, one fenced block each.
+///
+/// Verbatim and unabridged: no truncation, no "and N more". The point of the
+/// record is that the owner can see exactly which calls were attempted.
+fn foreign_span_inventory(spans: &[ForeignSpan]) -> String {
+    spans
+        .iter()
+        .map(|span| {
+            let verb = if span.verb.is_empty() {
+                String::new()
+            } else {
+                format!(" — verb `{}`", span.verb)
+            };
+            format!(
+                "- `@{}`{verb}\n\n  ```text\n  {}\n  ```",
+                span.namespace, span.raw
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// Put the leak in the transcript the owner actually reads.
+///
+/// Not a study row: study is opt-in and its `detail` is counters-only by
+/// design, so it cannot hold the span text and is not the owner's task log.
+/// A system row is the app's own voice, which is what this is — AgencyZero
+/// reporting that something addressed it and was not run.
+async fn persist_foreign_namespace_leak(
+    app: &AppHandle,
+    tables: &Tables,
+    project_id: &str,
+    agent: Agent,
+    model: &str,
+    spans: &[ForeignSpan],
+) {
+    if spans.is_empty() {
+        return;
+    }
+    let mut namespaces: Vec<&str> = spans.iter().map(|span| span.namespace.as_str()).collect();
+    namespaces.sort_unstable();
+    namespaces.dedup();
+    let heading = if spans.len() == 1 {
+        "A `<ps …>` span was not executed.".to_string()
+    } else {
+        format!("{} `<ps …>` spans were not executed.", spans.len())
+    };
+    let body = format!(
+        "{heading}\n\n\
+         {} not a live namespace in this application, so {} stayed inert text \
+         and nothing ran. Recorded here in full because {} sent for a purpose: \
+         if {} tool calls, those calls did not happen.\n\n{}",
+        if namespaces.len() == 1 {
+            format!("`@{}` is", namespaces[0])
+        } else {
+            format!(
+                "{} are",
+                namespaces
+                    .iter()
+                    .map(|namespace| format!("`@{namespace}`"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
+        },
+        if spans.len() == 1 { "it" } else { "they" },
+        if spans.len() == 1 { "it was" } else { "they were" },
+        if spans.len() == 1 {
+            "it was a tool call"
+        } else {
+            "they were tool calls"
+        },
+        foreign_span_inventory(spans)
+    );
+    let row = MessageRow {
+        id: id("msg"),
+        project_id: project_id.to_string(),
+        item_id: String::new(),
+        author: "system".into(),
+        agent: agent_wire_name(agent).into(),
+        moderation: String::new(),
+        model: model.to_string(),
+        permission: String::new(),
+        usage: String::new(),
+        stop: "completed".into(),
+        exit_code: 0,
+        body: body_head(&body),
+        created_at: now(),
+    };
+    if let Err(error) = tables.message.insert(row.clone()).await {
+        crate::log!(
+            crate::log::Level::Warn,
+            "run",
+            "{project_id}: could not record {} inert foreign span(s): {error}",
+            spans.len()
+        );
+        return;
+    }
+    store_body(tables, &row.id, project_id, &body).await;
+    let mut message = MessageDto::from(row);
+    message.body = body;
+    let _ = app.emit("message:appended", message);
+}
+
+/// Tell the model its spans did not execute, and give it back what it wrote.
+///
+/// Quoting them is the point. The model's intent lives in the verbs and
+/// arguments, and a correction that only says "that failed" throws away the
+/// very thing needed to retry. Naming both live surfaces matters too: without
+/// that the model cannot tell whether it wanted a native tool or an
+/// AgencyZero directive, and the usual retry is the same span with the
+/// namespace edited.
+fn foreign_namespace_resume_prompt(spans: &[ForeignSpan]) -> String {
+    let (subject, were, them, they, subj) = if spans.len() == 1 {
+        ("This span", "was", "it", "it was", "it")
+    } else {
+        ("These spans", "were", "them", "they were", "they")
+    };
+    format!(
+        "{subject} in your last reply {were} not executed:\n\n{}\n\n\
+         Those namespaces are not live here. AgencyZero declares `@{agency}` \
+         only; every other namespace stays inert text, so {subj} reached the \
+         transcript verbatim and nothing ran.\n\n\
+         If {they} tool calls, make {them} natively now — the calls did not \
+         happen and their results never came back. If {they} meant to be \
+         AgencyZero directives, reissue with `@{agency}:` and a verb from the \
+         per-turn list. Continue the in-flight work; do not recap, and do not \
+         wait for another owner message.",
+        foreign_span_inventory(spans),
+        agency = crate::directives::SURFACE.namespace
+    )
+}
+
+fn should_resume_after_foreign_namespace(prompt: &str, cancelled: bool) -> bool {
+    !cancelled && !prompt.contains("was not executed:")
+}
+
+fn grok_xml_resume_prompt() -> &'static str {
+    "Those XML tool blocks in the last reply were not executed. AgencyZero \
+     talks to Grok over ACP: tools must be native function calls, not markup \
+     in assistant text. Continue the in-flight work with native tools only. \
+     Do not recap. Do not wait for another owner message."
+}
+
+fn should_resume_after_xml_leak(agent: Agent, prompt: &str, cancelled: bool) -> bool {
+    agent == Agent::Grok
+        && !cancelled
+        && !prompt.contains("Those XML tool blocks in the last reply were not executed")
+}
+
+/// Sent every Grok turn via `--rules` / `_meta.rules`. Compaction-immune.
+fn grok_system_rules() -> &'static str {
+    "Reply only to the current user request. AgencyZero Prompt Syntax \
+     item/PR lists in the prompt are structured state, not a question. \
+     Do not recap prior turns or enumerate items unless asked. \
+     Do not call enter_plan_mode or exit_plan_mode — they hang over ACP; \
+     write plans as ordinary assistant text. Do not edit ~/.grok/config.toml. \
+     Never write XML tool markup in assistant text — ACP does not execute it \
+     and the turn ends. Use native tools only."
+}
+
+fn last_run_permission(tables: &Tables, project_id: &str, agent: Agent) -> Option<String> {
+    tables
+        .message
+        .select_by_project_id(project_id.to_string())
+        .execute()
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|row| {
+            row.agent == agent_wire_name(agent)
+                && (row.author == "user" || row.author == "agent")
+                && !row.permission.is_empty()
+        })
+        .max_by(|left, right| left.created_at.cmp(&right.created_at))
+        .map(|row| row.permission)
+}
+
+fn spawn_resume_after_compact(app: AppHandle, project_id: String, agent: Agent, model: String) {
+    spawn_host_resume(
+        app,
+        project_id,
+        agent,
+        model,
+        compact_resume_prompt().into(),
+        "compact",
+    );
+}
+
+fn spawn_host_resume(
+    app: AppHandle,
+    project_id: String,
+    agent: Agent,
+    model: String,
+    body: String,
+    reason: &'static str,
+) {
+    tauri::async_runtime::spawn(async move {
+        tokio::task::yield_now().await;
+        let state = app.state::<crate::AppState>();
+        let permission = last_run_permission(&state.tables, &project_id, agent)
+            .or_else(|| (agent == Agent::Grok).then(|| "auto".into()));
+        match send_message(
+            app.clone(),
+            SendMessageInput {
+                project_id: project_id.clone(),
+                body,
+                retry_message_id: None,
+                reply_question_id: None,
+                item_id: None,
+                agent: Some(agent_wire_name(agent).into()),
+                model: if model.is_empty() { None } else { Some(model) },
+                permission,
+                effort: None,
+                extra_thinking: None,
+                stateless: false,
+                study: None,
+            },
+            state,
+        )
+        .await
+        {
+            Ok(_) => crate::log!(
+                crate::log::Level::Info,
+                "run",
+                "{project_id}: resumed after {reason}"
+            ),
+            Err(error) => crate::log!(
+                crate::log::Level::Warn,
+                "run",
+                "{project_id}: could not resume after {reason}: {error}"
+            ),
+        }
+    });
+}
+
 /// Summarise the conversation so far and continue from the summary.
 ///
 /// The answer to a session that has filled its context window: past about
@@ -8004,9 +8475,13 @@ pub async fn compact_project(
     // from the project's directories and never asked the session where it
     // lives, so compacting a project whose session was recorded elsewhere
     // failed every time while an ordinary turn on the same project worked.
-    if agent == Agent::Claude
+    if matches!(agent, Agent::Claude | Agent::Grok)
         && let Some(session) = session.as_deref()
-        && let Some(home) = crate::chat_import::claude_session_cwd(session)
+        && let Some(home) = match agent {
+            Agent::Claude => crate::chat_import::claude_session_cwd(session),
+            Agent::Grok => crate::chat_import::grok_session_cwd(session),
+            _ => None,
+        }
         && home != cwd
     {
         if !dirs.contains(&cwd) {
@@ -8232,6 +8707,7 @@ pub async fn compact_project(
      */
     let mut outcome_note = None;
     let mut spoken = String::new();
+    let mut compact_live = agent_abstraction::Usage::default();
     let mut compact_model = state
         .tables
         .message
@@ -8261,6 +8737,7 @@ pub async fn compact_project(
                 ok,
                 error,
             }) => outcome_note = Some((ok, error)),
+            agent_abstraction::Event::Usage(usage) => compact_live.accumulate(&usage),
             // Kept only as a fallback reason. A compaction that works says
             // nothing here, so text almost always means it did not.
             agent_abstraction::Event::Text(text) => spoken.push_str(&text),
@@ -8339,24 +8816,31 @@ pub async fn compact_project(
         body.clone(),
     );
 
-    let mut compact_usage = agent_abstraction::Usage::default();
-    if let Some((_, usage)) = &learned {
-        compact_usage.accumulate(usage);
-    }
+    let mut compact_usage = compact_live;
     if let Ok(outcome) = &finished {
         compact_usage.accumulate(&outcome.usage);
     }
-    let has_usage = compact_usage.cost_usd.is_some()
-        || compact_usage.input_tokens.is_some()
-        || compact_usage.output_tokens.is_some()
-        || compact_usage.cache_read_tokens.is_some()
-        || compact_usage.cache_write_tokens.is_some();
-    let usage_json = if has_usage {
-        let mut standing_usage = compact_usage;
-        if ok {
-            standing_usage.context_tokens =
-                standing_usage.context_tokens.map(compacted_context_tokens);
+    let standing_usage = if ok {
+        post_compact_standing(
+            agent,
+            learned.as_ref().map(|(_, usage)| usage),
+            Some(&compact_usage),
+        )
+    } else {
+        let mut failed = agent_abstraction::Usage::default();
+        if let Some((_, usage)) = &learned {
+            failed.accumulate(usage);
         }
+        failed.accumulate(&compact_usage);
+        failed
+    };
+    let has_usage = standing_usage.cost_usd.is_some()
+        || standing_usage.input_tokens.is_some()
+        || standing_usage.output_tokens.is_some()
+        || standing_usage.cache_read_tokens.is_some()
+        || standing_usage.cache_write_tokens.is_some()
+        || standing_usage.context_tokens.is_some();
+    let usage_json = if has_usage {
         serde_json::to_string(&UsageDto::from(&standing_usage)).unwrap_or_default()
     } else {
         String::new()
@@ -8393,7 +8877,7 @@ pub async fn compact_project(
         } else {
             compact_model.clone()
         };
-        record_turn_usage(&state.tables, &project_id, agent, &model, &compact_usage).await;
+        record_turn_usage(&state.tables, &project_id, agent, &model, &standing_usage).await;
     }
     let _ = app.emit(
         "run:compaction",
@@ -8408,6 +8892,7 @@ pub async fn compact_project(
     );
 
     if ok {
+        spawn_resume_after_compact(app.clone(), project_id.clone(), agent, compact_model);
         Ok(())
     } else {
         Err(why.unwrap_or_else(|| "the compaction did not complete".into()))
@@ -8513,7 +8998,7 @@ pub async fn reset_project_session(
     } else {
         0
     };
-    let interrupted_provider_turn = if force && agent == Agent::Codex {
+    let interrupted_provider_turn = if force && matches!(agent, Agent::Codex | Agent::Grok) {
         match provider_session.as_deref() {
             Some(session_id) => {
                 state
@@ -9240,7 +9725,7 @@ pub async fn delete_project(
             );
         }
     }
-    let mut keys = [Agent::Claude, Agent::Codex, Agent::Copilot]
+    let mut keys = [Agent::Claude, Agent::Codex, Agent::Copilot, Agent::Grok]
         .map(|agent| agent_session_key(&id, agent))
         .to_vec();
     keys.extend([
@@ -9249,6 +9734,7 @@ pub async fn delete_project(
         crate::notes::checkpoint_mark_key(&id, "claude"),
         crate::notes::checkpoint_mark_key(&id, "codex"),
         crate::notes::checkpoint_mark_key(&id, "copilot"),
+        crate::notes::checkpoint_mark_key(&id, "grok"),
         // The notes kept across compactions. Ids are not recycled, so this is
         // only an orphan — but it is an orphan that would be fed to an agent as
         // standing instructions if one ever were.
@@ -9956,8 +10442,12 @@ fn invocation_scope(
     // the honest arrangement: the session decides where it runs, the project
     // decides what it may touch.
     let (cwd, extra_dirs) = match resume.as_deref().filter(|id| !id.is_empty()) {
-        Some(session) if agent == Agent::Claude => {
-            match crate::chat_import::claude_session_cwd(session) {
+        Some(session) if matches!(agent, Agent::Claude | Agent::Grok) => {
+            match match agent {
+                Agent::Claude => crate::chat_import::claude_session_cwd(session),
+                Agent::Grok => crate::chat_import::grok_session_cwd(session),
+                _ => None,
+            } {
                 Some(home) if home != cwd => {
                     let mut granted = extra_dirs;
                     for dir in std::iter::once(cwd).chain(std::mem::take(&mut granted)) {
@@ -11093,7 +11583,11 @@ async fn drive_run(
      * theirs, the format is ours.
      */
     let is_task_manager = project_id == crate::tasks::TASK_MANAGER_ID;
-    let provider_handoff = if stateless {
+    let provider_handoff = if stateless
+        || (agent == Agent::Grok && resume.as_deref().is_some_and(|id| !id.is_empty()))
+    {
+        // Grok ACP session/load already has the native transcript. Re-attaching
+        // the AZ thread as a "handoff" made it recap the whole session.
         String::new()
     } else {
         provider_handoff(&tables, &project_id, &turn_id, agent)
@@ -11224,6 +11718,8 @@ async fn drive_run(
         extra_thinking,
         &scope,
     );
+    // Grok operating rules ride the same system string as notes/AgencyZero.md
+    // so a later `request.system = Some(system)` cannot drop them.
     request
         .metadata
         .insert("projectId".into(), project_id.clone().into());
@@ -11269,6 +11765,9 @@ async fn drive_run(
             .unwrap_or_default()
     };
     let mut system = String::new();
+    if agent == Agent::Grok {
+        system.push_str(grok_system_rules());
+    }
 
     /*
      * The repository's own rules file, first and whole.
@@ -11586,6 +12085,21 @@ async fn drive_run(
             }
         }
     });
+    let (cliff_steer_tx, mut cliff_steer_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
+    let cliff_control = run.control();
+    let cliff_turn_id = turn_id.clone();
+    let cliff_delivery = tokio::spawn(async move {
+        let mut attempt = 0u32;
+        while let Some(body) = cliff_steer_rx.recv().await {
+            attempt = attempt.saturating_add(1);
+            let _ = cliff_control
+                .send(
+                    &mid_turn_owner_context(&body),
+                    &format!("{cliff_turn_id}:cliff:{attempt}"),
+                )
+                .await;
+        }
+    });
     let injection_delivery = tokio::spawn(async move {
         while let Some(injected) = injection_delivery_rx.recv().await {
             let delivered = deliver_injection(
@@ -11686,6 +12200,9 @@ async fn drive_run(
      * eye only — `Outcome::usage` remains the record.
      */
     let mut turn_usage = agent_abstraction::Usage::default();
+    let mut grok_steered_180 = false;
+    let mut grok_steered_190 = false;
+    let mut compact_resume_steered = false;
 
     // Set by the cancel signal, wherever the loop happens to be waiting when
     // it lands. The loop exits, and the tail below tears the agent down.
@@ -12561,12 +13078,14 @@ async fn drive_run(
                     is_blocking: limit.is_blocking(),
                     is_warning,
                     at: now(),
+                    used_percent: limit.used_percent,
                 };
                 if let Ok(mut kept) = limits.lock() {
                     // Plain `allowed` is a heartbeat: it replaces nothing and
                     // is not worth keeping, so a warning stays visible until
                     // the provider says something else that matters.
-                    if report.is_blocking || report.is_warning {
+                    // Grok's weekly % rides an `allowed` record; keep that.
+                    if report.is_blocking || report.is_warning || report.used_percent.is_some() {
                         kept.insert((project_id.clone(), agent), report.clone());
                     } else {
                         kept.remove(&(project_id.clone(), agent));
@@ -12623,6 +13142,22 @@ async fn drive_run(
                         "error": why,
                     }),
                 );
+                if done && ok && !compact_resume_steered {
+                    compact_resume_steered = true;
+                    let body = compact_resume_prompt().to_string();
+                    crate::log!(
+                        crate::log::Level::Info,
+                        "run",
+                        "{project_id}: compact finished mid-turn; resuming in-channel"
+                    );
+                    if let Some(message_id) =
+                        persist_grok_cliff_steer(&app, &tables, &project_id, agent, &model, &body)
+                            .await
+                    {
+                        emit_message_receipt(&app, &project_id, &message_id, "sent");
+                    }
+                    let _ = cliff_steer_tx.send(body);
+                }
             }
             Event::Usage(usage) => {
                 /*
@@ -12675,6 +13210,50 @@ async fn drive_run(
                         "estimatedCostUsd": estimated_cost_usd,
                     }),
                 );
+                if agent == Agent::Grok
+                    && let Some(used) = turn_usage.context_tokens
+                {
+                    let urgent = used >= GROK_CLIFF_URGENT;
+                    let wrap = used >= GROK_COMPACT_BEFORE_CLIFF;
+                    if (urgent && !grok_steered_190) || (wrap && !grok_steered_180 && !urgent) {
+                        if urgent {
+                            grok_steered_190 = true;
+                            grok_steered_180 = true;
+                        } else {
+                            grok_steered_180 = true;
+                        }
+                        let body = grok_cliff_steer(used, urgent);
+                        crate::log!(
+                            crate::log::Level::Info,
+                            "run",
+                            "{project_id}: Grok context {used}; steering to checkpoint before compact"
+                        );
+                        note_io(
+                            &app,
+                            &io,
+                            &project_id,
+                            "sent",
+                            "steer",
+                            format!(
+                                "auto cliff {}k: persist work, then compact after this turn",
+                                used / 1_000
+                            ),
+                        );
+                        if let Some(message_id) = persist_grok_cliff_steer(
+                            &app,
+                            &tables,
+                            &project_id,
+                            agent,
+                            &model,
+                            &body,
+                        )
+                        .await
+                        {
+                            emit_message_receipt(&app, &project_id, &message_id, "sent");
+                        }
+                        let _ = cliff_steer_tx.send(body);
+                    }
+                }
             }
             Event::Started { session, model } => {
                 observed_session.clone_from(&session);
@@ -12763,6 +13342,7 @@ async fn drive_run(
     // Closes the ping worker's queue so it can finish; a ping still in flight
     // is answered into a run that is already ending, which is harmless.
     drop(ping_request_tx);
+    drop(cliff_steer_tx);
 
     // A final ordinary line has no newline to make it classifiable during the
     // stream. Release it now; an authored PS tail stays private and is applied
@@ -12842,6 +13422,13 @@ async fn drive_run(
             "{project_id}: liveness ping worker failed: {error}"
         );
     }
+    if let Err(error) = cliff_delivery.await {
+        crate::log!(
+            crate::log::Level::Error,
+            "run",
+            "{project_id}: Grok cliff-steer worker failed: {error}"
+        );
+    }
 
     /*
      * The tombstone check. `delete_project` cancels the run and waits for
@@ -12883,6 +13470,8 @@ async fn drive_run(
         return;
     }
 
+    let mut grok_xml_leak = false;
+    let mut foreign_namespace_leaks: Vec<ForeignSpan> = Vec::new();
     match result {
         Ok(outcome) => {
             // A successful reopen ends any bounded transient-resume recovery
@@ -12896,6 +13485,16 @@ async fn drive_run(
              * text remains the fallback for a run that never streamed.
              */
             let used_streamed_body = !streamed_text.trim().is_empty();
+            grok_xml_leak = grok_leaked_xml_tools(if used_streamed_body {
+                &streamed_text
+            } else {
+                &outcome.text
+            });
+            foreign_namespace_leaks = leaked_foreign_namespace_spans(if used_streamed_body {
+                &streamed_text
+            } else {
+                &outcome.text
+            });
             let mut body = if used_streamed_body {
                 streamed_text
             } else {
@@ -13407,6 +14006,12 @@ async fn drive_run(
         checkpoint_dir.as_deref(),
     )
     .await;
+    let grok_auto_compact = agent == Agent::Grok
+        && !stateless
+        && !cancelled
+        && turn_usage
+            .context_tokens
+            .is_some_and(|used| used >= GROK_COMPACT_BEFORE_CLIFF);
     match tables
         .kv_put(&format!("agency-proxy-complete:{turn_id}"), now())
         .await
@@ -13426,6 +14031,71 @@ async fn drive_run(
                 "run",
                 "{project_id}: could not mark proxy run {turn_id} consumed: {error}"
             );
+        }
+    }
+    // Host-owned Grok compact has to wait until this run's slot is free.
+    drop(_reservation);
+    if grok_auto_compact {
+        crate::log!(
+            crate::log::Level::Info,
+            "run",
+            "{project_id}: Grok context {} ≥ {GROK_COMPACT_BEFORE_CLIFF}; compacting before the 200k price cliff",
+            turn_usage.context_tokens.unwrap_or(0)
+        );
+        let app = app.clone();
+        let project_id = project_id.clone();
+        tauri::async_runtime::spawn(async move {
+            let state = app.state::<crate::AppState>();
+            if let Err(error) =
+                compact_project(app.clone(), project_id.clone(), Some("grok".into()), state).await
+            {
+                crate::log!(
+                    crate::log::Level::Warn,
+                    "run",
+                    "{project_id}: could not auto-compact before the 200k cliff: {error}"
+                );
+            }
+        });
+    } else if grok_xml_leak && should_resume_after_xml_leak(agent, &prompt_echo, cancelled) {
+        crate::log!(
+            crate::log::Level::Info,
+            "run",
+            "{project_id}: Grok wrote XML tool markup; ACP did not execute it — resuming"
+        );
+        spawn_host_resume(
+            app,
+            project_id,
+            agent,
+            model,
+            grok_xml_resume_prompt().into(),
+            "xml-tool-leak",
+        );
+    } else if !foreign_namespace_leaks.is_empty() {
+        // Every span, individually, so the log never implies fewer calls were
+        // attempted than actually were.
+        for span in &foreign_namespace_leaks {
+            crate::log!(
+                crate::log::Level::Info,
+                "run",
+                "{project_id}: <ps @{}:{}> is not a live namespace here; it was not executed",
+                span.namespace,
+                span.verb
+            );
+        }
+        // Record whatever happens next: the spans were sent for a purpose, and
+        // a cancelled or looping run must not be the reason they vanish.
+        persist_foreign_namespace_leak(
+            &app,
+            &tables,
+            &project_id,
+            agent,
+            &model,
+            &foreign_namespace_leaks,
+        )
+        .await;
+        if should_resume_after_foreign_namespace(&prompt_echo, cancelled) {
+            let body = foreign_namespace_resume_prompt(&foreign_namespace_leaks);
+            spawn_host_resume(app, project_id, agent, model, body, "foreign-namespace-span");
         }
     }
 }
@@ -14456,6 +15126,7 @@ mod tests {
         assert_eq!(parse_agent(None), Ok(Agent::Claude));
         assert_eq!(parse_agent(Some("claude")), Ok(Agent::Claude));
         assert_eq!(parse_agent(Some("codex")), Ok(Agent::Codex));
+        assert_eq!(parse_agent(Some("grok")), Ok(Agent::Grok));
         assert!(parse_agent(Some("copilot")).is_err());
         assert!(parse_agent(Some("unknown")).is_err());
     }
@@ -14469,12 +15140,13 @@ mod tests {
         assert_eq!(parse_review_agent(Some("claude")), Ok(Agent::Claude));
         assert_eq!(parse_review_agent(Some("codex")), Ok(Agent::Codex));
         assert_eq!(parse_review_agent(Some("copilot")), Ok(Agent::Copilot));
+        assert_eq!(parse_review_agent(Some("grok")), Ok(Agent::Grok));
         assert!(parse_review_agent(Some("unknown")).is_err());
     }
 
     #[test]
     fn every_review_provider_receives_the_discovery_guard() {
-        for agent in [Agent::Claude, Agent::Codex, Agent::Copilot] {
+        for agent in [Agent::Claude, Agent::Codex, Agent::Copilot, Agent::Grok] {
             let request = read_only_proxy_request(
                 agent,
                 "review this diff".into(),
@@ -15254,6 +15926,8 @@ mod tests {
         // this app would only ever answer yes to.
         assert!(!should_route_approvals("auto", Agent::Claude));
         assert!(should_route_approvals("ask", Agent::Claude));
+        assert!(should_route_approvals("auto", Agent::Grok));
+        assert!(should_route_approvals("ask", Agent::Grok));
 
         // Only Auto answers for itself. Ask must still reach a human.
         assert!(auto_allows("auto"));
@@ -16307,6 +16981,188 @@ mod tests {
         assert_eq!(compacted_context_tokens(0), 0);
         assert_eq!(compacted_context_tokens(167_354), 8_000);
         assert_eq!(compacted_context_tokens(900_000), 18_000);
+    }
+
+    #[test]
+    fn grok_post_compact_drops_learn_and_compact_window_as_occupancy() {
+        let mut learned = agent_abstraction::Usage::default();
+        learned.input_tokens = Some(223_697);
+        learned.context_tokens = Some(223_697);
+        learned.context_window = Some(500_000);
+        let mut compact = agent_abstraction::Usage::default();
+        compact.input_tokens = Some(264_675);
+        compact.context_tokens = Some(264_675);
+        compact.context_window = Some(500_000);
+        let standing = post_compact_standing(Agent::Grok, Some(&learned), Some(&compact));
+        assert_eq!(standing.context_tokens, Some(8_000));
+        assert_eq!(standing.context_window, Some(500_000));
+        assert_eq!(standing.input_tokens, Some(223_697 + 264_675));
+    }
+
+    #[test]
+    fn grok_post_compact_keeps_session_info_fill() {
+        let mut learned = agent_abstraction::Usage::default();
+        learned.context_tokens = Some(223_697);
+        let mut compact = agent_abstraction::Usage::default();
+        compact.context_tokens = Some(28_978);
+        compact.context_window = Some(500_000);
+        let standing = post_compact_standing(Agent::Grok, Some(&learned), Some(&compact));
+        assert_eq!(standing.context_tokens, Some(28_978));
+    }
+
+    #[test]
+    fn compact_resume_prompt_tells_the_agent_to_continue() {
+        assert!(compact_resume_prompt().contains("Compaction finished"));
+        assert!(compact_resume_prompt().contains("Continue"));
+    }
+
+    /// The reported case: another session sent `<ps @antml:invoke>` and it
+    /// rendered verbatim. `antml` is the sending model's own tool-call
+    /// namespace, never one AgencyZero declares.
+    #[test]
+    fn a_foreign_namespace_span_is_detected_as_a_leak() {
+        let spans = leaked_foreign_namespace_spans("<ps @antml:invoke>");
+        assert_eq!(spans.len(), 1);
+        assert_eq!(spans[0].namespace, "antml");
+        assert_eq!(spans[0].verb, "invoke");
+        assert_eq!(spans[0].raw, "<ps @antml:invoke>");
+    }
+
+    /// The span was sent for a purpose, so the verb and every argument survive
+    /// detection. Losing them would repeat the silent drop this fix exists to
+    /// stop: the arguments are the only record of what the turn meant to do.
+    #[test]
+    fn a_leaked_span_keeps_the_verb_and_arguments() {
+        let raw = r#"<ps @antml:invoke(name: "Bash", command: "cargo test")>"#;
+        let spans = leaked_foreign_namespace_spans(&format!("Working.\n{raw}\nMore."));
+        assert_eq!(spans.len(), 1);
+        assert_eq!(spans[0].verb, "invoke");
+        assert_eq!(spans[0].raw, raw, "arguments must survive for the task log");
+    }
+
+    /// Scope must never be hidden. A turn that blends grammars once usually
+    /// does it repeatedly, and each span is a separate call the model believed
+    /// it made — reporting one would understate what was attempted.
+    #[test]
+    fn every_leaked_span_is_captured_not_just_the_first() {
+        let text = "Working.\n\
+             <ps @antml:invoke(name: \"Bash\", command: \"cargo test\")>\n\
+             Some prose in between.\n\
+             <ps @antml:invoke(name: \"Read\", file: \"/tmp/a\")>\n\
+             <ps @other:do_thing()>\n";
+        let spans = leaked_foreign_namespace_spans(text);
+        assert_eq!(spans.len(), 3, "all three spans must be reported");
+        assert!(spans[0].raw.contains("cargo test"));
+        assert!(spans[1].raw.contains("/tmp/a"));
+        assert_eq!(spans[2].namespace, "other");
+        assert_eq!(spans[2].verb, "do_thing");
+
+        // The record and the correction both carry all of them, verbatim.
+        let inventory = foreign_span_inventory(&spans);
+        assert!(inventory.contains("cargo test"));
+        assert!(inventory.contains("/tmp/a"));
+        assert!(inventory.contains("do_thing"));
+        let correction = foreign_namespace_resume_prompt(&spans);
+        for span in &spans {
+            assert!(
+                correction.contains(&span.raw),
+                "every span must reach the model: {}",
+                span.raw
+            );
+        }
+    }
+
+    /// The correction hands the span back verbatim, so the model can reissue
+    /// the call instead of guessing what it had written.
+    #[test]
+    fn the_correction_quotes_the_span_and_names_both_surfaces() {
+        let raw = r#"<ps @antml:invoke(name: "Bash", command: "cargo test")>"#;
+        let spans = leaked_foreign_namespace_spans(raw);
+        let correction = foreign_namespace_resume_prompt(&spans);
+        assert!(correction.contains(raw), "the span itself must come back");
+        assert!(correction.contains("cargo test"), "arguments must survive");
+        assert!(correction.contains("@agency"), "the live surface is named");
+        assert!(correction.contains("did not happen"));
+    }
+
+    /// The app's own surface is live, not a leak, and must never trip this.
+    #[test]
+    fn the_declared_namespace_is_never_a_leak() {
+        assert!(
+            leaked_foreign_namespace_spans(
+                r#"<ps @agency:items.state(id: "item-a", status: "active")>"#
+            )
+            .is_empty()
+        );
+        assert!(leaked_foreign_namespace_spans("<ps @agency:pong()>").is_empty());
+    }
+
+    /// PS inertness decides what counts. A quoted, fenced or indented example
+    /// is not something the model emitted as a span, and this file and the
+    /// per-turn block both discuss `<ps …>` constantly.
+    #[test]
+    fn quoted_and_fenced_foreign_spans_are_not_leaks() {
+        assert!(leaked_foreign_namespace_spans("> <ps @antml:invoke>").is_empty());
+        assert!(leaked_foreign_namespace_spans("    <ps @antml:invoke>").is_empty());
+        assert!(
+            leaked_foreign_namespace_spans("```text\n<ps @antml:invoke>\n```").is_empty()
+        );
+        // Inline, not alone on its line: prose about the syntax.
+        assert!(
+            leaked_foreign_namespace_spans("The span <ps @antml:invoke> rendered raw.")
+                .is_empty()
+        );
+        // Prose that merely mentions a namespace.
+        assert!(
+            leaked_foreign_namespace_spans("The antml: namespace is not live here.").is_empty()
+        );
+    }
+
+    /// The correction must not re-trigger on its own echoed text, or the run
+    /// loop resumes forever.
+    #[test]
+    fn the_foreign_namespace_correction_does_not_loop() {
+        let spans = leaked_foreign_namespace_spans("<ps @antml:invoke>");
+        let correction = foreign_namespace_resume_prompt(&spans);
+        assert!(!should_resume_after_foreign_namespace(&correction, false));
+        assert!(!should_resume_after_foreign_namespace("anything", true));
+        assert!(should_resume_after_foreign_namespace("ordinary prompt", false));
+    }
+
+    #[test]
+    fn grok_xml_tool_markup_is_a_leak() {
+        assert!(grok_leaked_xml_tools(
+            "Working.\n<tool_call>\nlist_dir(target_directory=/tmp)\n"
+        ));
+        assert!(!grok_leaked_xml_tools("Working. Opening the benches next."));
+    }
+
+    #[test]
+    fn grok_xml_resume_does_not_loop_on_its_own_prompt() {
+        assert!(should_resume_after_xml_leak(
+            Agent::Grok,
+            "using the primitives can you construct any benchmark",
+            false
+        ));
+        assert!(!should_resume_after_xml_leak(
+            Agent::Grok,
+            grok_xml_resume_prompt(),
+            false
+        ));
+        assert!(!should_resume_after_xml_leak(
+            Agent::Grok,
+            "using the primitives",
+            true
+        ));
+        assert!(!should_resume_after_xml_leak(Agent::Claude, "hi", false));
+    }
+
+    #[test]
+    fn grok_system_rules_forbid_xml_tool_markup() {
+        let rules = grok_system_rules();
+        assert!(rules.contains("native tools"));
+        assert!(rules.contains("XML tool markup"));
+        assert!(rules.contains("enter_plan_mode"));
     }
 
     #[test]

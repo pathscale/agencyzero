@@ -653,14 +653,15 @@ mod tests {
         let _ = std::fs::remove_dir_all(root);
     }
 
-    #[test]
-    fn semantic_preflight_opens_and_drains_a_real_worktable_store() {
+    #[tokio::test]
+    async fn semantic_preflight_opens_and_drains_a_real_worktable_store() {
         let root = scratch("semantic");
         let store = root.join("db");
-        let tables =
-            nagoya::block_on(crate::db::tables::Tables::open(&store)).expect("real store opens");
-        nagoya::block_on(tables.stamp_schema()).expect("schema stamps");
-        nagoya::block_on(tables.shutdown()).expect("store drains");
+        let tables = crate::db::tables::Tables::open(&store)
+            .await
+            .expect("real store opens");
+        tables.stamp_schema().await.expect("schema stamps");
+        tables.shutdown().await.expect("store drains");
         drop(tables);
 
         load_store_tables(&store).expect("restore preflight accepts the real store");

@@ -9,7 +9,7 @@
 //! calling and interpreting a failure — a host should be able to decide whether
 //! to draw the panel without discovering the answer from an error.
 //!
-//! Today that means **Codex answers and Claude does not**. Claude reports quota
+//! Today that means **Codex answers and Claude and Grok do not**. Claude reports quota
 //! only *during* a run, as `Event::RateLimit`, carrying the window, its reset
 //! time and whether the request was allowed. The percentages its `/usage` screen
 //! shows are not on the wire, and that screen itself says its figures are
@@ -85,6 +85,7 @@ fn from_proxy(provider: ProviderAccountUsage) -> Result<AgentQuota, String> {
         "claude" => Agent::Claude,
         "codex" => Agent::Codex,
         "copilot" => Agent::Copilot,
+        "grok" => Agent::Grok,
         other => {
             return Err(format!(
                 "AgencyProxy reported unknown quota provider: {other}"
@@ -105,6 +106,10 @@ fn from_proxy(provider: ProviderAccountUsage) -> Result<AgentQuota, String> {
         quota.detail = match agent {
             Agent::Claude => "Claude reports quota only during a run, as a rate limit. \
                               Its usage percentages are not on the wire."
+                .into(),
+            Agent::Grok => "Grok's weekly allowance is `_x.ai/billing` \
+                              creditUsagePercent, piggybacked on a send at \
+                              most once a minute."
                 .into(),
             _ => "This agent does not report account-wide usage.".into(),
         };

@@ -97,8 +97,8 @@ const zh = {
   Models: "模型",
   "what each picker offers": "各选择器提供的选项",
   "Re-read from the CLIs": "从 CLI 重新读取",
-  "only Codex can enumerate; the other two stay on the compiled list":
-    "只有 Codex 可动态枚举；另外两个使用编译时列表",
+  "Codex and Grok can enumerate; Claude and Copilot stay on the compiled list":
+    "Codex 和 Grok 可动态枚举；Claude 和 Copilot 使用编译时列表",
   "Task Manager": "任务管理器",
   "the Home conversation that keeps the lists in order": "负责整理列表的主页对话",
   "Task manager agent": "任务管理器智能体",

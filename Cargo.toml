@@ -10,7 +10,7 @@ members = [
 exclude = ["crates/wt-migrate/v2-reader"]
 
 [workspace.package]
-version = "0.8.61"
+version = "0.8.64"
 edition = "2024"
 publish = false
 
@@ -27,7 +27,7 @@ agency-proxy-protocol = "^0.1.8"
 # The GUI and both storage tools compile the same schema against one resolved
 # WorkTable package. A workspace dependency prevents their compatible ranges
 # from drifting into separate copies without freezing the selected patch.
-worktable = "^1.10.0-beta1"
+worktable = { path = "../WorkTable" }
 
 # Heavy deps are declared per-crate on purpose: only apps/gui pulls in the
 # Tauri stack, so agent/proxy builds never trigger a webview toolchain build.

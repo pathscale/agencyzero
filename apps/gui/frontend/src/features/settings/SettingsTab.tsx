@@ -91,6 +91,7 @@ const SOURCE_LABELS = {
 const AGENT_USE = {
   claude: "available to projects and Task Manager",
   codex: "available to projects and Task Manager",
+  grok: "available to projects and Task Manager",
   copilot: "ready for later project support",
 } satisfies Record<Agent, UiMessage>;
 
@@ -426,7 +427,7 @@ export function SettingsTab(): JSX.Element {
 
   /** Every selected provider model is eligible to watch a run. */
   const moderatorModels = () =>
-    (["claude", "codex", "copilot"] as const).flatMap((agent) =>
+    (["claude", "codex", "copilot", "grok"] as const).flatMap((agent) =>
       enabledModels(agent).map((model) => ({
         value: `${agent}:${model.id}`,
         label: `${AGENT_LABELS[agent]} · ${model.name}`,
@@ -906,7 +907,10 @@ export function SettingsTab(): JSX.Element {
                 icon="sparkles"
                 value={current().defaultAgent}
                 options={state.agents
-                  .filter((agent) => agent.agent === "claude" || agent.agent === "codex")
+                  .filter(
+                    (agent) =>
+                      agent.agent === "claude" || agent.agent === "codex" || agent.agent === "grok",
+                  )
                   .map((agent) => ({ value: agent.agent, label: AGENT_LABELS[agent.agent] }))}
                 onChange={selectDefaultAgent}
               />
@@ -1049,7 +1053,7 @@ export function SettingsTab(): JSX.Element {
                 class="sr-only"
               />
               <span class="text-az-muted text-ui-detail">
-                {tx("only Codex can enumerate; the other two stay on the compiled list")}
+                {tx("Codex and Grok can enumerate; Claude and Copilot stay on the compiled list")}
               </span>
             </div>
           </Section>
@@ -1067,7 +1071,12 @@ export function SettingsTab(): JSX.Element {
                 icon="sparkles"
                 value={current().taskManager.agent}
                 options={state.agents
-                  .filter((status) => status.agent === "claude" || status.agent === "codex")
+                  .filter(
+                    (status) =>
+                      status.agent === "claude" ||
+                      status.agent === "codex" ||
+                      status.agent === "grok",
+                  )
                   .map((status) => ({
                     value: status.agent,
                     label: AGENT_LABELS[status.agent],
@@ -3897,10 +3906,10 @@ function HoldRow(props: {
 /**
  * One agent's catalogue, with its provenance stated rather than implied.
  *
- * The provenance line is not decoration: two of the three lists were not
- * obtained from the installed binary, and a picker that presents a documented
- * list and an interrogated one identically invites the user to trust both
- * equally.
+ * The provenance line is not decoration: Claude and Copilot lists were not
+ * obtained from the installed binary. Codex and Grok can be asked. A picker
+ * that presents a documented list and an interrogated one identically invites
+ * the user to trust both equally.
  */
 function AgentModelList(props: { catalogue: AgentModels; selection: ModelSelection }): JSX.Element {
   const agent = () => props.catalogue.agent;

@@ -23,13 +23,17 @@ export type CloseConfirmProps = {
  * tell you what you are about to lose trains you to dismiss it.
  */
 export function CloseConfirm(props: CloseConfirmProps): JSX.Element {
-  const { state } = useWorkspace();
+  const { state, runningFor } = useWorkspace();
 
   // Optional chaining because a purged project can leave one record with a key
-  // another lacks, so a value can be absent under an existing key.
-  const runningCount = createMemo(() =>
-    Object.values(state.running).reduce((total, tasks) => total + (tasks?.length ?? 0), 0),
-  );
+  // another lacks, so a value can be absent under an existing key. A live turn
+  // with no in-flight tool still counts: quitting would kill that run.
+  const runningCount = createMemo(() => {
+    const ids = new Set([...Object.keys(state.running), ...Object.keys(state.runStatus)]);
+    let total = 0;
+    for (const id of ids) total += runningFor(id).length;
+    return total;
+  });
 
   const heldCount = createMemo(
     () =>

@@ -12,7 +12,7 @@ import { useWorkspace } from "~/stores/workspace";
 import type { Agent, ChatImportSource, Permission, StoreBackupSelection } from "~/types";
 
 const LAST_STEP = 4;
-const PROJECT_AGENTS: Agent[] = ["claude", "codex"];
+const PROJECT_AGENTS: Agent[] = ["claude", "codex", "grok"];
 type GuidedPermission = Extract<Permission, "read_only" | "ask" | "auto">;
 
 const SECURITY: GuidedPermission[] = ["read_only", "ask", "auto"];

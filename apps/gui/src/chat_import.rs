@@ -703,6 +703,55 @@ pub fn claude_session_cwd(session_id: &str) -> Option<String> {
     None
 }
 
+/// Directory Grok created this session under (`~/.grok/sessions/<urlencoded-cwd>/<id>`).
+///
+/// Grok keys sessions by process cwd the same way Claude does. Resume from a
+/// different project directory looks in the wrong folder and Grok answers
+/// JSON-RPC `-32603 Path not found`, which we were surfacing as a parse error.
+#[must_use]
+pub fn grok_session_cwd(session_id: &str) -> Option<String> {
+    if session_id.is_empty() {
+        return None;
+    }
+    let home = match std::env::var_os("GROK_HOME") {
+        Some(path) => PathBuf::from(path),
+        None => home().ok()?.join(".grok"),
+    };
+    let root = home.join("sessions");
+    let entries = std::fs::read_dir(&root).ok()?;
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let Some(encoded) = name.to_str() else {
+            continue;
+        };
+        if encoded.starts_with('.') || encoded.ends_with(".sqlite") {
+            continue;
+        }
+        if !entry.path().join(session_id).is_dir() {
+            continue;
+        }
+        return percent_decode_cwd(encoded);
+    }
+    None
+}
+
+fn percent_decode_cwd(encoded: &str) -> Option<String> {
+    let bytes = encoded.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 2 < bytes.len() {
+            let hex = std::str::from_utf8(&bytes[i + 1..i + 3]).ok()?;
+            out.push(u8::from_str_radix(hex, 16).ok()?);
+            i += 3;
+        } else {
+            out.push(bytes[i]);
+            i += 1;
+        }
+    }
+    String::from_utf8(out).ok().filter(|cwd| !cwd.is_empty())
+}
+
 fn find_session(root: &Path, extension: &str, id: &str) -> Option<PathBuf> {
     collect(root, extension).into_iter().find(|path| {
         path.file_stem()
@@ -907,5 +956,24 @@ mod tests {
             "discovery does not scan the whole file"
         );
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn grok_session_cwd_reads_urlencoded_parent() {
+        let root = std::env::temp_dir().join(format!("az-grok-home-{}", std::process::id()));
+        let session = "01a09bd5-4a37-7082-89af-26bd58490fca";
+        let dir = root
+            .join("sessions")
+            .join("%2FUsers%2Frevenge%2FAgencyZero")
+            .join(session);
+        std::fs::create_dir_all(&dir).expect("temp grok session dir");
+        // SAFETY: this test process does not run grok concurrently.
+        unsafe { std::env::set_var("GROK_HOME", &root) };
+        assert_eq!(
+            grok_session_cwd(session).as_deref(),
+            Some("/Users/revenge/AgencyZero")
+        );
+        unsafe { std::env::remove_var("GROK_HOME") };
+        let _ = std::fs::remove_dir_all(root);
     }
 }
