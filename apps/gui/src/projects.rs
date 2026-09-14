@@ -8116,7 +8116,10 @@ fn leaked_foreign_namespace_spans(text: &str) -> Vec<ForeignSpan> {
         // The verb runs to `(` for a call, or to the closing `>` without one.
         let verb = rest
             .split_once('(')
-            .map_or_else(|| rest.trim_end_matches('>').trim(), |(verb, _)| verb.trim())
+            .map_or_else(
+                || rest.trim_end_matches('>').trim(),
+                |(verb, _)| verb.trim(),
+            )
             .to_string();
         found.push(ForeignSpan {
             namespace: namespace.to_string(),
@@ -8192,7 +8195,11 @@ async fn persist_foreign_namespace_leak(
             )
         },
         if spans.len() == 1 { "it" } else { "they" },
-        if spans.len() == 1 { "it was" } else { "they were" },
+        if spans.len() == 1 {
+            "it was"
+        } else {
+            "they were"
+        },
         if spans.len() == 1 {
             "it was a tool call"
         } else {
@@ -14087,15 +14094,14 @@ async fn drive_run(
         let project_id = project_id.clone();
         tauri::async_runtime::spawn(async move {
             let state = app.state::<crate::AppState>();
-            if let Err(error) =
-                compact_project_with(
-                    app.clone(),
-                    project_id.clone(),
-                    Some("grok".into()),
-                    CompactTrigger::Automatic,
-                    state,
-                )
-                .await
+            if let Err(error) = compact_project_with(
+                app.clone(),
+                project_id.clone(),
+                Some("grok".into()),
+                CompactTrigger::Automatic,
+                state,
+            )
+            .await
             {
                 crate::log!(
                     crate::log::Level::Warn,
@@ -14143,7 +14149,14 @@ async fn drive_run(
         .await;
         if should_resume_after_foreign_namespace(&prompt_echo, cancelled) {
             let body = foreign_namespace_resume_prompt(&foreign_namespace_leaks);
-            spawn_host_resume(app, project_id, agent, model, body, "foreign-namespace-span");
+            spawn_host_resume(
+                app,
+                project_id,
+                agent,
+                model,
+                body,
+                "foreign-namespace-span",
+            );
         }
     }
 }
@@ -17163,13 +17176,10 @@ mod tests {
     fn quoted_and_fenced_foreign_spans_are_not_leaks() {
         assert!(leaked_foreign_namespace_spans("> <ps @antml:invoke>").is_empty());
         assert!(leaked_foreign_namespace_spans("    <ps @antml:invoke>").is_empty());
-        assert!(
-            leaked_foreign_namespace_spans("```text\n<ps @antml:invoke>\n```").is_empty()
-        );
+        assert!(leaked_foreign_namespace_spans("```text\n<ps @antml:invoke>\n```").is_empty());
         // Inline, not alone on its line: prose about the syntax.
         assert!(
-            leaked_foreign_namespace_spans("The span <ps @antml:invoke> rendered raw.")
-                .is_empty()
+            leaked_foreign_namespace_spans("The span <ps @antml:invoke> rendered raw.").is_empty()
         );
         // Prose that merely mentions a namespace.
         assert!(
@@ -17185,7 +17195,10 @@ mod tests {
         let correction = foreign_namespace_resume_prompt(&spans);
         assert!(!should_resume_after_foreign_namespace(&correction, false));
         assert!(!should_resume_after_foreign_namespace("anything", true));
-        assert!(should_resume_after_foreign_namespace("ordinary prompt", false));
+        assert!(should_resume_after_foreign_namespace(
+            "ordinary prompt",
+            false
+        ));
     }
 
     #[test]
