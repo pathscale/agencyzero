@@ -135,7 +135,11 @@ jobs:
       - name: Build the WorkTable v2 migration reader
         run: scripts/stage-wt-v2-reader-sidecar.sh
 
-      - run: cargo fmt --all --check
+      # `--all` reaches into path dependencies, so it would check the sibling
+      # checkouts' formatting as well as this repository's. Those repositories
+      # gate their own formatting in their own CI. `--package` per workspace
+      # member keeps this job answering for this repository only.
+      - run: cargo fmt --check -p az-gui -p az-core -p az-mcp-proxy -p wt-migrate -p agency-tools
       # Blitz is currently a macOS preview runtime. Enabling every feature on
       # this Linux runner asks it to implement Tauri's GTK-only runtime traits,
       # which is separate portability work rather than Linux CI for AgencyZero.
