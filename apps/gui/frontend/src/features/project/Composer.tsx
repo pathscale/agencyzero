@@ -913,7 +913,16 @@ export function Composer(props: ComposerProps): JSX.Element {
     lastLength = length;
     const height = Math.max(floor, Math.min(field.scrollHeight || floor, ceiling));
     // Most keystrokes land inside the current line and change no height at all.
-    if (height !== lastHeight) {
+    //
+    // The `auto` reset above is the exception, and skipping the write after it
+    // is what made deleting text jump the box. `auto` is a real style write: it
+    // drops the explicit height, so the field is left sized by its own content
+    // and no longer clamped to `ceiling`. When a deletion removed a character
+    // without removing a line, the measured height matched `lastHeight`, this
+    // branch was skipped, and the field stayed on `auto` until some later
+    // keystroke happened to change the number. Always restore an explicit
+    // height once it has been cleared.
+    if (height !== lastHeight || mayHaveShrunk) {
       field.style.height = `${height}px`;
       lastHeight = height;
     }
