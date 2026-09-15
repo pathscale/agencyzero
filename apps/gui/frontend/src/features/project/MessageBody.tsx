@@ -431,11 +431,15 @@ export function MessageBody(props: { id: string; body: string; class?: string })
       long identifier, a url, a wall of one repeated letter) has no break
       opportunity without the second. Between them, message text stayed at its
       natural width and drew straight past the edge of its own bubble.
+
+      `break-words` is `overflow-wrap: break-word`, which splits a word only
+      when that word alone cannot fit. This used to say `anywhere` as well.
+      The two differ in one way that matters here: `anywhere` also counts the
+      break opportunity when the renderer measures min-content width, so it
+      splits ordinary words mid-line and ends a line on "No" with "w" below.
+      `break-word` still rescues the long identifier without shredding prose.
     */
-    <div
-      class={`flex min-w-0 flex-col gap-2.5 break-words [overflow-wrap:anywhere] ${props.class ?? ""}`}
-      data-selectable
-    >
+    <div class={`flex min-w-0 flex-col gap-2.5 break-words ${props.class ?? ""}`} data-selectable>
       <For each={blocks()}>
         {(block, blockIndex) =>
           block.kind === "code" ? (
