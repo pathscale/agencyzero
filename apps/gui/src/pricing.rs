@@ -114,6 +114,22 @@ const PRICES: &[Price] = &[
         output: 15.00,
         cache_read: 0.25,
     },
+    // Grok — short-context list prices from docs.x.ai (2026-09-07). grok-4.6
+    // before grok-4.5 so substring match cannot collapse them. Cache-read
+    // differs ($0.50 vs $0.30). Long-context (>=200k) rates are not modelled;
+    // the table is an estimate, and the provider's turn cost still wins.
+    Price {
+        key: "grok-4.6",
+        input: 2.00,
+        output: 6.00,
+        cache_read: 0.50,
+    },
+    Price {
+        key: "grok-4.5",
+        input: 2.00,
+        output: 6.00,
+        cache_read: 0.30,
+    },
 ];
 
 // The estimate itself runs in the frontend, per keystroke and offline, from the
@@ -330,6 +346,28 @@ mod tests {
         // A dated or suffixed id still resolves by substring.
         assert_eq!(price_for("claude-opus-4-8").unwrap().output, 25.00);
         assert_eq!(price_for("gpt-5.6-terra-2026").unwrap().input, 2.00);
+        assert_eq!(price_for("grok-4.6").unwrap().input, 2.00);
+        assert_eq!(price_for("grok-4.6").unwrap().cache_read, 0.50);
+        assert_eq!(price_for("grok-4.5").unwrap().cache_read, 0.30);
+    }
+
+    /// `price_for` is first-match-wins on substring, so a key that contains an
+    /// earlier key can never be reached. `grok-4.6` before `grok-4.5` is the
+    /// case that prompted this, but the constraint is general and nothing in
+    /// the table's shape enforces it: a reorder would silently bill the wrong
+    /// cache rate while every by-id assertion still passed.
+    #[test]
+    fn no_price_key_is_shadowed_by_an_earlier_substring() {
+        for (later, price) in PRICES.iter().enumerate() {
+            for earlier in &PRICES[..later] {
+                assert!(
+                    !price.key.contains(earlier.key),
+                    "{} is unreachable: {} appears earlier and is a substring of it",
+                    price.key,
+                    earlier.key
+                );
+            }
+        }
     }
 
     #[test]

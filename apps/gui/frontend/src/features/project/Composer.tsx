@@ -376,6 +376,13 @@ export function Composer(props: ComposerProps): JSX.Element {
   const compactPressure = () => {
     const tokens = props.contextTokens ?? 0;
     const window = props.contextWindow ?? 0;
+    // Grok 4.6/4.5 double prices at 200k, far below 80% of the 500k window.
+    if (props.agent === "grok") {
+      if (tokens >= 200_000) return "red" as const;
+      if (tokens >= 180_000) return "orange" as const;
+      if (tokens >= 150_000) return "yellow" as const;
+      return null;
+    }
     const share = window > 0 ? tokens / window : null;
     if (share !== null) {
       if (share >= 0.9) return "red" as const;
@@ -906,7 +913,16 @@ export function Composer(props: ComposerProps): JSX.Element {
     lastLength = length;
     const height = Math.max(floor, Math.min(field.scrollHeight || floor, ceiling));
     // Most keystrokes land inside the current line and change no height at all.
-    if (height !== lastHeight) {
+    //
+    // The `auto` reset above is the exception, and skipping the write after it
+    // is what made deleting text jump the box. `auto` is a real style write: it
+    // drops the explicit height, so the field is left sized by its own content
+    // and no longer clamped to `ceiling`. When a deletion removed a character
+    // without removing a line, the measured height matched `lastHeight`, this
+    // branch was skipped, and the field stayed on `auto` until some later
+    // keystroke happened to change the number. Always restore an explicit
+    // height once it has been cleared.
+    if (height !== lastHeight || mayHaveShrunk) {
       field.style.height = `${height}px`;
       lastHeight = height;
     }
@@ -1234,7 +1250,14 @@ export function Composer(props: ComposerProps): JSX.Element {
             air above it, the controls only need to clear the edge. Even spacing
             made the row look adrift in the box rather than seated at its foot.
           */
-          class={`flex flex-col gap-2.5 bg-az-inset ${
+          /*
+            `overflow-hidden`: the inner radius is the ring's outer radius less
+            its 1px padding, so a child that reaches the padding box, such as
+            the first attachment chip, is drawn over the corner the ring
+            rounded. Without clipping here that chip squares off the top-left
+            while the untouched right corner stays round.
+          */
+          class={`flex flex-col gap-2.5 overflow-hidden bg-az-inset ${
             props.size === "lg" ? "rounded-[18px] p-[18px] pb-2.5" : "rounded-2xl p-[15px] pb-2"
           }`}
         >
@@ -1314,7 +1337,7 @@ export function Composer(props: ComposerProps): JSX.Element {
                 event.preventDefault();
                 void submit();
               }}
-              class={`az-scroll block max-h-full min-h-0 w-full min-w-0 resize-none overflow-y-auto overflow-x-hidden whitespace-pre-wrap break-words border-0 bg-transparent p-0 text-base-content leading-[1.45] shadow-none [overflow-wrap:anywhere] placeholder:text-az-faint focus:bg-transparent focus:shadow-none focus:outline-none ${
+              class={`az-scroll block max-h-full min-h-0 w-full min-w-0 resize-none overflow-y-auto overflow-x-hidden whitespace-pre-wrap break-words border-0 bg-transparent p-0 text-base-content leading-[1.45] shadow-none placeholder:text-az-faint focus:bg-transparent focus:shadow-none focus:outline-none ${
                 props.size === "lg" ? "text-ui-lead" : "text-ui-control-lg"
               }`}
             />

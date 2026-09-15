@@ -604,6 +604,9 @@ impl AgencyProxy {
             .arg("--socket")
             .arg(&self.socket_path)
             .stdin(Stdio::null());
+        if let Some(path) = std::env::var_os("PATH") {
+            command.env("PATH", path);
+        }
         if let Some(stderr) = captured {
             command.stdout(
                 stderr

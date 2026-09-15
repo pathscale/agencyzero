@@ -131,7 +131,17 @@ export function HomeTab(): JSX.Element {
 
             <div class="flex min-w-0 flex-1 items-center gap-2.5 rounded-[11px] border border-primary/11 bg-az-inset px-3 py-2.5 focus-within:border-primary/40">
               <Icon name="search" class="shrink-0 text-primary/70 text-ui-control" />
+              {/*
+                `md` spelled out because 3.0 moved the `Input` default from
+                `md` to `sm` so an unsized field lines up with an unsized
+                Button. Nothing here sets a height, so the field's own
+                min-height is what makes this row 2.5rem tall; taking the new
+                default would silently shorten every field in the app by 4px.
+                Which of these want the shorter control is a look decision,
+                not a migration one.
+              */}
               <Input.Field
+                size="md"
                 id="home-search"
                 type="search"
                 value={query()}
@@ -275,7 +285,7 @@ export function HomeTab(): JSX.Element {
                       </span>
                     </div>
                     <span class="ml-auto shrink-0 text-az-faint text-ui-caption">
-                      {state.running[project.id]?.length
+                      {state.running[project.id]?.length || project.id in state.runStatus
                         ? tx("running now")
                         : relativeTime(project.lastActivityAt)}
                     </span>
@@ -357,7 +367,19 @@ export function CleanupRowActions(props: {
         checked
         state={busy() !== null ? "disabled" : undefined}
         aria-label={tx("Delete {name}", { name: props.item.title })}
-        onChange={(event) => {
+        /*
+         * `onNativeChange` rather than `onChange`, which now reports only the
+         * boolean.
+         *
+         * The box is rendered permanently checked and unchecking it *is* the
+         * keep action, so a keep that fails has to put the tick back. Nothing
+         * in the store changed, so no re-render will do it: the restore is a
+         * write to the input element itself, and the native event is the only
+         * handler that still hands one over. A `ref` would not help either,
+         * because `Checkbox` sets its own on the input after spreading the
+         * caller's props.
+         */
+        onNativeChange={(event) => {
           if (event.currentTarget.checked) return;
           const checkbox = event.currentTarget;
           void run("keep", props.onKeep).catch(() => {
@@ -656,6 +678,7 @@ function TaskManagerComposer(): JSX.Element {
           when={tall()}
           fallback={
             <Input.Field
+              size="md"
               id="home-task-manager-prompt"
               value={draft()}
               onInput={(event) => setDraft(event.currentTarget.value)}
@@ -999,6 +1022,7 @@ function GroupItemRow(props: {
       fallback={
         <Show when={editing()}>
           <Input.Field
+            size="md"
             id={`home-item-${props.item.id}-title`}
             autofocus
             value={title()}

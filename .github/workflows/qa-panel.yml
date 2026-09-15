@@ -59,6 +59,32 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Same sibling checkouts as the Rust job in ci.yml, and for the same
+      # reason: the path dependencies are resolved before anything compiles.
+      # `actions/checkout` refuses a path outside the workspace, so these land
+      # inside it and are moved up afterwards.
+      - name: Check out WorkTable
+        uses: actions/checkout@v4
+        with:
+          repository: pathscale/WorkTable
+          ref: fix/heap-initialize-pages
+          path: .sibling/WorkTable
+
+      - name: Check out agent-abstraction
+        uses: actions/checkout@v4
+        with:
+          repository: pathscale/RustAgentAbstraction
+          ref: feat/grok-headless
+          path: .sibling/RustAgentAbstraction
+
+      - name: Put the sibling checkouts where the paths expect them
+        run: |
+          mv .sibling/WorkTable ..
+          mv .sibling/RustAgentAbstraction ..
+          rmdir .sibling
+          test -f ../WorkTable/Cargo.toml
+          test -f ../RustAgentAbstraction/Cargo.toml
+
       - uses: dtolnay/rust-toolchain@stable
 
       - uses: Swatinem/rust-cache@v2
@@ -90,6 +116,9 @@ jobs:
 
       - name: Stage the agency-proxy sidecar
         run: scripts/stage-agency-proxy-sidecar.sh
+
+      - name: Stage the WorkTable v2 migration reader
+        run: scripts/stage-wt-v2-reader-sidecar.sh
 
       # blitz-inspector, NOT blitz-runtime: a blitz-runtime build answers every
       # inspector call with diagnosticsUnavailable, so the run would fail with
@@ -203,7 +232,17 @@ jobs:
         id: full
         if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.group == '' && inputs.suite != 'focused') }}
         continue-on-error: true
-        timeout-minutes: 3
+        # All 312 checks, one process, on a shared runner. This was 3, which
+        # the suite outgrew rather than regressed into: the run that tripped it
+        # reported `passed: 312, failed: 0` and every contrast audit clean, then
+        # the step timeout killed it at 3m00s. The previous green run finished
+        # in 2m33s, so the margin was 27s and one more group spent it.
+        #
+        # A step timeout is not the per-check budget. `QA_TIMEOUT_SCALE` still
+        # governs whether an individual outcome is allowed to be slow; this
+        # only bounds the wall clock of the whole sweep, so raising it does not
+        # weaken a single assertion.
+        timeout-minutes: 6
         env:
           QA_GROUPS: ''
           QA_TIMEOUT_SCALE: 2

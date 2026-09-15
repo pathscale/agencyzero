@@ -87,7 +87,7 @@ pub fn verified_against(agent: Agent) -> String {
 /// Every agent's model catalogue.
 ///
 /// With `discover`, each CLI is asked to enumerate rather than trusting the
-/// crate's compiled list. Only Codex can answer that today; Claude and Copilot
+/// crate's compiled list. Codex and Grok can answer; Claude and Copilot
 /// return `Error::Unsupported` and fall back here.
 ///
 /// A discovery failure is **not** an error for the whole call. It falls back to

@@ -2,6 +2,16 @@
 // toggles must change either their semantic value or their inverse label.
 [
     (
+        id: "composer-agent-setup-opens-settings",
+        group: "composer",
+        what: "the blocked project composer links directly to agent settings",
+        open: Some("theta theta north indi"),
+        hover: None,
+        click: Some("Open Settings"),
+        subject: "textbox:Search settings",
+        expect: PaintsNamed,
+    ),
+    (
         id: "composer-body-is-flat",
         group: "composer",
         what: "the composer body owns an opaque flat fill while its border animates independently",
@@ -90,6 +100,7 @@
         click: Some("menuitem:Bypass"),
         subject: "Permission",
         expect: NameChanges,
+        covers: ["button:Permission:*"],
     ),
     (
         id: "composer-permission-hover-leaves-nothing",
@@ -201,6 +212,7 @@
         click: Some("menuitem:Claude · Claude Opus 5"),
         subject: "button:Model:",
         expect: NameChanges,
+        covers: ["button:Model:*"],
     ),
     (
         id: "composer-model-restores",

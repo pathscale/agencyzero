@@ -298,18 +298,14 @@ impl Tables {
     /// then erase the evidence that they had ever disagreed. An unreadable
     /// store is the case with the most to lose, and it was the case with no
     /// error path at all.
-    pub async fn peek_fingerprint(dir: &std::path::Path) -> Result<Option<String>, String> {
+    pub async fn peek_fingerprint(dir: &std::path::Path) -> eyre::Result<Option<String>> {
         let config = DiskConfig::new_with_table_name(
             dir.to_string_lossy().into_owned(),
             KvWorkTable::name_snake_case(),
             KvWorkTable::version(),
         );
-        let engine = KvPersistenceEngine::new(config)
-            .await
-            .map_err(|error| format!("kv would not open: {error}"))?;
-        let kv = KvWorkTable::load(engine)
-            .await
-            .map_err(|error| format!("kv would not load: {error}"))?;
+        let engine = KvPersistenceEngine::new(config).await?;
+        let kv = KvWorkTable::load(engine).await?;
         Ok(kv.select(FINGERPRINT_KEY.to_string()).map(|row| row.value))
     }
 
@@ -682,7 +678,9 @@ mod restart_tests {
     /// mutation shape concurrently, then require both a clean drain and reopen.
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn concurrent_pull_request_refreshes_drain_without_event_gaps() {
-        use crate::db::schema::pull_request::{PrFactsByIdQuery, PullRequestRow};
+        use crate::db::schema::pull_request::{
+            PrFactsByIdQuery, PullRequestColumns, PullRequestRow,
+        };
 
         const TASKS: usize = 16;
         const UPDATES_PER_TASK: usize = 64;
@@ -723,7 +721,9 @@ mod restart_tests {
                 tasks.push(tokio::spawn(async move {
                     for update in 0..UPDATES_PER_TASK {
                         table
-                            .update_pr_facts_by_id(
+                            .update_by_id(
+                                id.clone(),
+                                PullRequestColumns::BRANCH_AND_STATE_AND_ADDITIONS_AND_DELETIONS_AND_CI_AND_UPDATED_AT,
                                 PrFactsByIdQuery {
                                     branch: format!("task-{task}"),
                                     state: "OPEN".into(),
@@ -732,7 +732,6 @@ mod restart_tests {
                                     ci: "pending".into(),
                                     updated_at: format!("{task}-{update}"),
                                 },
-                                id.clone(),
                             )
                             .await
                             .expect("concurrent update should succeed");
@@ -766,7 +765,9 @@ mod restart_tests {
     /// two ids, the shape an attempted indexed replacement can emit.
     #[tokio::test]
     async fn rejected_duplicate_pull_request_insert_does_not_create_an_event_gap() {
-        use crate::db::schema::pull_request::{PrFactsByIdQuery, PullRequestRow};
+        use crate::db::schema::pull_request::{
+            PrFactsByIdQuery, PullRequestColumns, PullRequestRow,
+        };
 
         let dir = std::env::temp_dir().join(format!("az-pr-duplicate-gap-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
@@ -802,7 +803,9 @@ mod restart_tests {
         );
         tables
             .pull_request
-            .update_pr_facts_by_id(
+            .update_by_id(
+                "pr-duplicate-gap".to_string(),
+                PullRequestColumns::BRANCH_AND_STATE_AND_ADDITIONS_AND_DELETIONS_AND_CI_AND_UPDATED_AT,
                 PrFactsByIdQuery {
                     branch: "updated-branch-name".into(),
                     state: "MERGED".into(),
@@ -811,7 +814,6 @@ mod restart_tests {
                     ci: "pass".into(),
                     updated_at: "updated".into(),
                 },
-                "pr-duplicate-gap".to_string(),
             )
             .await
             .expect("update should succeed");
@@ -969,7 +971,7 @@ impl Tables {
         }
 
         // Independent tables must not make quit ten serial waits. WorkTable
-        // 1.0 reports a terminal persistence failure immediately; the local
+        // 1.9 reports a terminal persistence failure immediately; the local
         // timeout is the last boundary if a future engine regresses to a
         // parked worker. Each result keeps the table name that needs repair.
         let results = tokio::join!(

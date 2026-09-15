@@ -182,3 +182,55 @@ describe("queued live follow-ups", () => {
     );
   });
 });
+
+describe("live turn in Running", () => {
+  it("treats an accepted turn with no in-flight tools as running", async () => {
+    const workspace = await mountWorkspace();
+    expect(workspace.tabStatus("quux")).toBe("quiet");
+    expect(workspace.runningFor("quux")).toEqual([]);
+
+    queueHarness.handlers.get("run:accepted")?.({
+      projectId: "quux",
+      agent: "codex",
+      model: "gpt-5.6-sol",
+      permission: "auto",
+    });
+    flush();
+
+    expect(workspace.tabStatus("quux")).toBe("running");
+    expect(workspace.runningFor("quux")).toEqual([
+      expect.objectContaining({
+        projectId: "quux",
+        name: "codex",
+        label: "waiting for the agent…",
+        isCancelable: true,
+      }),
+    ]);
+  });
+
+  it("still lists in-flight tools instead of the turn placeholder", async () => {
+    const workspace = await mountWorkspace();
+    queueHarness.handlers.get("run:accepted")?.({
+      projectId: "quux",
+      agent: "claude",
+      model: "opus",
+      permission: "auto",
+    });
+    queueHarness.handlers.get("task:started")?.({
+      toolCallId: "tc-bash",
+      projectId: "quux",
+      itemId: null,
+      name: "Bash",
+      label: "cargo test -p az-core",
+      startedAt: new Date().toISOString(),
+      isCancelable: true,
+    });
+    flush();
+
+    const rows = workspace.runningFor("quux");
+    expect(rows).toHaveLength(1);
+    expect(rows[0].toolCallId).toBe("tc-bash");
+    expect(rows[0].name).toBe("Bash");
+    expect(workspace.tabStatus("quux")).toBe("running");
+  });
+});

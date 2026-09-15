@@ -13,7 +13,7 @@ use tauri::{Emitter, Manager, State};
 use worktable::prelude::*;
 
 use crate::db::schema::pull_request::{
-    PrDismissedByIdQuery, PrFactsByIdQuery, PullRequestRow, PullRequestWorkTable,
+    PrFactsByIdQuery, PullRequestColumns, PullRequestRow, PullRequestWorkTable,
 };
 use crate::db::tables::Tables;
 use crate::{AppHandle, AppState};
@@ -582,7 +582,11 @@ pub fn refresh_project(app: AppHandle, project_id: String) {
                 if let Err(error) = state
                     .tables
                     .pull_request
-                    .update_pr_facts_by_id(update, pr.id.clone())
+                    .update_by_id(
+                        pr.id.clone(),
+                        PullRequestColumns::BRANCH_AND_STATE_AND_ADDITIONS_AND_DELETIONS_AND_CI_AND_UPDATED_AT,
+                        update,
+                    )
                     .await
                 {
                     crate::log!(
@@ -634,7 +638,11 @@ async fn mark_unknown(app: &AppHandle, state: &State<'_, AppState>, row: &PullRe
     if state
         .tables
         .pull_request
-        .update_pr_facts_by_id(update, row.id.clone())
+        .update_by_id(
+            row.id.clone(),
+            PullRequestColumns::BRANCH_AND_STATE_AND_ADDITIONS_AND_DELETIONS_AND_CI_AND_UPDATED_AT,
+            update,
+        )
         .await
         .is_ok()
         && let Some(updated) = state.tables.pull_request.select(row.id.clone())
@@ -685,10 +693,7 @@ pub async fn dismiss_association(
     for duplicate in duplicates {
         tables
             .pull_request
-            .update_pr_dismissed_by_id(
-                PrDismissedByIdQuery { dismissed: true },
-                duplicate.id.clone(),
-            )
+            .update_by_id(duplicate.id.clone(), PullRequestColumns::DISMISSED, true)
             .await
             .map_err(|error| error.to_string())?;
         if let Some(row) = tables.pull_request.select(duplicate.id.clone()) {

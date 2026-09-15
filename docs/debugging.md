@@ -69,6 +69,49 @@ Use a tight loop while repairing a bug:
 3. Reproduce once and inspect the new log/control evidence.
 4. Repeat. Run the full delivery gate once, before delivery—not after every edit.
 
+## Native OS file dialogs
+
+Blitz control and `ps-qa` see the in-app semantic tree. They do not see a
+macOS open/save panel. Several live buttons open one: `Add dir`, `Choose
+folder`, `Attach files`, Settings `Choose…`, backup pickers. The labels live
+in `ps-qa.ron` under `manual_controls` so inventory can count them without
+activating them. Re-derive that list with
+`grep -n '\.dialog()' apps/gui/src/*.rs` if the count changes.
+
+That is not a defect in those buttons. It is a process boundary. The owner
+can finish the panel; an agent or unattended harness cannot, and the session
+then looks wedged.
+
+### How to tell you hit one
+
+- The last click was one of those labels and nothing in the tree changed.
+- `ps-qa find` still shows the same window; there is no new Cancel/Open node.
+- The owner sees a system file panel in front of AgencyZero.
+
+Do not click around hoping a semantic Cancel exists. Ask the owner to
+dismiss or complete the panel.
+
+### How to debug a picker flow
+
+1. Confirm which control opens the panel (`grep dialog apps/gui/src`).
+2. Ask the owner to click it and select (or cancel).
+3. Inspect the tree afterwards: the in-app row, chip, or path field is the
+   evidence. `ps-qa find` on the chosen path or the in-app Remove control.
+4. Logs: `choose_project_directory` / `choose_attachments` IPC around the
+   pick, then `add_dir` if a directory was attached.
+
+The path the picker returns is whatever the OS resolved. The typed-path
+field stores what was typed. Those can differ. A successful owner pick does
+not prove the typed-path check, and a passing typed-path check does not
+prove the picker.
+
+### What the automated suite covers instead
+
+Directory add/remove checks type into the in-app path field and assert the
+in-app Remove control on that row. They never click the picker. That is
+why `Add dir` is both a typed-path entry point and a listed manual picker
+control: one label, two mechanisms.
+
 ## Old Tauri: Wry/WebKit
 
 Run the isolated Dev identity directly from source:

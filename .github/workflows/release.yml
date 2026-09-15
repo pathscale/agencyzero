@@ -152,6 +152,9 @@ jobs:
       - name: Build the AgencyProxy sidecar
         run: scripts/stage-agency-proxy-sidecar.sh
 
+      - name: Build the WorkTable v2 migration reader
+        run: scripts/stage-wt-v2-reader-sidecar.sh
+
       # Ad-hoc signed, and nothing here decides that: `signingIdentity: "-"` in
       # tauri.conf.json does. Notarization needs a current Apple Developer
       # Program membership and ours has lapsed.

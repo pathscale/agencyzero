@@ -44,6 +44,7 @@ export const AGENT_LABELS: Record<Agent, string> = {
   claude: "Claude",
   codex: "Codex",
   copilot: "Copilot",
+  grok: "Grok",
 };
 
 export const AGENT_STATE_LABELS: Record<AgentState, string> = {

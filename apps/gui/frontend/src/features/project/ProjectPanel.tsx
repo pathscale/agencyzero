@@ -16,6 +16,7 @@ import { nextStatus, statusLabel, statusSuffix } from "~/lib/labels";
 import { whileMounted } from "~/lib/live";
 import { describeError, log } from "~/lib/log";
 import { record as recordPerf } from "~/lib/perf";
+import { LIVE_TURN_ID } from "~/lib/running";
 import { tx } from "~/stores/i18n";
 import { prefs, setPrefs, togglePanelSection } from "~/stores/prefs";
 import { useNow, useWorkspace } from "~/stores/workspace";
@@ -62,7 +63,7 @@ export function itemPage<T>(items: readonly T[], limit: number): T[] {
  * you switch tabs.
  */
 export function ProjectPanel(props: { project: Project; agent: Agent }): JSX.Element {
-  const { state, actions, itemsFor, openItemCount } = useWorkspace();
+  const { state, actions, itemsFor, openItemCount, runningFor } = useWorkspace();
 
   // One typed load for the whole panel. Leaf controls render this shared
   // snapshot and perform mutations; none owns a mount-time backend request.
@@ -104,7 +105,7 @@ export function ProjectPanel(props: { project: Project; agent: Agent }): JSX.Ele
     );
   });
 
-  const running = () => state.running[props.project.id] ?? [];
+  const running = () => runningFor(props.project.id);
   // Named for what it holds, not `log`: the module-level logger is also in
   // scope here and the shadow made `log.info` resolve to this accessor.
   const taskLog = () => state.taskLog[props.project.id] ?? [];
@@ -334,7 +335,7 @@ function IoPersistToggle(props: { projectId: string }): JSX.Element {
       id={`project-${props.projectId}-agent-io-persist`}
       checked={enabled()}
       state={!isLive("setIoPersist") ? "disabled" : undefined}
-      onChange={(event) => void toggle(event.currentTarget.checked)}
+      onChange={(checked) => void toggle(checked)}
       title={tx(
         "Keep this project's raw exchange in the database, so it survives a restart. Off by default: a long run writes thousands of rows.",
       )}
@@ -525,7 +526,8 @@ function SettingsSection(props: { project: Project; agent: Agent }): JSX.Element
   const [path, setPath] = createSignal("");
 
   const moderatorDefault = () => state.settings?.moderator.enabled ?? true;
-  const isRunning = () => (state.running[props.project.id] ?? []).length > 0;
+  const isRunning = () =>
+    props.project.id in state.runStatus || (state.running[props.project.id] ?? []).length > 0;
 
   /** The native panel, then straight into the list: no second confirmation. */
   async function pick(): Promise<void> {
@@ -624,7 +626,11 @@ function SettingsSection(props: { project: Project; agent: Agent }): JSX.Element
               >
                 <Icon name="folder-plus" class="text-ui-body" />
               </Button>
+              {/* `md` spelled out: 3.0 moved the `Input` default to `sm`, and
+                  these fields set no height of their own, so the implicit `md`
+                  is what their rows are currently built on. */}
               <Input.Field
+                size="md"
                 id={`project-${props.project.id}-dir-path`}
                 autofocus
                 value={path()}
@@ -658,9 +664,7 @@ function SettingsSection(props: { project: Project; agent: Agent }): JSX.Element
               disabled
               flavor="accent"
               size="sm"
-              onChange={(event) =>
-                void actions.setProjectModerator(props.project.id, event.currentTarget.checked)
-              }
+              onChange={(checked) => void actions.setProjectModerator(props.project.id, checked)}
             />
           </div>
 
@@ -1016,6 +1020,7 @@ function ResumeSession(props: {
         </span>
       </div>
       <Input.Field
+        size="md"
         id={`project-${props.projectId}-resume-session-id`}
         value={id()}
         disabled={busy() || props.running}
@@ -1236,6 +1241,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
             // the persisted row by its unique backend ID so its actions do
             // not disappear between reveal and click.
             setLastCreatedId(item.id);
+            actions.revealItem(item.id);
           }),
         )
         .catch(
@@ -1259,7 +1265,8 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
     void actions.setItemStatus(item.id, nextStatus(item.status));
   }
 
-  const isRunning = () => (state.running[props.projectId] ?? []).length > 0;
+  const isRunning = () =>
+    props.projectId in state.runStatus || (state.running[props.projectId] ?? []).length > 0;
 
   /**
    * Prefer an unanswered question, but keep the newest dismissed one reachable.
@@ -1414,6 +1421,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
           <div class="mb-1 flex items-center gap-2 border-az-hairline-soft border-b bg-az-inset px-2.5 py-1.5">
             <Icon name="search" class="shrink-0 text-primary/70 text-ui-label" />
             <Input.Field
+              size="md"
               id={`project-${props.projectId}-items-filter`}
               type="text"
               value={query()}
@@ -1462,6 +1470,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
               fallback={
                 <Show when={editingId() === item.id}>
                   <Input.Field
+                    size="md"
                     id={`project-${props.projectId}-item-${item.id}-title-edit`}
                     autofocus
                     value={editTitle()}
@@ -1876,6 +1885,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                   {(draft) => (
                     <section class="flex items-center gap-2 rounded-b-[9px] border-primary/24 border-t bg-az-inset px-3 py-2.5 shadow-[inset_2px_0_0_color-mix(in_srgb,var(--color-primary)_55%,transparent)]">
                       <Input.Field
+                        size="md"
                         id={`project-${props.projectId}-item-${item.id}-issue-url`}
                         ref={(element: HTMLInputElement) => {
                           issueField = element;
@@ -1994,6 +2004,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
         }
       >
         <Input.Field
+          size="md"
           id={`project-${props.projectId}-item-new-title`}
           autofocus
           value={title()}
@@ -2108,13 +2119,36 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
 function RunningList(props: { projectId: string }): JSX.Element {
   const { state } = useWorkspace();
   const now = useNow();
-  const tasks = () => state.running[props.projectId] ?? [];
+  const tools = () => state.running[props.projectId] ?? [];
+  const turn = () => state.runStatus[props.projectId];
 
   return (
     <div class="az-scroll flex max-h-[230px] flex-col gap-2 px-3 pt-3 pb-3">
-      <For each={tasks()}>{(task) => <RunningTaskCard task={task} now={now()} />}</For>
+      <For each={tools()}>{(task) => <RunningTaskCard task={task} now={now()} />}</For>
 
-      <Show when={tasks().length === 0}>
+      {/*
+        Tools that finish in the same tick never paint. The turn itself is
+        still live (`runStatus` from accepted to stopped), so show that rather
+        than "Nothing running" while the agent is thinking or writing.
+      */}
+      <Show when={tools().length === 0 && turn()}>
+        {(status) => (
+          <RunningTaskCard
+            task={{
+              toolCallId: LIVE_TURN_ID,
+              projectId: props.projectId,
+              itemId: null,
+              name: status().agent,
+              label: status().activity,
+              startedAt: new Date(status().startedAt).toISOString(),
+              isCancelable: true,
+            }}
+            now={now()}
+          />
+        )}
+      </Show>
+
+      <Show when={tools().length === 0 && !turn()}>
         <p class="rounded-[11px] border border-primary/12 border-dashed p-3 text-center text-az-muted text-ui-detail">
           {tx("Nothing running")}
         </p>
@@ -2478,7 +2512,7 @@ function CheckpointToggle(props: { projectId: string }): JSX.Element {
           flavor="accent"
           size="sm"
           disabled={!isLive("setCheckpoints")}
-          onChange={(event) => void toggle(event.currentTarget.checked)}
+          onChange={(checked) => void toggle(checked)}
         />
       </div>
       {/*

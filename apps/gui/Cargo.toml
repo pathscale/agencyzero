@@ -23,6 +23,7 @@ experimental = ["dep:agent-experimental"]
 # workspace both already take tauri this way, and neither needs that flag.
 webview-runtime = ["tauri/wry"]
 blitz-runtime = [
+    "dep:blitz-control-protocol",
     "dep:blitz-dom",
     "dep:blitz-script",
     "dep:brotli",
@@ -63,7 +64,7 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 # Carries the store forward when a column changes; see crates/wt-migrate.
 wt-migrate = { path = "../../crates/wt-migrate" }
-agent-abstraction = "0.4.19"
+agent-abstraction = { path = "../../../RustAgentAbstraction" }
 agency-proxy-client.workspace = true
 agency-proxy-protocol.workspace = true
 agent-experimental = { version = "^0.1.3", default-features = false, optional = true }
@@ -80,18 +81,23 @@ az-core.workspace = true
 worktable.workspace = true
 # The `worktable!` macro emits code that names these by bare path rather than
 # through a re-export, so a consumer of the macro has to declare them too.
-# Versions match worktable 1.0 beta's own, since a mismatch produces errors that name
+# Versions match WorkTable 1.9's own, since a mismatch produces errors that name
 # the wrong crate.
 eyre = "0.6"
 rkyv = { version = "0.8.9", features = ["uuid-1"] }
 derive_more = { version = "2.0.1", features = ["from", "error", "display", "debug", "into"] }
 futures = "0.3"
+nagoya = "^0.1"
 backon = { version = "1.6.0", default-features = false }
 libc = "0.2"
 dirs = "6"
 uuid = "1"
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde", "std"] }
-tokio = { version = "1", features = ["process", "rt-multi-thread", "time"] }
+# Tauri owns the live GUI runtime and exposes Tokio-native tasks. AgencyProxy's
+# Unix sockets plus git/gh child processes also require Tokio's concrete I/O
+# types, so this compatibility boundary remains direct and declares every API
+# this crate calls instead of borrowing transitive features.
+tokio = { version = "1", features = ["fs", "io-util", "net", "process", "rt-multi-thread", "signal", "sync", "time"] }
 # Default features are off; see `webview-runtime` for why.
 tauri = { version = "2", default-features = false, features = ["macos-private-api", "compression"] }
 # `macos-private-api` must match the `tauri` dependency above. Tauri's
@@ -101,7 +107,8 @@ tauri = { version = "2", default-features = false, features = ["macos-private-ap
 # 0.1.0 the runtime's own feature forwards to `tauri` and `tauri-runtime`, so
 # naming it here agrees with that rather than being the only thing holding the
 # two sides together.
-tauri-runtime-blitz = { version = "^0.3", optional = true, features = ["macos-private-api"] }
+tauri-runtime-blitz = { version = "^0.4", optional = true, features = ["macos-private-api"] }
+blitz-control-protocol = { version = "^0.5", optional = true }
 #
 # The engine by version, not by branch. Same move `chuzz` made, for the same
 # reasons its manifest records.
@@ -114,15 +121,14 @@ tauri-runtime-blitz = { version = "^0.3", optional = true, features = ["macos-pr
 # resolved anyrender from crates.io at 0.12.0, and the build stopped at
 # "failed to select a version".
 #
-# A caret is what was meant. `cargo update` moves it, `Cargo.lock` records what
-# was resolved, and anything else asking for the same range gets the same crate
-# rather than a second copy of the engine - which is the failure that reads as
-# `expected ScriptDocument, found ScriptDocument` with both types naming one
-# file. Working against a local checkout stays possible through the `[patch]`
-# entries in `.cargo/config.toml`, so the default exercises what a release
-# actually resolves.
-blitz-dom = { package = "ps-blitz-dom", version = "^0.3", features = ["system-fonts", "parallel-construct"], optional = true }
-blitz-script = { package = "ps-blitz-script", version = "^0.3", features = ["system-fonts"], optional = true }
+# A caret is what was meant. Every lockless build resolves the compatible family
+# afresh, and anything else asking for the same range gets the same crate rather
+# than a second copy of the engine. Two incompatible families produce the failure
+# that reads as `expected ScriptDocument, found ScriptDocument` with both types
+# naming one file. Local renderer work uses `.cargo/local-renderer.toml` through
+# `scripts/local-renderer.sh`, so the default exercises the published graph.
+blitz-dom = { package = "ps-blitz-dom", version = "^0.4", features = ["system-fonts", "parallel-construct"], optional = true }
+blitz-script = { package = "ps-blitz-script", version = "^0.4", features = ["system-fonts"], optional = true }
 brotli = { version = "8.0.4", default-features = false, features = ["std"], optional = true }
 url = { version = "2.5.8", optional = true }
 tauri-plugin-updater = "2"

@@ -3,6 +3,16 @@
 // Search runs last because it intentionally filters every fixture row away.
 [
     (
+        id: "home-task-manager-opens-settings",
+        group: "home",
+        what: "the unavailable task manager links directly to the settings that make it usable",
+        open: Some("Home"),
+        hover: None,
+        click: Some("#home-task-manager-open-settings"),
+        subject: "textbox:Search settings",
+        expect: PaintsNamed,
+    ),
+    (
         id: "home-task-manager-prompt-disabled-without-agent",
         group: "home",
         what: "the task-manager prompt is visibly unavailable when no task-manager agent can run",
@@ -120,6 +130,7 @@
         click: Some("Open project "),
         subject: "button:Send",
         expect: Paints,
+        covers: ["button:Open project "],
     ),
     (
         id: "home-recent-project-opens",
@@ -130,6 +141,7 @@
         click: Some("Open recent project "),
         subject: "button:Send",
         expect: Paints,
+        covers: ["button:Open recent project "],
     ),
     (
         id: "home-item-opens",
@@ -140,6 +152,7 @@
         click: Some("Open item "),
         subject: "button:Send",
         expect: Paints,
+        covers: ["button:Open item "],
     ),
     (
         id: "home-close-draft",
@@ -216,6 +229,7 @@
         click: Some("Collapse project "),
         subject: "Expand project ",
         expect: Paints,
+        covers: ["button:Collapse project "],
     ),
     (
         id: "home-expand-project",

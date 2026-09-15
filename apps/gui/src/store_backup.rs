@@ -464,13 +464,9 @@ fn verify_store(store: &Path, manifest: &Manifest) -> Result<(), String> {
 }
 
 fn load_store_tables(store: &Path) -> Result<(), String> {
-    let runtime = tokio::runtime::Runtime::new()
-        .map_err(|error| format!("could not start backup validation: {error}"))?;
-    let tables = runtime
-        .block_on(crate::db::tables::Tables::open(store))
+    let tables = nagoya::block_on(crate::db::tables::Tables::open(store))
         .map_err(|error| format!("restored WorkTable store would not open: {error}"))?;
-    runtime
-        .block_on(tables.shutdown())
+    nagoya::block_on(tables.shutdown())
         .map_err(|error| format!("restored WorkTable store would not drain: {error}"))?;
     drop(tables);
     Ok(())
@@ -657,20 +653,16 @@ mod tests {
         let _ = std::fs::remove_dir_all(root);
     }
 
-    #[test]
-    fn semantic_preflight_opens_and_drains_a_real_worktable_store() {
+    #[tokio::test]
+    async fn semantic_preflight_opens_and_drains_a_real_worktable_store() {
         let root = scratch("semantic");
         let store = root.join("db");
-        let runtime = tokio::runtime::Runtime::new().expect("runtime starts");
-        let tables = runtime
-            .block_on(crate::db::tables::Tables::open(&store))
+        let tables = crate::db::tables::Tables::open(&store)
+            .await
             .expect("real store opens");
-        runtime
-            .block_on(tables.stamp_schema())
-            .expect("schema stamps");
-        runtime.block_on(tables.shutdown()).expect("store drains");
+        tables.stamp_schema().await.expect("schema stamps");
+        tables.shutdown().await.expect("store drains");
         drop(tables);
-        drop(runtime);
 
         load_store_tables(&store).expect("restore preflight accepts the real store");
 

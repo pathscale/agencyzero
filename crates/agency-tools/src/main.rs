@@ -216,10 +216,7 @@ fn run(command: Command) -> eyre::Result<()> {
     };
     let location = agency_tools::data_location_for(identifier)?;
     let dir = location.path;
-    let runtime = tokio::runtime::Builder::new_multi_thread()
-        .enable_all()
-        .build()?;
-    runtime.block_on(async {
+    nagoya::block_on(async {
         match command {
             Command::ListProjects => {
                 let table = agency_tools::open_projects(&dir).await?;

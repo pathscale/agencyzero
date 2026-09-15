@@ -4,6 +4,37 @@ What protects the WorkTable store, what to do when a launch fails anyway,
 and how the pieces earned their existence on 2026-08-01, when a botched
 migration plus a second writer turned every launch into a silent bus error.
 
+## The WorkTable 1.9 page-format boundary
+
+WorkTable 1.9 and DataBucket 0.7 write page format v3. Existing AgencyZero
+stores use v2. The new reader deliberately refuses those pages; this boundary
+is independent of AgencyZero's `SCHEMA_FINGERPRINT`, so an unchanged table
+schema does not make the files compatible.
+
+The first WorkTable 1.9 launch converts the profile automatically, before any
+application table opens. Stable and Experimental run the same code; only the
+resolved store path differs. A bundled private reader, resolved independently
+against the final WorkTable v2 release, scans all 17 tables read-only and emits
+checksummed row archives. The current `wt-migrate` code decodes those archives
+through the current AgencyZero schema and writes a separate v3 staging store.
+
+Every staged table is drained, cold-opened under WorkTable's strict checks, and
+compared by row count and full-row digest. That proves every primary-keyed row
+and field survived, while strict open proves each persisted index agrees. Only
+then is the original directory renamed to temporary `db.v2-preserved` and
+staging renamed to `db`. Once the v3 promotion marker is durably committed,
+the displaced v2 directory is deleted. A failed promotion restores or retains
+v2; a successful production migration does not leave a stale database copy.
+
+Promotion has a durable `db.v3-migration-state` phase marker. A crash during
+export/import discards only derived staging and retries from the untouched v2
+source. A crash between the two same-filesystem renames resumes promotion on
+the next launch. `complete` plus a v3 live store makes every later launch skip
+the converter and removes a temporary v2 directory left by a crash after the
+commit. Any failure stops startup instead of opening partial v3 data;
+`AZ_NO_DB_MIGRATION=1` remains the explicit way to leave v2 untouched and run
+that session on scratch.
+
 ## The engine bug at the bottom of it
 
 The August 4 message failure isolated a second loaded-index defect:

@@ -29,6 +29,7 @@ describe("the catalogue", () => {
     expect(workspace.state.models.map((entry) => entry.agent)).toEqual([
       "claude",
       "codex",
+      "grok",
       "copilot",
     ]);
   });
@@ -155,7 +156,7 @@ describe("choosing models", () => {
 });
 
 describe("what the prompt offers", () => {
-  it("offers the enabled Claude and OpenAI models, in catalogue order", async () => {
+  it("offers every enabled model, in catalogue order", async () => {
     const workspace = await mountWorkspace();
     expect(workspace.promptModels().map((option) => option.value)).toEqual([
       "claude:default",
@@ -168,6 +169,8 @@ describe("what the prompt offers", () => {
       "codex:gpt-5.6-terra",
       "codex:gpt-5.6-luna",
       "codex:gpt-5.5",
+      "grok:grok-4.6",
+      "grok:grok-4.5",
     ]);
   });
 
@@ -186,7 +189,7 @@ describe("what the prompt offers", () => {
     const sonnet = workspace.promptModels().find((option) => option.value === "claude:sonnet");
     const sol = workspace.promptModels().find((option) => option.value === "codex:gpt-5.6-sol");
     expect(sonnet?.label).toBe("Claude · Sonnet");
-    expect(sol?.label).toBe("OpenAI · GPT-5.6-Sol");
+    expect(sol?.label).toBe("Codex · GPT-5.6-Sol");
   });
 
   it("follows the selection as it changes", async () => {

@@ -11,6 +11,7 @@
         open: Some("theta theta north indi"),
         hover: None,
         click: None,
+        reveal_before_capture: Some("textbox:Notes kept across compaction"),
         // `role:name`, not the name alone: the panel labels its heading and its
         // field alike, so a name-only match is answered by the heading.
         subject: "textbox:Notes kept across compaction",

@@ -199,6 +199,11 @@ if [ "$mode" != "quick" ]; then
   )
 fi
 
+if [ "$mode" != "verify" ]; then
+  echo "==> WorkTable v2 migration reader"
+  "$repo_root/scripts/stage-wt-v2-reader-sidecar.sh"
+fi
+
 case "$mode" in
   verify)
     echo "==> verified"
@@ -236,6 +241,8 @@ case "$mode" in
     # crash and cuts off the store mid-write. Ask it to quit first.
     quit_running_bundle "$bundle"
     cp "$repo_root/target/release/az-gui" "$bundle/Contents/MacOS/az-gui"
+    cp "$repo_root/apps/gui/binaries/agencyzero-wt-v2-reader-$rust_target" \
+      "$bundle/Contents/MacOS/agencyzero-wt-v2-reader"
     # Carry the version across too.
     #
     # `Info.plist` is written by the bundler, which `quick` does not run, so the

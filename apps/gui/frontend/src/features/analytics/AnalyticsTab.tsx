@@ -4,10 +4,12 @@ import { createMemo, createSignal, For, onSettled, Show } from "solid-js";
 import { Button } from "~/components/Button";
 import { Icon } from "~/components/Icon";
 import { duration } from "~/lib/format";
+import { AGENT_LABELS } from "~/lib/labels";
 import { whileMounted } from "~/lib/live";
 import { tx } from "~/stores/i18n";
 import { useWorkspace } from "~/stores/workspace";
 import type {
+  Agent,
   UsageAgentValue,
   UsageAnalytics,
   UsageDay,
@@ -237,11 +239,7 @@ function AgentValue(props: { agents: UsageAgentValue[] }): JSX.Element {
               <div class="rounded-lg border border-az-hairline px-3 py-2.5">
                 <div class="flex items-baseline justify-between gap-2">
                   <span class="font-semibold text-az-strong text-ui-label">
-                    {agent.agent === "codex"
-                      ? "Codex"
-                      : agent.agent === "claude"
-                        ? "Claude"
-                        : agent.agent}
+                    {AGENT_LABELS[agent.agent as Agent] ?? agent.agent}
                   </span>
                   <span class="font-mono text-primary text-ui-label">
                     {agent.costPerCompletedItem === null
@@ -283,7 +281,9 @@ function SessionBreakdown(props: { sessions: UsageSession[] }): JSX.Element {
               <div class="rounded-lg border border-az-hairline px-3 py-2.5">
                 <div class="flex items-baseline gap-2 text-ui-detail">
                   <span class="min-w-0 flex-1 truncate text-az-strong">{session.projectName}</span>
-                  <span class="font-mono text-az-muted text-ui-caption-sm">{session.agent}</span>
+                  <span class="font-mono text-az-muted text-ui-caption-sm">
+                    {AGENT_LABELS[session.agent as Agent] ?? session.agent}
+                  </span>
                   <span class="font-mono text-az-title text-ui-caption">
                     {dollars(session.costUsd)}
                   </span>

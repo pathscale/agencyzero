@@ -15,9 +15,10 @@ import {
 import type { AgencyZeroApi, AppEvents, Unlisten } from "~/api";
 import { selectApi } from "~/api";
 import { setItemReferenceHandler } from "~/lib/itemReference";
-import { PERMISSION_ORDER } from "~/lib/labels";
+import { AGENT_LABELS, PERMISSION_ORDER } from "~/lib/labels";
 import { describeError, installGlobalErrorLogging, log } from "~/lib/log";
 import { record as recordPerf } from "~/lib/perf";
+import { runningRows } from "~/lib/running";
 import { usageTotals } from "~/lib/stats";
 import { installSubscriptions, type SubscriptionFactory } from "~/lib/subscriptions";
 import { applyTheme, windowChromeForTheme } from "~/lib/theme";
@@ -435,9 +436,9 @@ const HOME_TAB: Tab = {
   status: "quiet",
 };
 
-/** Project runs support these two providers; Copilot remains Settings-only. */
-function isProjectAgent(agent: Agent): agent is "claude" | "codex" {
-  return agent === "claude" || agent === "codex";
+/** Project runs support these providers; Copilot remains Settings-only. */
+function isProjectAgent(agent: Agent): agent is "claude" | "codex" | "grok" {
+  return agent === "claude" || agent === "codex" || agent === "grok";
 }
 
 function compatiblePermission(
@@ -699,7 +700,7 @@ export function createWorkspace() {
     }
     const status = state.agents.find((candidate) => candidate.agent === agent);
     if (status?.state === "connected") return;
-    const label = agent === "claude" ? "Claude" : agent === "codex" ? "Codex" : "Copilot";
+    const label = AGENT_LABELS[agent];
     throw new Error(
       `${label} is not ready. Install or sign in from Settings, then run the agent checks again.`,
     );
@@ -999,7 +1000,14 @@ export function createWorkspace() {
       "claude";
     const limit = state.rateLimits[projectId]?.[selectedAgent];
     if (limit?.isBlocking && isLimitLive(limit, clock())) return "blocked";
-    if ((state.running[projectId] ?? []).length > 0) return "running";
+    /*
+     * A live turn, not only an in-flight tool. Fast tools finish in the same
+     * tick they start, so `state.running` is empty for most of a working turn;
+     * `runStatus` exists from `run:accepted` to `run:stopped` for every agent.
+     */
+    if (projectId in state.runStatus || (state.running[projectId] ?? []).length > 0) {
+      return "running";
+    }
 
     /*
      * Idle, so the question is whether this project is still live work.
@@ -1015,10 +1023,10 @@ export function createWorkspace() {
 
   /** Models enabled in Settings for the two project-capable agents. */
   const promptModels = createMemo(() => {
-    return (["claude", "codex"] as const).flatMap((agent) => {
+    return (["claude", "codex", "grok"] as const).flatMap((agent) => {
       const catalogue = state.models.find((entry) => entry.agent === agent);
       const enabled = state.settings?.models[agent].enabled ?? [];
-      const provider = agent === "claude" ? "Claude" : "OpenAI";
+      const provider = AGENT_LABELS[agent];
       return (catalogue?.models ?? [])
         .filter((model) => enabled.includes(model.id))
         .map((model) => ({
@@ -1071,6 +1079,14 @@ export function createWorkspace() {
     return capabilitiesFor(agent)?.approvals
       ? [...PERMISSION_ORDER]
       : PERMISSION_ORDER.filter((permission) => permission !== "ask");
+  }
+
+  /**
+   * What the Running panel lists. In-flight tools if any, otherwise one row
+   * for the live turn so a working agent does not read as idle.
+   */
+  function runningFor(projectId: string): RunningTask[] {
+    return runningRows(projectId, state.running[projectId], state.runStatus[projectId]);
   }
 
   function itemsFor(projectId: string): ProjectItem[] {
@@ -1752,8 +1768,10 @@ export function createWorkspace() {
     return state.settings?.defaultEffort ?? FALLBACK_EFFORT;
   }
 
-  function defaultAgent(): "claude" | "codex" {
-    return state.settings?.defaultAgent === "codex" ? "codex" : "claude";
+  function defaultAgent(): "claude" | "codex" | "grok" {
+    const agent = state.settings?.defaultAgent;
+    if (agent === "codex" || agent === "grok") return agent;
+    return "claude";
   }
 
   function defaultModel(): string {
@@ -2715,7 +2733,7 @@ export function createWorkspace() {
    * editing an unrelated setting should not silently reset it.
    */
   function reconcileTabModels(settings: GlobalSettings): void {
-    const defaultAgent = settings.defaultAgent === "codex" ? "codex" : "claude";
+    const defaultAgent = isProjectAgent(settings.defaultAgent) ? settings.defaultAgent : "claude";
     const selection = settings.models[defaultAgent];
     if (!selection || selection.enabled.length === 0) return;
 
@@ -3784,6 +3802,7 @@ export function createWorkspace() {
     capabilitiesFor,
     permissionsFor,
     itemsFor,
+    runningFor,
     openItemCount,
     promptModels,
     init,

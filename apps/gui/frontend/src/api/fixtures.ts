@@ -418,6 +418,23 @@ export const AGENT_STATUS: AgentStatus[] = [
     },
     checkedAt: ago(2 * 60_000),
   },
+  {
+    agent: "grok",
+    state: "connected",
+    version: "1.0.30",
+    minVersion: "1.0.30",
+    caps: ["fork", "thread id"],
+    capabilities: {
+      session: true,
+      fork: true,
+      events: true,
+      nativeSystem: true,
+      commands: true,
+      liveFollowUp: true,
+      approvals: true,
+    },
+    checkedAt: ago(2 * 60_000),
+  },
 ];
 
 /**
@@ -486,6 +503,23 @@ export const MODEL_CATALOGUE: AgentModels[] = [
       pinned("gpt-5.5", "GPT-5.5", "Frontier model for complex coding and research.", TO_XHIGH),
       pinned("gpt-5.4", "GPT-5.4", "Strong model for everyday coding.", TO_XHIGH),
       pinned("gpt-5.4-mini", "GPT-5.4-Mini", "Small, fast, cost-efficient model.", TO_XHIGH),
+    ],
+  },
+  {
+    agent: "grok",
+    source: "cli",
+    checked: "2026-09-13",
+    against: "grok 1.0.30",
+    discovered: false,
+    models: [
+      pinned(
+        "grok-4.6",
+        "Grok 4.6",
+        "Default Grok Build model",
+        ["minimal", "low", "medium", "high", "xhigh"],
+        true,
+      ),
+      pinned("grok-4.5", "Grok 4.5", "", ["minimal", "low", "medium", "high", "xhigh"]),
     ],
   },
   {
@@ -591,6 +625,7 @@ export const SETTINGS: GlobalSettings = {
       default: "gpt-5.6-sol",
     },
     copilot: { enabled: ["auto"], default: "auto" },
+    grok: { enabled: ["grok-4.6", "grok-4.5"], default: "grok-4.6" },
   },
   defaultPermission: "read_only",
   defaultEffort: "high",
