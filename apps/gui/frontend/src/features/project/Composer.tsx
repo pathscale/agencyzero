@@ -1241,7 +1241,14 @@ export function Composer(props: ComposerProps): JSX.Element {
             air above it, the controls only need to clear the edge. Even spacing
             made the row look adrift in the box rather than seated at its foot.
           */
-          class={`flex flex-col gap-2.5 bg-az-inset ${
+          /*
+            `overflow-hidden`: the inner radius is the ring's outer radius less
+            its 1px padding, so a child that reaches the padding box, such as
+            the first attachment chip, is drawn over the corner the ring
+            rounded. Without clipping here that chip squares off the top-left
+            while the untouched right corner stays round.
+          */
+          class={`flex flex-col gap-2.5 overflow-hidden bg-az-inset ${
             props.size === "lg" ? "rounded-[18px] p-[18px] pb-2.5" : "rounded-2xl p-[15px] pb-2"
           }`}
         >
@@ -1321,7 +1328,7 @@ export function Composer(props: ComposerProps): JSX.Element {
                 event.preventDefault();
                 void submit();
               }}
-              class={`az-scroll block max-h-full min-h-0 w-full min-w-0 resize-none overflow-y-auto overflow-x-hidden whitespace-pre-wrap break-words border-0 bg-transparent p-0 text-base-content leading-[1.45] shadow-none [overflow-wrap:anywhere] placeholder:text-az-faint focus:bg-transparent focus:shadow-none focus:outline-none ${
+              class={`az-scroll block max-h-full min-h-0 w-full min-w-0 resize-none overflow-y-auto overflow-x-hidden whitespace-pre-wrap break-words border-0 bg-transparent p-0 text-base-content leading-[1.45] shadow-none placeholder:text-az-faint focus:bg-transparent focus:shadow-none focus:outline-none ${
                 props.size === "lg" ? "text-ui-lead" : "text-ui-control-lg"
               }`}
             />
