@@ -232,7 +232,17 @@ jobs:
         id: full
         if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.group == '' && inputs.suite != 'focused') }}
         continue-on-error: true
-        timeout-minutes: 3
+        # All 312 checks, one process, on a shared runner. This was 3, which
+        # the suite outgrew rather than regressed into: the run that tripped it
+        # reported `passed: 312, failed: 0` and every contrast audit clean, then
+        # the step timeout killed it at 3m00s. The previous green run finished
+        # in 2m33s, so the margin was 27s and one more group spent it.
+        #
+        # A step timeout is not the per-check budget. `QA_TIMEOUT_SCALE` still
+        # governs whether an individual outcome is allowed to be slow; this
+        # only bounds the wall clock of the whole sweep, so raising it does not
+        # weaken a single assertion.
+        timeout-minutes: 6
         env:
           QA_GROUPS: ''
           QA_TIMEOUT_SCALE: 2
