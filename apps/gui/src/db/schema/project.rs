@@ -62,5 +62,13 @@ worktable!(
             PositionById(position) by id,
             LastActivityById(last_activity_at) by id,
         },
+        // Reordering the tab strip writes one row per tab. A normal `update`
+        // reserializes the whole row and reinserts it when the length moves;
+        // `update_in_place` mutates the archived field where it already sits,
+        // which is sound here because these columns are fixed size and none of
+        // them is indexed (`status_idx` is on `status`).
+        update_in_place: {
+            PositionInPlace(position) by id,
+        },
     }
 );
