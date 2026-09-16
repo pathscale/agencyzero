@@ -58,33 +58,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # AgencyZero takes agent-abstraction by path, from a sibling checkout, so
-      # a change can be made and tested across both without a publish between
-      # each step. Cargo resolves that path literally, and
-      # CI does not commit Cargo.lock, so the siblings have to exist before the
-      # first command that resolves the graph. Without them `cargo
-      # generate-lockfile` fails inside the sidecar script, before anything is
-      # compiled.
-      #
-      # `ref` follows the branch carrying the matching change, and falls back
-      # to the default branch once that merges. Do not replace these paths with
-      # version requirements to make CI pass: that forces a publish before the
-      # change can be tested, which is the coupling the paths exist to avoid.
-      # `actions/checkout` refuses a path outside the workspace, so the
-      # siblings land inside it and are moved up afterwards.
-      - name: Check out agent-abstraction
-        uses: actions/checkout@v4
-        with:
-          repository: pathscale/RustAgentAbstraction
-          ref: feat/grok-headless
-          path: .sibling/RustAgentAbstraction
-
-      - name: Put the sibling checkouts where the paths expect them
-        run: |
-          mv .sibling/RustAgentAbstraction ..
-          rmdir .sibling
-          test -f ../RustAgentAbstraction/Cargo.toml
-
       - name: Check portable shell scripts
         run: /bin/sh tests/shell-scripts.sh
 
@@ -126,10 +99,11 @@ jobs:
       - name: Build the WorkTable v2 migration reader
         run: scripts/stage-wt-v2-reader-sidecar.sh
 
-      # `--all` reaches into path dependencies, so it would check the sibling
-      # checkouts' formatting as well as this repository's. Those repositories
-      # gate their own formatting in their own CI. `--package` per workspace
-      # member keeps this job answering for this repository only.
+      # Named per workspace member rather than `--all`, which reaches into any
+      # path dependency and reports another repository's formatting as this
+      # job's failure. Nothing is taken by path from outside the workspace
+      # today, but a local `[patch]` or a temporary override reintroduces that
+      # the moment someone adds one, and the failure reads as ours.
       - run: cargo fmt --check -p az-gui -p az-core -p az-mcp-proxy -p wt-migrate -p agency-tools
       # Blitz is currently a macOS preview runtime. Enabling every feature on
       # this Linux runner asks it to implement Tauri's GTK-only runtime traits,
