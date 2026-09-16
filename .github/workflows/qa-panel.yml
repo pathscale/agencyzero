@@ -59,23 +59,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Same sibling checkouts as the Rust job in ci.yml, and for the same
-      # reason: the path dependencies are resolved before anything compiles.
-      # `actions/checkout` refuses a path outside the workspace, so these land
-      # inside it and are moved up afterwards.
-      - name: Check out agent-abstraction
-        uses: actions/checkout@v4
-        with:
-          repository: pathscale/RustAgentAbstraction
-          ref: feat/grok-headless
-          path: .sibling/RustAgentAbstraction
-
-      - name: Put the sibling checkouts where the paths expect them
-        run: |
-          mv .sibling/RustAgentAbstraction ..
-          rmdir .sibling
-          test -f ../RustAgentAbstraction/Cargo.toml
-
       - uses: dtolnay/rust-toolchain@stable
 
       - uses: Swatinem/rust-cache@v2
