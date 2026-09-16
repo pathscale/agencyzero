@@ -9545,7 +9545,13 @@ pub async fn reorder_projects(
         state
             .tables
             .project
-            .update_by_id(id.clone(), ProjectColumns::POSITION, position)
+            .update_in_place_by_id(
+                id.clone(),
+                ProjectColumns::POSITION,
+                |slot: &mut <u32 as worktable::prelude::rkyv::Archive>::Archived| {
+                    *slot = position.into();
+                },
+            )
             .await
             .map_err(|error| error.to_string())?;
     }
@@ -17075,6 +17081,76 @@ mod tests {
     fn compact_resume_prompt_tells_the_agent_to_continue() {
         assert!(compact_resume_prompt().contains("Compaction finished"));
         assert!(compact_resume_prompt().contains("Continue"));
+    }
+
+    /// An in-place position write must reach disk like any other update.
+    ///
+    /// `update_in_place` mutates the archived bytes where the row already sits
+    /// rather than reserializing and reinserting it. That is the whole point,
+    /// and it is also the risk: a fast path that never marks the page dirty
+    /// would look correct in memory for the rest of the session and lose the
+    /// tab order on the next launch. Reorder, drain, reopen, and read it back.
+    #[tokio::test]
+    async fn an_in_place_reorder_survives_a_reopen() {
+        let dir = std::env::temp_dir().join(format!(
+            "az-inplace-reorder-{}-{}",
+            std::process::id(),
+            uuid::Uuid::now_v7()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        let tables = Tables::open(&dir).await.expect("store opens");
+
+        let ids: Vec<String> = (0..4).map(|n| format!("proj-{n}")).collect();
+        for (position, id) in ids.iter().enumerate() {
+            tables
+                .project
+                .insert(ProjectRow {
+                    id: id.clone(),
+                    name: format!("project {position}"),
+                    status: "active".into(),
+                    position: u32::try_from(position).expect("small"),
+                    dirs: String::new(),
+                    pinned: false,
+                    moderator_enabled: false,
+                    forked_from: String::new(),
+                    last_activity_at: now(),
+                })
+                .await
+                .expect("seed row inserts");
+        }
+
+        // Reverse the strip, the way a drag does.
+        for (position, id) in ids.iter().rev().enumerate() {
+            let position = u32::try_from(position).expect("small");
+            tables
+                .project
+                .update_in_place_by_id(
+                    id.clone(),
+                    ProjectColumns::POSITION,
+                    |slot: &mut <u32 as worktable::prelude::rkyv::Archive>::Archived| {
+                        *slot = position.into();
+                    },
+                )
+                .await
+                .expect("in-place position update");
+        }
+
+        tables.shutdown().await.expect("store drains");
+        drop(tables);
+
+        let reopened = Tables::open(&dir).await.expect("store reopens");
+        for (expected, id) in ids.iter().rev().enumerate() {
+            let row = reopened
+                .project
+                .select(id.clone())
+                .expect("seeded row is still there");
+            assert_eq!(
+                row.position,
+                u32::try_from(expected).expect("small"),
+                "{id} lost its in-place position across the reopen"
+            );
+        }
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// Compaction the owner asked for must not spend a turn afterwards.
