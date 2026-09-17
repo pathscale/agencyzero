@@ -886,7 +886,7 @@ async fn delete_imported_usage(tables: &Tables, message_id: &str) {
 ///
 /// Called before Analytics is assembled. Rows already reconstructed are
 /// primary-key hits and a durable marker makes later refreshes constant-time.
-pub async fn backfill_imported_usage(tables: &Tables, pool: &crate::runtime::Pool) -> usize {
+pub async fn backfill_imported_usage(tables: &Tables) -> usize {
     const MARKER: &str = "analytics-import-backfill:v1";
     if tables.kv_get(MARKER).as_deref() == Some("complete") {
         return 0;
@@ -936,25 +936,17 @@ pub async fn backfill_imported_usage(tables: &Tables, pool: &crate::runtime::Poo
         stored.sort_by(|left, right| left.created_at.cmp(&right.created_at));
         let source = source.to_string();
         let session_id = session_id.to_string();
-        let loaded = pool
-            .run(move || crate::chat_import::load(&source, &session_id))
-            .await;
+        // Called directly: `load` is synchronous, and handing it to an
+        // executor only to await it back is the handoff that wedged
+        // `discover_chat_imports`. See [`list_item_rows`].
+        let loaded = crate::chat_import::load(&source, &session_id);
         let chat = match loaded {
-            Ok(Ok(chat)) => chat,
-            Ok(Err(error)) => {
-                crate::log!(
-                    crate::log::Level::Warn,
-                    "analytics",
-                    "{}: could not reload imported transcript usage: {error}",
-                    import.value
-                );
-                continue;
-            }
+            Ok(chat) => chat,
             Err(error) => {
                 crate::log!(
                     crate::log::Level::Warn,
                     "analytics",
-                    "{}: imported transcript reload stopped unexpectedly: {error}",
+                    "{}: could not reload imported transcript usage: {error}",
                     import.value
                 );
                 continue;
@@ -2197,18 +2189,11 @@ pub fn get_home_snapshot(state: State<'_, AppState>) -> HomeSnapshotDto {
 }
 
 #[tauri::command]
-pub async fn list_items(
-    project_id: String,
-    state: State<'_, AppState>,
-) -> Result<Vec<ProjectItemDto>, String> {
-    let tables = std::sync::Arc::clone(&state.tables);
-    state
-        .pool
-        .run(move || list_item_rows(&tables, project_id))
-        .await
+pub fn list_items(project_id: String, state: State<'_, AppState>) -> Vec<ProjectItemDto> {
+    list_item_rows(&state.tables, project_id)
 }
 
-/// The read itself, off both the window thread and the async workers.
+/// The read itself, off the async workers because it is not async.
 ///
 /// A plain `async fn` was tried first and made this worse, not better:
 /// `list_items` went from 10.8ms average to 52.5ms. Tauri runs async commands
@@ -2217,10 +2202,17 @@ pub async fn list_items(
 /// store read there stops it queueing behind other reads and starts it queueing
 /// behind those.
 ///
-/// So it runs on [`crate::runtime::Pool`], which is neither the window thread
-/// nor an async worker, and a read waits on nothing it has no reason to wait
-/// on. That was `tokio::task::spawn_blocking` first, which got the same result
-/// on a pool az neither sizes nor stops; see the module for why az owns one.
+/// The answer is not to ship it somewhere else, it is not to make it async at
+/// all. A synchronous `#[tauri::command]` runs on the invoke thread rather than
+/// the async runtime, so it never joins that queue, and there is no executor
+/// between the caller and the answer. Two designs did ship it elsewhere first,
+/// `tokio::task::spawn_blocking` and then a nagoya pool, and the second bought
+/// a defect with it: awaiting a nagoya `JoinHandle` from Tauri's tokio task
+/// registers the waker with one executor and wakes it from the other, and a
+/// wake lost in that handoff is a command that never returns. Sixteen
+/// `discover_chat_imports` dispatches were answered seven times in one
+/// session, the last eight wedged, which is what left Settings showing "No
+/// sessions discovered" and ps-qa's `select` group failing.
 fn list_item_rows(tables: &Tables, project_id: String) -> Vec<ProjectItemDto> {
     let mut rows: Vec<ProjectItemDto> = tables
         .project_item
@@ -3093,7 +3085,7 @@ pub async fn reorder_items(
 ) -> Result<Vec<ProjectItemDto>, String> {
     let started = std::time::Instant::now();
     let moved = write_item_positions(&state.tables, &ids, 0).await?;
-    let items = list_items(project_id.clone(), state.clone()).await?;
+    let items = list_items(project_id.clone(), state.clone());
     let moved: std::collections::HashSet<&str> = moved.iter().map(String::as_str).collect();
     for item in items.iter().filter(|item| moved.contains(item.id.as_str())) {
         let _ = app.emit("item:updated", item.clone());
@@ -3127,20 +3119,15 @@ pub struct MessagePage {
 ///
 /// Passing `None` still returns everything, for callers that genuinely want it.
 #[tauri::command]
-pub async fn list_messages(
+pub fn list_messages(
     project_id: String,
     limit: Option<usize>,
     state: State<'_, AppState>,
-) -> Result<MessagePage, String> {
-    let tables = std::sync::Arc::clone(&state.tables);
-    state
-        .pool
-        .run(move || message_page(&tables, project_id, limit))
-        .await
+) -> MessagePage {
+    message_page(&state.tables, project_id, limit)
 }
 
-/// See [`list_item_rows`] for why this is a blocking-pool task and not an
-/// `async fn`.
+/// See [`list_item_rows`] for why its command is synchronous.
 fn message_page(tables: &Tables, project_id: String, limit: Option<usize>) -> MessagePage {
     let reply_targets: std::collections::HashMap<String, String> = tables
         .question_reply
@@ -6686,21 +6673,13 @@ impl Drop for RunReservation {
 
 /// What is running in this project right now.
 #[tauri::command]
-pub async fn list_running_tasks(
-    project_id: String,
-    state: State<'_, AppState>,
-) -> Result<Vec<RunningTaskDto>, String> {
-    let running = std::sync::Arc::clone(&state.running);
-    // See [`list_item_rows`]: az's own pool, not an async worker.
+pub fn list_running_tasks(project_id: String, state: State<'_, AppState>) -> Vec<RunningTaskDto> {
+    // See [`list_item_rows`]: a mutex read is not async work.
     state
-        .pool
-        .run(move || {
-            running
-                .lock()
-                .map(|tasks| tasks.get(&project_id).cloned().unwrap_or_default())
-                .unwrap_or_default()
-        })
-        .await
+        .running
+        .lock()
+        .map(|tasks| tasks.get(&project_id).cloned().unwrap_or_default())
+        .unwrap_or_default()
 }
 
 /// A page of the task log, plus the total the page came out of.
@@ -7308,7 +7287,7 @@ pub async fn get_usage_analytics(state: State<'_, AppState>) -> Result<UsageAnal
     // before the matching ledger rows do, producing a trustworthy-looking
     // partial report from an import that is still in flight.
     let _import_guard = state.chat_imports.lock().await;
-    let reconstructed = backfill_imported_usage(&state.tables, &state.pool).await;
+    let reconstructed = backfill_imported_usage(&state.tables).await;
     if reconstructed > 0 {
         crate::log!(
             crate::log::Level::Info,
@@ -10182,16 +10161,15 @@ fn exclude_owned_imports(
 }
 
 #[tauri::command]
-pub async fn discover_chat_imports(
+pub fn discover_chat_imports(
     state: State<'_, AppState>,
 ) -> Result<Vec<crate::chat_import::SourceStatus>, String> {
     let claude = owned_provider_sessions(&state.tables, Agent::Claude);
     let codex = owned_provider_sessions(&state.tables, Agent::Codex);
-    let mut sources = state
-        .pool
-        .run(crate::chat_import::discover)
-        .await
-        .map_err(|error| format!("chat discovery stopped unexpectedly: {error}"))??;
+    // A directory walk bounded by `MAX_DISCOVERED_FILES`, on the invoke thread
+    // rather than an executor. See [`list_item_rows`]: this command is the one
+    // the cross-executor await actually broke.
+    let mut sources = crate::chat_import::discover()?;
     exclude_owned_imports(&mut sources, &claude, &codex);
     Ok(sources)
 }
@@ -10282,13 +10260,11 @@ pub async fn import_chat_session(
         return Ok(with_session(ProjectDto::from(row), &state.tables));
     }
 
-    let parse_source = source.clone();
-    let parse_session = session_id.clone();
-    let chat = state
-        .pool
-        .run(move || crate::chat_import::load(&parse_source, &parse_session))
-        .await
-        .map_err(|error| format!("chat import stopped unexpectedly: {error}"))??;
+    // Synchronous, like the rest of the import path. See [`list_item_rows`]:
+    // this command stays `async` for the writes below it, and a transcript
+    // parse is the one long unit here, but shipping it to an executor and
+    // awaiting it back is the handoff that wedged discovery.
+    let chat = crate::chat_import::load(&source, &session_id)?;
     if chat.messages.is_empty() {
         return Err("the selected session contains no importable user or agent messages".into());
     }
@@ -16731,8 +16707,8 @@ mod tests {
             .expect("provider session persists");
 
         let pool = crate::runtime::Pool::new();
-        assert_eq!(backfill_imported_usage(&tables, &pool).await, 1);
-        assert_eq!(backfill_imported_usage(&tables, &pool).await, 0);
+        assert_eq!(backfill_imported_usage(&tables).await, 1);
+        assert_eq!(backfill_imported_usage(&tables).await, 0);
         pool.stop();
 
         let ledger = tables
