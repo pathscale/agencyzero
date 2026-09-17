@@ -37,6 +37,8 @@
 //! shutdown here and an explicit [`Pool::stop`] the right one, called from
 //! the persistence drain, after the last read that could still be in flight.
 
+use std::future::Future;
+
 use nagoya::runtime::Runtime;
 
 /// A pool for work that finishes rather than work that waits.
@@ -98,6 +100,28 @@ impl Pool {
             .spawn(async move { work() })
             .await
             .ok_or_else(|| "the work was cancelled before it produced an answer".to_string())
+    }
+
+    /// Start `work` on the pool and do not wait for it.
+    ///
+    /// For a send whose answer the caller does not need and must not block
+    /// for. The run loop's liveness ping is the case: it has to keep draining
+    /// provider events, and awaiting the send fills the bounded event channel
+    /// and manufactures the deadlock the ping exists to detect.
+    ///
+    /// Nothing is returned, so a panic inside `work` is lost rather than
+    /// propagated. `work` should carry its own failure back, the way the ping
+    /// sets a latch the loop reads.
+    ///
+    /// This is a future rather than a closure, unlike [`Self::run`]: the point
+    /// is work that suspends, where `run`'s point is work that does not.
+    pub fn spawn<F>(&self, work: F)
+    where
+        F: Future<Output = ()> + Send + 'static,
+    {
+        // The handle is dropped, which detaches rather than cancels, so the
+        // task runs to completion with nobody watching.
+        drop(self.runtime.spawn(work));
     }
 
     /// Stop the workers and let their threads exit.

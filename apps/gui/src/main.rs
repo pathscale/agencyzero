@@ -311,7 +311,11 @@ pub(crate) struct AppState {
     tables: Arc<Tables>,
     /// The threads az's own synchronous work runs on, owned rather than
     /// borrowed from tokio's process-wide blocking pool. See [`runtime::Pool`].
-    pub(crate) pool: runtime::Pool,
+    ///
+    /// An `Arc` because a run outlives the command that started it: `drive_run`
+    /// is spawned and keeps sending pings long after the caller's borrow of
+    /// this state has gone.
+    pub(crate) pool: Arc<runtime::Pool>,
     /// Persistent provider runtime. The GUI is only a client; live agent
     /// processes survive this application's restart inside AgencyProxy.
     proxy: Arc<agent_proxy::AgencyProxy>,
@@ -3030,7 +3034,7 @@ fn main() {
             let restart_resume = take_restart_resume(&config_dir);
             app.manage(AppState {
                 tables: Arc::new(tables),
-                pool: runtime::Pool::new(),
+                pool: Arc::new(runtime::Pool::new()),
                 proxy,
                 running: Arc::default(),
                 io: Arc::default(),
