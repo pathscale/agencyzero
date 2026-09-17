@@ -607,7 +607,7 @@ impl AppState {
         // true. Let one already in flight finish before asking WorkTable if it
         // is idle, otherwise that refresh can submit a new operation after the
         // pull-request table has already reported drained.
-        tokio::time::timeout(
+        nagoya::timeout(
             std::time::Duration::from_secs(15),
             self.pr_refreshes.wait_until_empty(),
         )
@@ -669,7 +669,7 @@ pub(crate) fn schedule_agent_restart(
     let project_id = project_id.to_string();
     let actor = actor.to_string();
     tauri::async_runtime::spawn(async move {
-        let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(600);
+        let deadline = runtime::deadline_in(std::time::Duration::from_secs(600));
         let token = uuid::Uuid::new_v4().to_string();
         let (confirmed, confirmation) = tokio::sync::oneshot::channel();
         let ready = async {
@@ -684,13 +684,13 @@ pub(crate) fn schedule_agent_restart(
                     serde_json::json!({ "token": token }),
                 )
                 .map_err(|error| format!("could not announce the scheduled restart: {error}"))?;
-            tokio::time::timeout_at(deadline, confirmation)
+            nagoya::timeout(runtime::remaining(deadline), confirmation)
                 .await
                 .map_err(|_| {
                     "agent restart expired while frontend work remained queued".to_string()
                 })?
                 .map_err(|_| "the frontend restart confirmation was dropped".to_string())?;
-            tokio::time::timeout_at(deadline, state.active.wait_until_idle())
+            nagoya::timeout(runtime::remaining(deadline), state.active.wait_until_idle())
                 .await
                 .map_err(|_| "agent restart expired while runs remained active".to_string())??;
             Ok::<(), String>(())
@@ -1629,7 +1629,7 @@ async fn quit_app(app: AppHandle, state: State<'_, AppState>) -> Result<(), Stri
 async fn quit_app_and_proxy(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
     state.proxy.terminate().await?;
 
-    tokio::time::timeout(
+    nagoya::timeout(
         std::time::Duration::from_secs(15),
         state.active.wait_until_idle(),
     )

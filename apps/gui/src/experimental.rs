@@ -120,7 +120,7 @@ pub async fn claude_usage() -> Result<ClaudeUsageDto, String> {
             .map_err(|error| error.to_string())?;
         let usage = (|| client.fetch())
             .retry(crate::retry::interactive_backoff())
-            .sleep(tokio::time::sleep)
+            .sleep(nagoya::sleep)
             .await
             .map_err(|error| error.to_string())?;
 

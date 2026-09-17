@@ -49,6 +49,7 @@
 //! persistence drain, after the last send that could still be in flight.
 
 use std::future::Future;
+use std::time::Duration;
 
 use nagoya::runtime::Runtime;
 
@@ -140,4 +141,26 @@ impl std::fmt::Debug for Pool {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter.debug_struct("Pool").finish_non_exhaustive()
     }
+}
+
+/// A deadline `duration` from now, on the clock [`nagoya::now_ns`] reads.
+///
+/// Nagoya has `sleep_until` but no `timeout_at`, so a deadline shared by
+/// several awaits is held as an absolute instant here and converted back to
+/// what is left of it at each call, by [`remaining`]. That is what
+/// `tokio::time::timeout_at` gave: one budget spanning a sequence of steps,
+/// rather than a fresh full timeout for each.
+#[must_use]
+pub fn deadline_in(duration: Duration) -> u64 {
+    nagoya::now_ns().saturating_add(u64::try_from(duration.as_nanos()).unwrap_or(u64::MAX))
+}
+
+/// What is left of `deadline`, saturating at zero.
+///
+/// A deadline already passed returns zero rather than wrapping, and a timeout
+/// of zero fires on its first poll, which is the answer a caller past its
+/// budget is owed.
+#[must_use]
+pub fn remaining(deadline: u64) -> Duration {
+    Duration::from_nanos(deadline.saturating_sub(nagoya::now_ns()))
 }
