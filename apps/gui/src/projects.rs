@@ -12132,10 +12132,19 @@ async fn drive_run(
      */
     let (injection_delivery_tx, mut injection_delivery_rx) =
         tokio::sync::mpsc::unbounded_channel::<InjectedMessage>();
-    // A latch, not a queue. This is awaited from two different loops below,
-    // and `recv()` consumes: whichever polled first took the one `()` and the
+    // One wake for the three facts that stop or retry this loop.
+    //
+    // They were three `select!` arms, which asked the loop to re-poll all
+    // three on every provider event to be told, almost always, that nothing
+    // had changed. Each is an `AtomicBool` that knows exactly when it moved,
+    // so they share a queue instead: one registration, and the loop reads the
+    // flags to learn which fired. Level triggered, so two arriving together
+    // are both seen rather than one being consumed.
+    let signals = crate::cancel::Signals::around(cancel);
+    // A latch, not a queue. This is read from two different loops below, and
+    // `recv()` consumes: whichever polled first took the one `()` and the
     // other waited forever for a failure that had already happened.
-    let injection_failure = crate::cancel::Latch::new();
+    let injection_failure = signals.injection_failure.clone();
     let injection_failure_delivery = injection_failure.clone();
     let injection_app = app.clone();
     let injection_tables = tables.clone();
@@ -12163,7 +12172,7 @@ async fn drive_run(
         tokio::sync::mpsc::channel::<()>(MAX_UNANSWERED_LIVENESS_PINGS as usize);
     // One bit, set once, read by the loop that then stops. A queue allocated a
     // node and woke a task to carry it.
-    let ping_failed = crate::cancel::Latch::new();
+    let ping_failed = signals.ping_failed.clone();
     let ping_failed_delivery = ping_failed.clone();
     let ping_control = run.control();
     let ping_turn_id = turn_id.clone();
@@ -12338,6 +12347,10 @@ async fn drive_run(
     let mut idle_deadline = tokio::time::Instant::now() + start_timeout;
     // Set when a liveness ping has been injected and not yet answered. One ping
     // per silence: a second expiry with this still set is the wedged case.
+    // Facts this loop has acted on and does not want woken for again. A
+    // `Latch` never clears, so without this a handled non-terminal fact would
+    // make its arm ready on every iteration and spin the loop.
+    let mut handled = crate::cancel::Handled::default();
     let mut ping_outstanding = false;
     // Bounded retries, so a tool that legitimately outlives one ping window is
     // not mistaken for a wedged run. Reset wherever the ping itself is.
@@ -12349,29 +12362,40 @@ async fn drive_run(
                 None => break,
             },
             /*
-             * `Ok` is the signal; `Err` means the sender vanished from the
-             * registry, which only teardown paths do — both read as "stop".
+             * One arm for the three facts that stop or redirect this loop.
+             *
+             * They were three arms, so every provider event re-polled all
+             * three to be told nothing had changed. They share a wake now:
+             * this parks once and reads the flags, which is three `Acquire`
+             * loads. Level triggered, so two arriving together are both acted
+             * on rather than one being consumed.
              */
-            () = cancel.cancelled() => {
-                crate::log!(crate::log::Level::Info, "run", "{project_id}: stop observed in the main event loop");
-                cancelled = true;
-                break;
-            }
-            () = injection_failure.waited() => {
-                // The visible message is already queued for retry. Free the
-                // one-run-per-project slot so that retry can resume the same
-                // session instead of waiting behind a dead app-server forever.
-                cancelled = true;
-                stalled_injection = true;
-                break;
-            }
-            /*
-             * The ping could not be delivered, so nothing is going to answer
-             * it. Clearing the flag rather than stopping here keeps the
-             * decision in one place: the next expiry finds no outstanding ping
-             * and takes the ordinary wedged path.
-             */
-            () = ping_failed.waited() => {
+            () = signals.changed(handled) => {
+                if signals.cancel.is_cancelled() {
+                    crate::log!(crate::log::Level::Info, "run", "{project_id}: stop observed in the main event loop");
+                    cancelled = true;
+                    break;
+                }
+                if signals.injection_failure.is_set() {
+                    // The visible message is already queued for retry. Free the
+                    // one-run-per-project slot so that retry can resume the same
+                    // session instead of waiting behind a dead app-server forever.
+                    cancelled = true;
+                    stalled_injection = true;
+                    break;
+                }
+                /*
+                 * The ping could not be delivered, so nothing is going to
+                 * answer it. Clearing the outstanding flag rather than stopping
+                 * keeps the decision in one place: the next expiry finds no
+                 * outstanding ping and takes the ordinary wedged path.
+                 *
+                 * `ping_failed` stays set, so this arm would be ready forever
+                 * and spin the loop. Taking the ping worker's queue down is
+                 * what makes it quiet: the fact has been acted on, and the
+                 * only thing that could set it again is a worker that no
+                 * longer exists.
+                 */
                 crate::log!(
                     crate::log::Level::Warn,
                     "run",
@@ -12379,6 +12403,7 @@ async fn drive_run(
                 );
                 ping_outstanding = false;
                 unanswered_pings = 0;
+                handled.ping_failed = true;
                 continue;
             }
             () = async {
@@ -12729,14 +12754,44 @@ async fn drive_run(
                         () = tokio::time::sleep_until(deadline) => break None,
                         // Stop can arrive while the question stands; the pending
                         // tool call is denied and the loop tail tears down.
-                        () = cancel.cancelled() => {
-                            crate::log!(crate::log::Level::Info, "run", "{project_id}: stop observed while waiting on an approval");
+                        /*
+                         * One arm for every reason this wait ends early.
+                         *
+                         * This was two arms, `cancel` and `injection_failure`,
+                         * and it silently omitted `ping_failed`: a liveness
+                         * ping that could not be delivered went unobserved
+                         * until the approval resolved, because the outer loop
+                         * that watches for it is not running while this one
+                         * is. Duplicating a poll set is how that happens, and
+                         * adding a third arm here would only postpone the next
+                         * divergence.
+                         *
+                         * The facts share a wake, so this parks once and reads
+                         * the flags to learn which fired.
+                         */
+                        /*
+                         * One arm for every reason this wait ends early.
+                         *
+                         * This was two arms, `cancel` and `injection_failure`,
+                         * and it silently omitted `ping_failed`: a liveness
+                         * ping that could not be delivered went unobserved
+                         * until the approval resolved, because the outer loop
+                         * that watches for it is not running while this one
+                         * is. Duplicating a poll set is how that happens.
+                         *
+                         * `stopped` is the right set rather than all three: a
+                         * failed ping means this run is unmonitored, not that
+                         * it is over, and the owner is still being asked a
+                         * question. It shares the wake, so a ping failure
+                         * re-checks and parks again instead of waking this.
+                         */
+                        () = signals.stopped() => {
+                            if signals.cancel.is_cancelled() {
+                                crate::log!(crate::log::Level::Info, "run", "{project_id}: stop observed while waiting on an approval");
+                            } else {
+                                stalled_injection = true;
+                            }
                             cancelled = true;
-                            break None;
-                        }
-                        () = injection_failure.waited() => {
-                            cancelled = true;
-                            stalled_injection = true;
                             break None;
                         }
                         injected = inject_rx.recv() => {
