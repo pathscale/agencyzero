@@ -36,7 +36,10 @@ use nagoya::sync::Notify;
 #[derive(Debug)]
 struct Inner {
     stopped: AtomicBool,
-    wake: Notify,
+    /// Shared, because [`Signals`] gives three facts one queue: a loop waiting
+    /// on all three then parks once rather than holding three registrations.
+    /// A `Cancel` built on its own still owns an `Arc` nobody else holds.
+    wake: Arc<Notify>,
 }
 
 /// A cancellation switch, cloneable and cheap.
@@ -53,7 +56,19 @@ impl Cancel {
     pub fn new() -> Self {
         Self(Arc::new(Inner {
             stopped: AtomicBool::new(false),
-            wake: Notify::new(),
+            wake: Arc::new(Notify::new()),
+        }))
+    }
+
+    /// A switch that rings `wake` rather than a queue of its own.
+    ///
+    /// For [`Signals`], where three facts share one wake so a loop waiting on
+    /// all of them parks once.
+    #[must_use]
+    fn sharing(wake: &Arc<Notify>) -> Self {
+        Self(Arc::new(Inner {
+            stopped: AtomicBool::new(false),
+            wake: Arc::clone(wake),
         }))
     }
 
@@ -137,7 +152,17 @@ impl Latch {
     pub fn new() -> Self {
         Self(Arc::new(Inner {
             stopped: AtomicBool::new(false),
-            wake: Notify::new(),
+            wake: Arc::new(Notify::new()),
+        }))
+    }
+
+    /// A latch that rings `wake` rather than a queue of its own. See
+    /// [`Cancel::sharing`].
+    #[must_use]
+    fn sharing(wake: &Arc<Notify>) -> Self {
+        Self(Arc::new(Inner {
+            stopped: AtomicBool::new(false),
+            wake: Arc::clone(wake),
         }))
     }
 
@@ -149,6 +174,22 @@ impl Latch {
         self.0.wake.notify_waiters();
     }
 
+    /// A future that completes when it happens, or at once if it already has.
+    ///
+    /// The run loop reaches for [`Signals::stopped`] or [`Signals::changed`]
+    /// instead, which is the point of those: three facts behind one wake. This
+    /// stays because it is a latch's defining behaviour and the tests below
+    /// assert it - a latch is observed by every waiter rather than consumed by
+    /// one, which is the property that makes sharing a wake safe.
+    #[allow(dead_code, reason = "the primitive's contract; asserted in tests")]
+    #[must_use]
+    pub fn waited(&self) -> Cancelled<'_> {
+        Cancelled {
+            inner: &self.0,
+            waiting: None,
+        }
+    }
+
     /// Whether it has happened, without waiting.
     ///
     /// Kept for the same reason as [`Cancel::is_cancelled`]: level-readable as
@@ -157,15 +198,6 @@ impl Latch {
     #[must_use]
     pub fn is_set(&self) -> bool {
         self.0.stopped.load(Ordering::Acquire)
-    }
-
-    /// A future that completes when it happens, or at once if it already has.
-    #[must_use]
-    pub fn waited(&self) -> Cancelled<'_> {
-        Cancelled {
-            inner: &self.0,
-            waiting: None,
-        }
     }
 }
 
@@ -327,6 +359,81 @@ mod tests {
         fire.join().expect("firing thread");
     }
 
+    /// One wait, woken by whichever of the three fires.
+    #[test]
+    fn any_signal_wakes_the_single_wait() {
+        for which in 0..3 {
+            let signals = Signals::new();
+            let firing = signals.clone();
+            let fire = std::thread::spawn(move || {
+                std::thread::sleep(Duration::from_millis(20));
+                match which {
+                    0 => firing.cancel.cancel(),
+                    1 => firing.injection_failure.set(),
+                    _ => firing.ping_failed.set(),
+                }
+            });
+            // Completes for any of the three, through one registration.
+            nagoya::block_on(async { signals.changed(Handled::default()).await });
+            assert!(
+                signals.pending(Handled::default()),
+                "signal {which} was observed"
+            );
+            fire.join().expect("firing thread");
+        }
+    }
+
+    /// The race a shared wake must not lose: fire first, wait second.
+    #[test]
+    fn a_signal_set_before_the_wait_is_still_observed() {
+        let signals = Signals::new();
+        signals.ping_failed.set();
+        // Must not hang: `changed` reads the flags before parking.
+        nagoya::block_on(async { signals.changed(Handled::default()).await });
+        assert!(signals.ping_failed.is_set());
+        assert!(!signals.cancel.is_cancelled(), "only the one that fired");
+    }
+
+    /// Two facts arriving together are both readable, not one consumed.
+    ///
+    /// This is what a queue could not give and why the flags are level
+    /// triggered: the loop reads all three on wake and acts on each.
+    #[test]
+    fn two_signals_are_both_visible() {
+        let signals = Signals::new();
+        signals.cancel.cancel();
+        signals.injection_failure.set();
+        nagoya::block_on(async { signals.changed(Handled::default()).await });
+        assert!(signals.cancel.is_cancelled());
+        assert!(signals.injection_failure.is_set());
+        assert!(!signals.ping_failed.is_set());
+    }
+
+    /// A handled fact stops waking the caller, so the loop cannot spin.
+    ///
+    /// `ping_failed` never clears, so once the run loop has noted it and
+    /// decided to continue, a wait that still counted it would return
+    /// instantly forever.
+    #[test]
+    fn a_handled_signal_no_longer_wakes_the_wait() {
+        let signals = Signals::new();
+        signals.ping_failed.set();
+        let handled = Handled { ping_failed: true };
+        assert!(
+            !signals.pending(handled),
+            "a handled ping is not a reason to wake"
+        );
+        // Still true, and still readable by anyone who cares.
+        assert!(signals.ping_failed.is_set());
+        // A terminal fact still gets through the same filter.
+        signals.cancel.cancel();
+        assert!(
+            signals.pending(handled),
+            "cancellation is never handled away"
+        );
+        nagoya::block_on(async { signals.changed(handled).await });
+    }
+
     /// Clones share the flag: stopping through one stops the run.
     #[test]
     fn a_clone_stops_the_same_run() {
@@ -334,5 +441,164 @@ mod tests {
         let clone = cancel.clone();
         clone.cancel();
         assert!(cancel.is_cancelled(), "the clone shares one flag");
+    }
+}
+
+/// The run's three stop-or-retry facts, behind one wake.
+///
+/// # Why these are one object
+///
+/// The run loop waited on `cancel`, `injection_failure` and `ping_failed` as
+/// three separate `select!` arms. Each is a [`Cancel`] or [`Latch`], which is
+/// to say each is an `AtomicBool` that already knows exactly when it changed
+/// and a `Notify` that already wakes whoever is parked on it. Putting three
+/// such things in a poll set asks the loop to re-poll all three every time any
+/// one of them — or a provider event, or a timer — fires.
+///
+/// So they share a wake instead. "Something wants this loop to stop or retry"
+/// is one event; *which* of the three it was is a question the loop answers by
+/// reading the flags, which is three `Acquire` loads and no allocation.
+///
+/// That works only because the flags are level-triggered: a fact that is set
+/// stays set, so reading after the wake cannot miss one, and two arriving
+/// together are both seen rather than one being consumed. An edge-triggered
+/// signal would need a branch per source to avoid losing the second.
+///
+/// The three keep their own types rather than becoming an enum. `Cancel` and
+/// `Latch` mean different things, they are held by different parts of the run,
+/// and the places that *set* them should not gain the ability to set the others.
+#[derive(Clone, Debug)]
+pub struct Signals {
+    /// The owner or a teardown path asked this run to stop.
+    pub cancel: Cancel,
+    /// A mid-turn message could not be delivered into the live turn.
+    pub injection_failure: Latch,
+    /// A liveness ping could not be delivered, so nothing will answer it.
+    pub ping_failed: Latch,
+    /// The one queue every fact above rings.
+    wake: Arc<Notify>,
+}
+
+impl Signals {
+    /// Three unset facts sharing one wake.
+    #[must_use]
+    pub fn new() -> Self {
+        let wake = Arc::new(Notify::new());
+        Self {
+            cancel: Cancel::sharing(&wake),
+            injection_failure: Latch::sharing(&wake),
+            ping_failed: Latch::sharing(&wake),
+            wake,
+        }
+    }
+
+    /// Two fresh latches joining an existing switch's wake.
+    ///
+    /// A run's `Cancel` is created by whoever starts the run, because stopping
+    /// it is something the outside world does; the two failure latches belong
+    /// to the run itself and do not exist until it is under way. This adopts
+    /// the caller's switch rather than replacing it, so a stop requested
+    /// through the original handle still reaches this loop.
+    #[must_use]
+    pub fn around(cancel: Cancel) -> Self {
+        let wake = Arc::clone(&cancel.0.wake);
+        Self {
+            injection_failure: Latch::sharing(&wake),
+            ping_failed: Latch::sharing(&wake),
+            cancel,
+            wake,
+        }
+    }
+
+    /// Whether either fact that *ends a run* has fired.
+    ///
+    /// `ping_failed` is deliberately not one of them. It says a liveness probe
+    /// did not reach the provider, which is a reason for the main loop to stop
+    /// expecting an answer, not a reason to abandon whatever is in flight. A
+    /// waiter that treated it as terminal would tear down a run that is merely
+    /// unmonitored.
+    #[must_use]
+    pub fn stopping(&self) -> bool {
+        self.cancel.is_cancelled() || self.injection_failure.is_set()
+    }
+
+    /// Wait until this run is being stopped, by cancellation or a failed
+    /// injection.
+    ///
+    /// The counterpart to [`Self::stopping`], for a wait that must end when the
+    /// run ends but has no interest in liveness. It still shares the one wake,
+    /// so a `ping_failed` that rings the queue simply re-checks and parks
+    /// again rather than waking the caller spuriously.
+    pub async fn stopped(&self) {
+        loop {
+            if self.stopping() {
+                return;
+            }
+            let waiting = self.wake.notified();
+            if self.stopping() {
+                return;
+            }
+            waiting.await;
+        }
+    }
+
+    /// Wait until a fact the caller has not already handled fires.
+    ///
+    /// Returns as soon as one is set, so a fact that arrived before the wait
+    /// began is not missed. The caller then reads the individual flags to learn
+    /// which, and may see more than one.
+    ///
+    /// # Why this takes `handled`
+    ///
+    /// The flags are level triggered and a [`Latch`] never clears, which is
+    /// what makes two simultaneous facts both visible. It also means a fact the
+    /// caller has *acted on* and decided not to stop for stays set forever, so
+    /// a bare "is anything set" wait would return instantly on every call and
+    /// spin the loop at full tilt.
+    ///
+    /// `ping_failed` is exactly that case: the run loop notes it, clears its
+    /// own outstanding-ping state, and carries on. Passing it here afterwards
+    /// says "I know, do not wake me for this again", which is the honest way to
+    /// say it - clearing the flag would lie to every other reader.
+    pub async fn changed(&self, handled: Handled) -> () {
+        loop {
+            if self.pending(handled) {
+                return;
+            }
+            let waiting = self.wake.notified();
+            // Re-check between registering and parking: a fact set in that
+            // window has already rung the queue, and without this the loop
+            // would park on a wake that has been and gone.
+            if self.pending(handled) {
+                return;
+            }
+            waiting.await;
+        }
+    }
+
+    /// Whether a fact outside `handled` is set.
+    #[must_use]
+    fn pending(&self, handled: Handled) -> bool {
+        if self.cancel.is_cancelled() || self.injection_failure.is_set() {
+            return true;
+        }
+        !handled.ping_failed && self.ping_failed.is_set()
+    }
+}
+
+/// Facts the caller has already acted on and does not want woken for again.
+///
+/// Only the non-terminal ones can be named: cancellation and a failed
+/// injection end the run, so "I have handled that and wish to continue" is not
+/// a thing a caller can mean about them.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Handled {
+    /// The liveness ping's failure has been noted and the run continues.
+    pub ping_failed: bool,
+}
+
+impl Default for Signals {
+    fn default() -> Self {
+        Self::new()
     }
 }
