@@ -12190,25 +12190,18 @@ async fn drive_run(
     let ping_failed = signals.ping_failed.clone();
     let ping_control = run.control();
     let ping_turn_id = turn_id.clone();
-    // One slot per steer that can fire, and each is behind its own one-shot
-    // flag: the 180k checkpoint, the 190k stop-now, and the post-compact
-    // resume. Unbounded implied a stream; this is three messages at most for
-    // the life of a turn.
-    let (cliff_steer_tx, mut cliff_steer_rx) = tokio::sync::mpsc::channel::<String>(3);
+    // The cliff steers go to the pool for the same reason the ping does, and
+    // need even less around them: there are three for the life of a turn, the
+    // 180k checkpoint, the 190k stop-now and the post-compact resume, each
+    // behind its own one-shot flag. The queue's capacity of three restated
+    // those flags, and the worker only moved the await off this loop.
+    //
+    // Nothing reads the result. A steer that does not land is not a reason to
+    // stop a run the owner is still watching, which is why the old worker
+    // discarded the error too.
     let cliff_control = run.control();
     let cliff_turn_id = turn_id.clone();
-    let cliff_delivery = tokio::spawn(async move {
-        let mut attempt = 0u32;
-        while let Some(body) = cliff_steer_rx.recv().await {
-            attempt = attempt.saturating_add(1);
-            let _ = cliff_control
-                .send(
-                    &mid_turn_owner_context(&body),
-                    &format!("{cliff_turn_id}:cliff:{attempt}"),
-                )
-                .await;
-        }
-    });
+    let cliff_attempt = std::sync::Arc::new(std::sync::atomic::AtomicU32::new(0));
     let injection_delivery = tokio::spawn(async move {
         while let Some(injected) = injection_delivery_rx.recv().await {
             let delivered = deliver_injection(
@@ -13326,10 +13319,22 @@ async fn drive_run(
                     {
                         emit_message_receipt(&app, &project_id, &message_id, "sent");
                     }
-                    // `try_send` for the same reason the ping does: this runs on the
-                    // loop that must keep draining, and each steer is behind a
-                    // one-shot flag so a full queue means it was already sent.
-                    let _ = cliff_steer_tx.try_send(body);
+                    // Sent from the pool for the same reason the ping is: this
+                    // loop must keep draining `run.recv`. Each steer is behind
+                    // its own one-shot flag, so this runs at most once.
+                    let control = cliff_control.clone();
+                    let turn = cliff_turn_id.clone();
+                    let attempt = cliff_attempt
+                        .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+                        .saturating_add(1);
+                    pool.spawn(async move {
+                        let _ = control
+                            .send(
+                                &mid_turn_owner_context(&body),
+                                &format!("{turn}:cliff:{attempt}"),
+                            )
+                            .await;
+                    });
                 }
             }
             Event::Usage(usage) => {
@@ -13424,10 +13429,23 @@ async fn drive_run(
                         {
                             emit_message_receipt(&app, &project_id, &message_id, "sent");
                         }
-                        // `try_send` for the same reason the ping does: this runs on the
-                        // loop that must keep draining, and each steer is behind a
-                        // one-shot flag so a full queue means it was already sent.
-                        let _ = cliff_steer_tx.try_send(body);
+                        // Sent from the pool for the same reason the ping is:
+                        // this loop must keep draining `run.recv`. Each steer
+                        // is behind its own one-shot flag, so this runs at
+                        // most once.
+                        let control = cliff_control.clone();
+                        let turn = cliff_turn_id.clone();
+                        let attempt = cliff_attempt
+                            .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+                            .saturating_add(1);
+                        pool.spawn(async move {
+                            let _ = control
+                                .send(
+                                    &mid_turn_owner_context(&body),
+                                    &format!("{turn}:cliff:{attempt}"),
+                                )
+                                .await;
+                        });
                     }
                 }
             }
@@ -13515,7 +13533,6 @@ async fn drive_run(
      */
     drop(inject_rx);
     drop(injection_delivery_tx);
-    drop(cliff_steer_tx);
 
     // A final ordinary line has no newline to make it classifiable during the
     // stream. Release it now; an authored PS tail stays private and is applied
@@ -13586,13 +13603,6 @@ async fn drive_run(
             crate::log::Level::Error,
             "run",
             "{project_id}: injection delivery worker failed: {error}"
-        );
-    }
-    if let Err(error) = cliff_delivery.await {
-        crate::log!(
-            crate::log::Level::Error,
-            "run",
-            "{project_id}: Grok cliff-steer worker failed: {error}"
         );
     }
 
