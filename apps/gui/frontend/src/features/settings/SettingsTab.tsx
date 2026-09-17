@@ -3313,7 +3313,15 @@ function Section(props: {
       if (indexed === undefined) {
         // The first search teaches the section its descendant accessible names.
         // Once the nested indexer settles, non-matches immediately unmount.
-        setSearchRetained(false);
+        //
+        // Retention is not cleared here, because this branch has two causes and
+        // only one of them is "never indexed". The other is a locale change:
+        // the corpus is keyed by language, so switching interface language
+        // retracts every section's index at once and lands each of them right
+        // here. Clearing retention then dropped a section that was matching a
+        // moment ago, and the next `visible()` read hid it until something
+        // re-indexed it. That is what made the Codex import picker unreachable
+        // after a Chinese round trip while the search box still held its query.
         setMounted(true);
         return;
       }
@@ -3352,7 +3360,16 @@ function Section(props: {
       if (matched) setSearchRetained(true);
     },
   );
-  const visible = () => settingsQuery().trim() === "" || titleMatches() || hits().size > 0;
+  // `indexedCorpus() === undefined` under a live query means this section is
+  // still learning its words for the current language, so `hits()` is empty
+  // because nothing has reported yet, not because nothing matches. Hiding on
+  // that emptiness is what made a section vanish mid-reindex; it un-hides on
+  // its own an instant later when the rows report.
+  const visible = () =>
+    settingsQuery().trim() === "" ||
+    titleMatches() ||
+    hits().size > 0 ||
+    (mounted() && indexedCorpus() === undefined);
   const report = (label: string, hit: boolean): void => {
     setHits((prev) => {
       const next = new Set(prev);
