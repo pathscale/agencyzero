@@ -101,83 +101,87 @@ mod profile_repair_tests {
         }
     }
 
-    #[tokio::test]
-    async fn message_window_merge_is_bounded_verified_and_idempotent() {
-        let temp = tempfile::tempdir().unwrap();
-        let source = temp.path().join("source");
-        let target = temp.path().join("target");
-        let source_table = open_messages(&source).await;
-        for row in [
-            message("before", "project", "2026-08-09T20:01:59+00:00"),
-            message("wanted", "project", "2026-08-09T20:02:00+00:00"),
-            message("other-project", "other", "2026-08-09T20:03:00+00:00"),
-            message("after", "project", "2026-08-09T20:20:00+00:00"),
-        ] {
-            source_table.insert(row).await.unwrap();
-        }
-        source_table.wait_for_ops().await.unwrap();
-        source_table.close().await.unwrap();
-
-        let report = merge_message_window(
-            &source,
-            &target,
-            "project",
-            "2026-08-09T20:02:00+00:00",
-            "2026-08-09T20:20:00+00:00",
-        )
-        .await
-        .unwrap();
-        assert_eq!(
-            report,
-            MessageMergeReport {
-                candidates: 1,
-                inserted: 1,
-                already_present: 0,
+    #[test]
+    fn message_window_merge_is_bounded_verified_and_idempotent() {
+        nagoya::block_on(async {
+            let temp = tempfile::tempdir().unwrap();
+            let source = temp.path().join("source");
+            let target = temp.path().join("target");
+            let source_table = open_messages(&source).await;
+            for row in [
+                message("before", "project", "2026-08-09T20:01:59+00:00"),
+                message("wanted", "project", "2026-08-09T20:02:00+00:00"),
+                message("other-project", "other", "2026-08-09T20:03:00+00:00"),
+                message("after", "project", "2026-08-09T20:20:00+00:00"),
+            ] {
+                source_table.insert(row).await.unwrap();
             }
-        );
-        let repeated = merge_message_window(
-            &source,
-            &target,
-            "project",
-            "2026-08-09T20:02:00+00:00",
-            "2026-08-09T20:20:00+00:00",
-        )
-        .await
-        .unwrap();
-        assert_eq!(repeated.inserted, 0);
-        assert_eq!(repeated.already_present, 1);
+            source_table.wait_for_ops().await.unwrap();
+            source_table.close().await.unwrap();
+
+            let report = merge_message_window(
+                &source,
+                &target,
+                "project",
+                "2026-08-09T20:02:00+00:00",
+                "2026-08-09T20:20:00+00:00",
+            )
+            .await
+            .unwrap();
+            assert_eq!(
+                report,
+                MessageMergeReport {
+                    candidates: 1,
+                    inserted: 1,
+                    already_present: 0,
+                }
+            );
+            let repeated = merge_message_window(
+                &source,
+                &target,
+                "project",
+                "2026-08-09T20:02:00+00:00",
+                "2026-08-09T20:20:00+00:00",
+            )
+            .await
+            .unwrap();
+            assert_eq!(repeated.inserted, 0);
+            assert_eq!(repeated.already_present, 1);
+        });
     }
 
-    #[tokio::test]
-    async fn session_restore_refuses_to_replace_a_different_live_pointer() {
-        let temp = tempfile::tempdir().unwrap();
-        let target = temp.path().join("target");
-        restore_provider_session(&target, "project", "codex", "recovered")
-            .await
-            .unwrap();
-        restore_provider_session(&target, "project", "codex", "recovered")
-            .await
-            .unwrap();
-        let error = restore_provider_session(&target, "project", "codex", "different")
-            .await
-            .unwrap_err();
-        assert!(error.to_string().contains("another nonempty session"));
+    #[test]
+    fn session_restore_refuses_to_replace_a_different_live_pointer() {
+        nagoya::block_on(async {
+            let temp = tempfile::tempdir().unwrap();
+            let target = temp.path().join("target");
+            restore_provider_session(&target, "project", "codex", "recovered")
+                .await
+                .unwrap();
+            restore_provider_session(&target, "project", "codex", "recovered")
+                .await
+                .unwrap();
+            let error = restore_provider_session(&target, "project", "codex", "different")
+                .await
+                .unwrap_err();
+            assert!(error.to_string().contains("another nonempty session"));
 
-        let config = DiskConfig::new_with_table_name(
-            target.to_string_lossy().into_owned(),
-            KvWorkTable::name_snake_case(),
-            KvWorkTable::version(),
-        );
-        let engine = KvPersistenceEngine::new(config).await.unwrap();
-        let table = KvWorkTable::load(engine).await.unwrap();
-        let row = table
-            .select_all()
-            .execute()
-            .unwrap()
-            .into_iter()
-            .find(|row| row.key == "session:codex:project")
-            .unwrap();
-        assert_eq!(row.value, "recovered");
+            let config = DiskConfig::new_with_table_name(
+                target.to_string_lossy().into_owned(),
+                KvWorkTable::name_snake_case(),
+                KvWorkTable::version(),
+            );
+            let engine = KvPersistenceEngine::new(config).await.unwrap();
+            let table = KvWorkTable::load(engine).await.unwrap();
+            let row = table
+                .select_all()
+                .execute()
+                .unwrap()
+                .into_iter()
+                .find(|row| row.key == "session:codex:project")
+                .unwrap();
+            assert_eq!(row.value, "recovered");
+        });
     }
 }
 
@@ -2376,74 +2380,76 @@ mod recovery_tests {
         PullRequestPersistenceEngine, PullRequestRow, PullRequestWorkTable,
     };
 
-    #[tokio::test]
-    async fn rebuild_store_repairs_a_secondary_index_rejected_by_strict_load() {
-        let root = tempfile::tempdir().expect("temporary rebuild store");
-        let source = root.path().join("source");
-        let target = root.path().join("target");
-        let empty = root.path().join("empty");
+    #[test]
+    fn rebuild_store_repairs_a_secondary_index_rejected_by_strict_load() {
+        nagoya::block_on(async {
+            let root = tempfile::tempdir().expect("temporary rebuild store");
+            let source = root.path().join("source");
+            let target = root.path().join("target");
+            let empty = root.path().join("empty");
 
-        let open = |dir: &Path| {
-            let config = DiskConfig::new_with_table_name(
-                dir.to_string_lossy().into_owned(),
-                ProjectWorkTable::name_snake_case(),
-                ProjectWorkTable::version(),
-            );
-            async move {
-                let engine = ProjectPersistenceEngine::new(config).await?;
-                ProjectWorkTable::load(engine).await
-            }
-        };
+            let open = |dir: &Path| {
+                let config = DiskConfig::new_with_table_name(
+                    dir.to_string_lossy().into_owned(),
+                    ProjectWorkTable::name_snake_case(),
+                    ProjectWorkTable::version(),
+                );
+                async move {
+                    let engine = ProjectPersistenceEngine::new(config).await?;
+                    ProjectWorkTable::load(engine).await
+                }
+            };
 
-        let table = open(&source).await.expect("source project table");
-        table
-            .insert(ProjectRow {
-                id: "project-1".into(),
-                name: "kept".into(),
-                status: "active".into(),
-                position: 1,
-                dirs: "[]".into(),
-                pinned: false,
-                moderator_enabled: false,
-                forked_from: String::new(),
-                last_activity_at: "2026-09-04T00:00:00Z".into(),
-            })
-            .await
-            .expect("project inserts");
-        table.close().await.expect("source project closes");
-
-        let empty_table = open(&empty).await.expect("empty project table");
-        empty_table.close().await.expect("empty project closes");
-        std::fs::copy(
-            empty.join("project/status_idx.wt.idx"),
-            source.join("project/status_idx.wt.idx"),
-        )
-        .expect("replace the secondary index with a valid but stale one");
-
-        let error = open(&source)
-            .await
-            .expect_err("strict load must reject a missing secondary entry");
-        assert!(error.to_string().contains("status_idx"));
-
-        assert_eq!(
-            rebuild_store(&source, &target)
+            let table = open(&source).await.expect("source project table");
+            table
+                .insert(ProjectRow {
+                    id: "project-1".into(),
+                    name: "kept".into(),
+                    status: "active".into(),
+                    position: 1,
+                    dirs: "[]".into(),
+                    pinned: false,
+                    moderator_enabled: false,
+                    forked_from: String::new(),
+                    last_activity_at: "2026-09-04T00:00:00Z".into(),
+                })
                 .await
-                .expect("recovery rebuild succeeds"),
-            vec![("project".to_string(), 1)]
-        );
+                .expect("project inserts");
+            table.close().await.expect("source project closes");
 
-        let rebuilt = open(&target)
-            .await
-            .expect("rebuilt store passes strict load");
-        assert_eq!(
-            rebuilt
-                .select_by_status("active".into())
-                .execute()
-                .expect("rebuilt secondary index selects")
-                .len(),
-            1
-        );
-        rebuilt.close().await.expect("rebuilt project closes");
+            let empty_table = open(&empty).await.expect("empty project table");
+            empty_table.close().await.expect("empty project closes");
+            std::fs::copy(
+                empty.join("project/status_idx.wt.idx"),
+                source.join("project/status_idx.wt.idx"),
+            )
+            .expect("replace the secondary index with a valid but stale one");
+
+            let error = open(&source)
+                .await
+                .expect_err("strict load must reject a missing secondary entry");
+            assert!(error.to_string().contains("status_idx"));
+
+            assert_eq!(
+                rebuild_store(&source, &target)
+                    .await
+                    .expect("recovery rebuild succeeds"),
+                vec![("project".to_string(), 1)]
+            );
+
+            let rebuilt = open(&target)
+                .await
+                .expect("rebuilt store passes strict load");
+            assert_eq!(
+                rebuilt
+                    .select_by_status("active".into())
+                    .execute()
+                    .expect("rebuilt secondary index selects")
+                    .len(),
+                1
+            );
+            rebuilt.close().await.expect("rebuilt project closes");
+        });
     }
 
     fn item(id: &str, project_id: &str) -> ProjectItemRow {
@@ -2466,62 +2472,64 @@ mod recovery_tests {
      * fraction while reporting success is worse than failing outright,
      * because the operator swaps the store on the strength of the report.
      */
-    #[tokio::test]
-    async fn the_data_file_sweep_recovers_every_row_a_torn_index_hides() {
-        let root = tempfile::tempdir().expect("temporary recovery store");
-        let source = root.path().join("source");
-        let target = root.path().join("target");
-        let config = DiskConfig::new_with_table_name(
-            source.to_string_lossy().into_owned(),
-            ProjectItemWorkTable::name_snake_case(),
-            ProjectItemWorkTable::version(),
-        );
-        let engine = ProjectItemPersistenceEngine::new(config)
-            .await
-            .expect("engine");
-        let table = ProjectItemWorkTable::load(engine).await.expect("table");
-        for (id, project) in [
-            ("item-one", "proj-1"),
-            ("item-two", "proj-1"),
-            ("item-three", "proj-2"),
-            ("item-four", "proj-2"),
-            ("item-five", "proj-3"),
-        ] {
-            table.insert(item(id, project)).await.expect("row inserts");
-        }
-        table.close().await.expect("source closes cleanly");
+    #[test]
+    fn the_data_file_sweep_recovers_every_row_a_torn_index_hides() {
+        nagoya::block_on(async {
+            let root = tempfile::tempdir().expect("temporary recovery store");
+            let source = root.path().join("source");
+            let target = root.path().join("target");
+            let config = DiskConfig::new_with_table_name(
+                source.to_string_lossy().into_owned(),
+                ProjectItemWorkTable::name_snake_case(),
+                ProjectItemWorkTable::version(),
+            );
+            let engine = ProjectItemPersistenceEngine::new(config)
+                .await
+                .expect("engine");
+            let table = ProjectItemWorkTable::load(engine).await.expect("table");
+            for (id, project) in [
+                ("item-one", "proj-1"),
+                ("item-two", "proj-1"),
+                ("item-three", "proj-2"),
+                ("item-four", "proj-2"),
+                ("item-five", "proj-3"),
+            ] {
+                table.insert(item(id, project)).await.expect("row inserts");
+            }
+            table.close().await.expect("source closes cleanly");
 
-        /*
-         * The index is emptied rather than mangled, which is the shape the
-         * store this verb was written for actually had: a primary that parses
-         * and simply does not account for the rows still in `.wt.data`. A
-         * corrupt index fails to parse and never reaches the sweep at all.
-         */
-        let index = source.join("project_item/primary.wt.idx");
-        let empty = tempfile::tempdir().expect("temporary empty store");
-        let config = DiskConfig::new_with_table_name(
-            empty.path().to_string_lossy().into_owned(),
-            ProjectItemWorkTable::name_snake_case(),
-            ProjectItemWorkTable::version(),
-        );
-        let engine = ProjectItemPersistenceEngine::new(config)
-            .await
-            .expect("empty engine");
-        let table = ProjectItemWorkTable::load(engine)
-            .await
-            .expect("empty table");
-        table.close().await.expect("empty store closes");
-        std::fs::copy(empty.path().join("project_item/primary.wt.idx"), &index)
-            .expect("primary index is replaced with one that knows nothing");
+            /*
+             * The index is emptied rather than mangled, which is the shape the
+             * store this verb was written for actually had: a primary that parses
+             * and simply does not account for the rows still in `.wt.data`. A
+             * corrupt index fails to parse and never reaches the sweep at all.
+             */
+            let index = source.join("project_item/primary.wt.idx");
+            let empty = tempfile::tempdir().expect("temporary empty store");
+            let config = DiskConfig::new_with_table_name(
+                empty.path().to_string_lossy().into_owned(),
+                ProjectItemWorkTable::name_snake_case(),
+                ProjectItemWorkTable::version(),
+            );
+            let engine = ProjectItemPersistenceEngine::new(config)
+                .await
+                .expect("empty engine");
+            let table = ProjectItemWorkTable::load(engine)
+                .await
+                .expect("empty table");
+            table.close().await.expect("empty store closes");
+            std::fs::copy(empty.path().join("project_item/primary.wt.idx"), &index)
+                .expect("primary index is replaced with one that knows nothing");
 
-        let report = salvage_item_index(&source, &target)
-            .await
-            .expect("salvage succeeds");
+            let report = salvage_item_index(&source, &target)
+                .await
+                .expect("salvage succeeds");
 
-        assert_eq!(
-            report.rows, 5,
-            "every row in the data file has to come back, not only the last archive"
-        );
+            assert_eq!(
+                report.rows, 5,
+                "every row in the data file has to come back, not only the last archive"
+            );
+        });
     }
 
     fn task(id: &str, project_id: &str) -> TaskLogRow {
@@ -2575,366 +2583,376 @@ mod recovery_tests {
         }
     }
 
-    #[tokio::test]
-    async fn an_intact_secondary_index_recovers_every_row_from_a_torn_primary() {
-        let root = tempfile::tempdir().expect("temporary recovery store");
-        let source = root.path().join("source");
-        let target = root.path().join("target");
-        let config = DiskConfig::new_with_table_name(
-            source.to_string_lossy().into_owned(),
-            TaskLogWorkTable::name_snake_case(),
-            TaskLogWorkTable::version(),
-        );
-        let engine = TaskLogPersistenceEngine::new(config).await.expect("engine");
-        let table = TaskLogWorkTable::load(engine).await.expect("table");
-        table
-            .insert(task("log-1", "proj-1"))
-            .await
-            .expect("first row");
-        table
-            .insert(task("log-2", "proj-1"))
-            .await
-            .expect("second row");
-        table
-            .insert(task("log-3", "proj-2"))
-            .await
-            .expect("third row");
-        table.close().await.expect("source closes cleanly");
+    #[test]
+    fn an_intact_secondary_index_recovers_every_row_from_a_torn_primary() {
+        nagoya::block_on(async {
+            let root = tempfile::tempdir().expect("temporary recovery store");
+            let source = root.path().join("source");
+            let target = root.path().join("target");
+            let config = DiskConfig::new_with_table_name(
+                source.to_string_lossy().into_owned(),
+                TaskLogWorkTable::name_snake_case(),
+                TaskLogWorkTable::version(),
+            );
+            let engine = TaskLogPersistenceEngine::new(config).await.expect("engine");
+            let table = TaskLogWorkTable::load(engine).await.expect("table");
+            table
+                .insert(task("log-1", "proj-1"))
+                .await
+                .expect("first row");
+            table
+                .insert(task("log-2", "proj-1"))
+                .await
+                .expect("second row");
+            table
+                .insert(task("log-3", "proj-2"))
+                .await
+                .expect("third row");
+            table.close().await.expect("source closes cleanly");
 
-        std::fs::write(source.join("task_log/primary.wt.idx"), b"torn primary")
-            .expect("primary index is made unreadable");
+            std::fs::write(source.join("task_log/primary.wt.idx"), b"torn primary")
+                .expect("primary index is made unreadable");
 
-        let report = recover_task_log_index(&source, &target)
-            .await
-            .expect("secondary-index recovery succeeds");
-        assert_eq!(
-            report,
-            TaskLogRecoveryReport {
-                rows: 3,
-                projects: 2,
+            let report = recover_task_log_index(&source, &target)
+                .await
+                .expect("secondary-index recovery succeeds");
+            assert_eq!(
+                report,
+                TaskLogRecoveryReport {
+                    rows: 3,
+                    projects: 2,
+                }
+            );
+
+            let config = DiskConfig::new_with_table_name(
+                target.to_string_lossy().into_owned(),
+                TaskLogWorkTable::name_snake_case(),
+                TaskLogWorkTable::version(),
+            );
+            let engine = TaskLogPersistenceEngine::new(config)
+                .await
+                .expect("rebuilt engine");
+            let rebuilt = TaskLogWorkTable::load(engine).await.expect("rebuilt table");
+            let mut ids: Vec<String> = rebuilt
+                .select_all()
+                .execute()
+                .expect("rebuilt rows")
+                .into_iter()
+                .map(|row| row.id)
+                .collect();
+            ids.sort();
+            assert_eq!(ids, vec!["log-1", "log-2", "log-3"]);
+            rebuilt.close().await.expect("rebuilt table closes");
+        });
+    }
+
+    #[test]
+    fn task_log_recovery_refuses_a_corrupt_v3_data_page() {
+        nagoya::block_on(async {
+            let root = tempfile::tempdir().expect("temporary recovery store");
+            let source = root.path().join("source");
+            let target = root.path().join("target");
+            let config = DiskConfig::new_with_table_name(
+                source.to_string_lossy().into_owned(),
+                TaskLogWorkTable::name_snake_case(),
+                TaskLogWorkTable::version(),
+            );
+            let engine = TaskLogPersistenceEngine::new(config).await.expect("engine");
+            let table = TaskLogWorkTable::load(engine).await.expect("table");
+            let id = "log-corrupt".to_string();
+            let primary_key = table.insert(task(&id, "proj-1")).await.expect("row");
+            let link = table
+                .0
+                .primary_index
+                .pk_map
+                .get_value(&primary_key)
+                .expect("primary link")
+                .0;
+            table.close().await.expect("source closes cleanly");
+
+            let data_path = source.join("task_log/.wt.data");
+            let page_id: u32 = link.page_id.into();
+            let byte_offset = u64::from(page_id) * PAGE_SIZE as u64
+                + GENERAL_HEADER_SIZE as u64
+                + u64::from(link.offset);
+            {
+                use std::io::{Seek, SeekFrom, Write};
+
+                let mut file = std::fs::OpenOptions::new()
+                    .write(true)
+                    .open(data_path)
+                    .expect("data file");
+                file.seek(SeekFrom::Start(byte_offset)).expect("row offset");
+                file.write_all(&vec![0; link.length as usize])
+                    .expect("corrupt row bytes");
+                file.sync_all().expect("corruption reaches disk");
             }
-        );
+            std::fs::write(source.join("task_log/primary.wt.idx"), b"torn primary")
+                .expect("primary index is made unreadable");
 
-        let config = DiskConfig::new_with_table_name(
-            target.to_string_lossy().into_owned(),
-            TaskLogWorkTable::name_snake_case(),
-            TaskLogWorkTable::version(),
-        );
-        let engine = TaskLogPersistenceEngine::new(config)
-            .await
-            .expect("rebuilt engine");
-        let rebuilt = TaskLogWorkTable::load(engine).await.expect("rebuilt table");
-        let mut ids: Vec<String> = rebuilt
-            .select_all()
-            .execute()
-            .expect("rebuilt rows")
-            .into_iter()
-            .map(|row| row.id)
-            .collect();
-        ids.sort();
-        assert_eq!(ids, vec!["log-1", "log-2", "log-3"]);
-        rebuilt.close().await.expect("rebuilt table closes");
+            let error = recover_task_log_index(&source, &target)
+                .await
+                .expect_err("recovery must reject a corrupt row reached through project_idx");
+            let reason = format!("{error:#}");
+            assert!(
+                reason.contains("v3 data page checksum"),
+                "unexpected recovery refusal: {reason}"
+            );
+        });
     }
 
-    #[tokio::test]
-    async fn task_log_recovery_refuses_a_corrupt_v3_data_page() {
-        let root = tempfile::tempdir().expect("temporary recovery store");
-        let source = root.path().join("source");
-        let target = root.path().join("target");
-        let config = DiskConfig::new_with_table_name(
-            source.to_string_lossy().into_owned(),
-            TaskLogWorkTable::name_snake_case(),
-            TaskLogWorkTable::version(),
-        );
-        let engine = TaskLogPersistenceEngine::new(config).await.expect("engine");
-        let table = TaskLogWorkTable::load(engine).await.expect("table");
-        let id = "log-corrupt".to_string();
-        let primary_key = table.insert(task(&id, "proj-1")).await.expect("row");
-        let link = table
-            .0
-            .primary_index
-            .pk_map
-            .get_value(&primary_key)
-            .expect("primary link")
-            .0;
-        table.close().await.expect("source closes cleanly");
+    #[test]
+    fn an_intact_primary_recovers_every_message_from_a_torn_secondary() {
+        nagoya::block_on(async {
+            let root = tempfile::tempdir().expect("temporary recovery store");
+            let source = root.path().join("source");
+            let target = root.path().join("target");
+            let config = DiskConfig::new_with_table_name(
+                source.to_string_lossy().into_owned(),
+                MessageWorkTable::name_snake_case(),
+                MessageWorkTable::version(),
+            );
+            let engine = MessagePersistenceEngine::new(config).await.expect("engine");
+            let table = MessageWorkTable::load(engine).await.expect("table");
+            table
+                .insert(message("msg-1", "proj-1"))
+                .await
+                .expect("first row");
+            table
+                .insert(message("msg-2", "proj-1"))
+                .await
+                .expect("second row");
+            table
+                .insert(message("msg-3", "proj-2"))
+                .await
+                .expect("third row");
+            table.close().await.expect("source closes cleanly");
 
-        let data_path = source.join("task_log/.wt.data");
-        let page_id: u32 = link.page_id.into();
-        let byte_offset = u64::from(page_id) * PAGE_SIZE as u64
-            + GENERAL_HEADER_SIZE as u64
-            + u64::from(link.offset);
-        {
-            use std::io::{Seek, SeekFrom, Write};
+            std::fs::write(source.join("message/project_idx.wt.idx"), b"torn secondary")
+                .expect("secondary index is made unreadable");
 
-            let mut file = std::fs::OpenOptions::new()
-                .write(true)
-                .open(data_path)
-                .expect("data file");
-            file.seek(SeekFrom::Start(byte_offset)).expect("row offset");
-            file.write_all(&vec![0; link.length as usize])
-                .expect("corrupt row bytes");
-            file.sync_all().expect("corruption reaches disk");
-        }
-        std::fs::write(source.join("task_log/primary.wt.idx"), b"torn primary")
-            .expect("primary index is made unreadable");
+            let report = recover_message_index(&source, &target)
+                .await
+                .expect("primary-index recovery succeeds");
+            assert_eq!(
+                report,
+                MessageRecoveryReport {
+                    rows: 3,
+                    projects: 2,
+                }
+            );
 
-        let error = recover_task_log_index(&source, &target)
-            .await
-            .expect_err("recovery must reject a corrupt row reached through project_idx");
-        let reason = format!("{error:#}");
-        assert!(
-            reason.contains("v3 data page checksum"),
-            "unexpected recovery refusal: {reason}"
-        );
+            let config = DiskConfig::new_with_table_name(
+                target.to_string_lossy().into_owned(),
+                MessageWorkTable::name_snake_case(),
+                MessageWorkTable::version(),
+            );
+            let engine = MessagePersistenceEngine::new(config)
+                .await
+                .expect("rebuilt engine");
+            let rebuilt = MessageWorkTable::load(engine).await.expect("rebuilt table");
+            let mut ids: Vec<String> = rebuilt
+                .select_all()
+                .execute()
+                .expect("rebuilt rows")
+                .into_iter()
+                .map(|row| row.id)
+                .collect();
+            ids.sort();
+            assert_eq!(ids, vec!["msg-1", "msg-2", "msg-3"]);
+            assert_eq!(
+                rebuilt
+                    .select_by_project_id("proj-1".into())
+                    .execute()
+                    .expect("rebuilt secondary index")
+                    .len(),
+                2
+            );
+            rebuilt.close().await.expect("rebuilt table closes");
+        });
     }
 
-    #[tokio::test]
-    async fn an_intact_primary_recovers_every_message_from_a_torn_secondary() {
-        let root = tempfile::tempdir().expect("temporary recovery store");
-        let source = root.path().join("source");
-        let target = root.path().join("target");
-        let config = DiskConfig::new_with_table_name(
-            source.to_string_lossy().into_owned(),
-            MessageWorkTable::name_snake_case(),
-            MessageWorkTable::version(),
-        );
-        let engine = MessagePersistenceEngine::new(config).await.expect("engine");
-        let table = MessageWorkTable::load(engine).await.expect("table");
-        table
-            .insert(message("msg-1", "proj-1"))
-            .await
-            .expect("first row");
-        table
-            .insert(message("msg-2", "proj-1"))
-            .await
-            .expect("second row");
-        table
-            .insert(message("msg-3", "proj-2"))
-            .await
-            .expect("third row");
-        table.close().await.expect("source closes cleanly");
+    #[test]
+    fn an_intact_primary_recovers_every_pull_request_from_a_torn_secondary() {
+        nagoya::block_on(async {
+            let root = tempfile::tempdir().expect("temporary recovery store");
+            let source = root.path().join("source");
+            let target = root.path().join("target");
+            let config = DiskConfig::new_with_table_name(
+                source.to_string_lossy().into_owned(),
+                PullRequestWorkTable::name_snake_case(),
+                PullRequestWorkTable::version(),
+            );
+            let engine = PullRequestPersistenceEngine::new(config)
+                .await
+                .expect("engine");
+            let table = PullRequestWorkTable::load(engine).await.expect("table");
+            table
+                .insert(pull_request("pr-1", "proj-1"))
+                .await
+                .expect("first row");
+            table
+                .insert(pull_request("pr-2", "proj-1"))
+                .await
+                .expect("second row");
+            table
+                .insert(pull_request("pr-3", "proj-2"))
+                .await
+                .expect("third row");
+            table.close().await.expect("source closes cleanly");
 
-        std::fs::write(source.join("message/project_idx.wt.idx"), b"torn secondary")
+            std::fs::write(
+                source.join("pull_request/pr_project_idx.wt.idx"),
+                b"torn secondary",
+            )
             .expect("secondary index is made unreadable");
 
-        let report = recover_message_index(&source, &target)
-            .await
-            .expect("primary-index recovery succeeds");
-        assert_eq!(
-            report,
-            MessageRecoveryReport {
-                rows: 3,
-                projects: 2,
-            }
-        );
+            let report = recover_pull_request_index(&source, &target)
+                .await
+                .expect("primary-index recovery succeeds");
+            assert_eq!(
+                report,
+                PullRequestRecoveryReport {
+                    rows: 3,
+                    projects: 2,
+                }
+            );
 
-        let config = DiskConfig::new_with_table_name(
-            target.to_string_lossy().into_owned(),
-            MessageWorkTable::name_snake_case(),
-            MessageWorkTable::version(),
-        );
-        let engine = MessagePersistenceEngine::new(config)
-            .await
-            .expect("rebuilt engine");
-        let rebuilt = MessageWorkTable::load(engine).await.expect("rebuilt table");
-        let mut ids: Vec<String> = rebuilt
-            .select_all()
-            .execute()
-            .expect("rebuilt rows")
-            .into_iter()
-            .map(|row| row.id)
-            .collect();
-        ids.sort();
-        assert_eq!(ids, vec!["msg-1", "msg-2", "msg-3"]);
-        assert_eq!(
-            rebuilt
-                .select_by_project_id("proj-1".into())
+            let config = DiskConfig::new_with_table_name(
+                target.to_string_lossy().into_owned(),
+                PullRequestWorkTable::name_snake_case(),
+                PullRequestWorkTable::version(),
+            );
+            let engine = PullRequestPersistenceEngine::new(config)
+                .await
+                .expect("rebuilt engine");
+            let rebuilt = PullRequestWorkTable::load(engine)
+                .await
+                .expect("rebuilt table");
+            let mut ids: Vec<String> = rebuilt
+                .select_all()
                 .execute()
-                .expect("rebuilt secondary index")
-                .len(),
-            2
-        );
-        rebuilt.close().await.expect("rebuilt table closes");
+                .expect("rebuilt rows")
+                .into_iter()
+                .map(|row| row.id)
+                .collect();
+            ids.sort();
+            assert_eq!(ids, vec!["pr-1", "pr-2", "pr-3"]);
+            assert_eq!(
+                rebuilt
+                    .select_by_project_id("proj-1".into())
+                    .execute()
+                    .expect("rebuilt secondary index")
+                    .len(),
+                2
+            );
+            rebuilt.close().await.expect("rebuilt table closes");
+        });
     }
 
-    #[tokio::test]
-    async fn an_intact_primary_recovers_every_pull_request_from_a_torn_secondary() {
-        let root = tempfile::tempdir().expect("temporary recovery store");
-        let source = root.path().join("source");
-        let target = root.path().join("target");
-        let config = DiskConfig::new_with_table_name(
-            source.to_string_lossy().into_owned(),
-            PullRequestWorkTable::name_snake_case(),
-            PullRequestWorkTable::version(),
-        );
-        let engine = PullRequestPersistenceEngine::new(config)
-            .await
-            .expect("engine");
-        let table = PullRequestWorkTable::load(engine).await.expect("table");
-        table
-            .insert(pull_request("pr-1", "proj-1"))
-            .await
-            .expect("first row");
-        table
-            .insert(pull_request("pr-2", "proj-1"))
-            .await
-            .expect("second row");
-        table
-            .insert(pull_request("pr-3", "proj-2"))
-            .await
-            .expect("third row");
-        table.close().await.expect("source closes cleanly");
+    #[test]
+    fn pull_request_salvage_reports_and_omits_a_corrupt_row() {
+        nagoya::block_on(async {
+            let root = tempfile::tempdir().expect("temporary recovery store");
+            let source = root.path().join("source");
+            let strict_target = root.path().join("strict-target");
+            let salvage_target = root.path().join("salvage-target");
+            let config = DiskConfig::new_with_table_name(
+                source.to_string_lossy().into_owned(),
+                PullRequestWorkTable::name_snake_case(),
+                PullRequestWorkTable::version(),
+            );
+            let engine = PullRequestPersistenceEngine::new(config)
+                .await
+                .expect("engine");
+            let table = PullRequestWorkTable::load(engine).await.expect("table");
+            table
+                .insert(pull_request("pr-good-1", "proj-1"))
+                .await
+                .expect("first row");
+            table
+                .insert(pull_request("pr-corrupt", "proj-1"))
+                .await
+                .expect("corrupt row");
+            table
+                .insert(pull_request("pr-good-2", "proj-2"))
+                .await
+                .expect("third row");
+            table.close().await.expect("source closes cleanly");
 
-        std::fs::write(
-            source.join("pull_request/pr_project_idx.wt.idx"),
-            b"torn secondary",
-        )
-        .expect("secondary index is made unreadable");
-
-        let report = recover_pull_request_index(&source, &target)
+            let table_path = source.join("pull_request");
+            let mut primary = <SpaceIndexUnsized<
+                String,
+                { INNER_PAGE_SIZE as u32 },
+                { PAGE_SIZE as u32 },
+            > as SpaceIndexOps<String>>::primary_from_table_files_path(
+                table_path.to_string_lossy().into_owned(),
+                PullRequestWorkTable::version(),
+            )
             .await
-            .expect("primary-index recovery succeeds");
-        assert_eq!(
-            report,
-            PullRequestRecoveryReport {
-                rows: 3,
-                projects: 2,
+            .expect("primary index");
+            let primary_index = primary.parse_indexset().await.expect("primary rows");
+            let corrupt_link = primary_index
+                .iter()
+                .find_map(|(id, link)| (id == "pr-corrupt").then_some(link))
+                .expect("corrupt row link");
+            drop(primary);
+
+            let data_path = source.join("pull_request/.wt.data");
+            let page_id: u32 = corrupt_link.page_id.into();
+            let byte_offset = u64::from(page_id) * PAGE_SIZE as u64
+                + GENERAL_HEADER_SIZE as u64
+                + u64::from(corrupt_link.offset);
+            {
+                use std::io::{Seek, SeekFrom, Write};
+
+                let mut file = std::fs::OpenOptions::new()
+                    .write(true)
+                    .open(data_path)
+                    .expect("data file");
+                file.seek(SeekFrom::Start(byte_offset)).expect("row offset");
+                file.write_all(&vec![0; corrupt_link.length as usize])
+                    .expect("corrupt row bytes");
+                file.sync_all().expect("corruption reaches disk");
             }
-        );
 
-        let config = DiskConfig::new_with_table_name(
-            target.to_string_lossy().into_owned(),
-            PullRequestWorkTable::name_snake_case(),
-            PullRequestWorkTable::version(),
-        );
-        let engine = PullRequestPersistenceEngine::new(config)
-            .await
-            .expect("rebuilt engine");
-        let rebuilt = PullRequestWorkTable::load(engine)
-            .await
-            .expect("rebuilt table");
-        let mut ids: Vec<String> = rebuilt
-            .select_all()
-            .execute()
-            .expect("rebuilt rows")
-            .into_iter()
-            .map(|row| row.id)
-            .collect();
-        ids.sort();
-        assert_eq!(ids, vec!["pr-1", "pr-2", "pr-3"]);
-        assert_eq!(
-            rebuilt
-                .select_by_project_id("proj-1".into())
+            let _ = recover_pull_request_index(&source, &strict_target)
+                .await
+                .expect_err("strict recovery refuses the corrupt row");
+            let report = salvage_pull_request_index(&source, &salvage_target)
+                .await
+                .expect("salvage keeps valid rows");
+            assert_eq!(
+                report,
+                PullRequestSalvageReport {
+                    rows: 2,
+                    projects: 2,
+                    skipped: vec!["pr-corrupt".into()],
+                }
+            );
+
+            let config = DiskConfig::new_with_table_name(
+                salvage_target.to_string_lossy().into_owned(),
+                PullRequestWorkTable::name_snake_case(),
+                PullRequestWorkTable::version(),
+            );
+            let engine = PullRequestPersistenceEngine::new(config)
+                .await
+                .expect("rebuilt engine");
+            let rebuilt = PullRequestWorkTable::load(engine)
+                .await
+                .expect("rebuilt table");
+            let mut ids: Vec<String> = rebuilt
+                .select_all()
                 .execute()
-                .expect("rebuilt secondary index")
-                .len(),
-            2
-        );
-        rebuilt.close().await.expect("rebuilt table closes");
-    }
-
-    #[tokio::test]
-    async fn pull_request_salvage_reports_and_omits_a_corrupt_row() {
-        let root = tempfile::tempdir().expect("temporary recovery store");
-        let source = root.path().join("source");
-        let strict_target = root.path().join("strict-target");
-        let salvage_target = root.path().join("salvage-target");
-        let config = DiskConfig::new_with_table_name(
-            source.to_string_lossy().into_owned(),
-            PullRequestWorkTable::name_snake_case(),
-            PullRequestWorkTable::version(),
-        );
-        let engine = PullRequestPersistenceEngine::new(config)
-            .await
-            .expect("engine");
-        let table = PullRequestWorkTable::load(engine).await.expect("table");
-        table
-            .insert(pull_request("pr-good-1", "proj-1"))
-            .await
-            .expect("first row");
-        table
-            .insert(pull_request("pr-corrupt", "proj-1"))
-            .await
-            .expect("corrupt row");
-        table
-            .insert(pull_request("pr-good-2", "proj-2"))
-            .await
-            .expect("third row");
-        table.close().await.expect("source closes cleanly");
-
-        let table_path = source.join("pull_request");
-        let mut primary = <SpaceIndexUnsized<
-            String,
-            { INNER_PAGE_SIZE as u32 },
-            { PAGE_SIZE as u32 },
-        > as SpaceIndexOps<String>>::primary_from_table_files_path(
-            table_path.to_string_lossy().into_owned(),
-            PullRequestWorkTable::version(),
-        )
-        .await
-        .expect("primary index");
-        let primary_index = primary.parse_indexset().await.expect("primary rows");
-        let corrupt_link = primary_index
-            .iter()
-            .find_map(|(id, link)| (id == "pr-corrupt").then_some(link))
-            .expect("corrupt row link");
-        drop(primary);
-
-        let data_path = source.join("pull_request/.wt.data");
-        let page_id: u32 = corrupt_link.page_id.into();
-        let byte_offset = u64::from(page_id) * PAGE_SIZE as u64
-            + GENERAL_HEADER_SIZE as u64
-            + u64::from(corrupt_link.offset);
-        {
-            use std::io::{Seek, SeekFrom, Write};
-
-            let mut file = std::fs::OpenOptions::new()
-                .write(true)
-                .open(data_path)
-                .expect("data file");
-            file.seek(SeekFrom::Start(byte_offset)).expect("row offset");
-            file.write_all(&vec![0; corrupt_link.length as usize])
-                .expect("corrupt row bytes");
-            file.sync_all().expect("corruption reaches disk");
-        }
-
-        let _ = recover_pull_request_index(&source, &strict_target)
-            .await
-            .expect_err("strict recovery refuses the corrupt row");
-        let report = salvage_pull_request_index(&source, &salvage_target)
-            .await
-            .expect("salvage keeps valid rows");
-        assert_eq!(
-            report,
-            PullRequestSalvageReport {
-                rows: 2,
-                projects: 2,
-                skipped: vec!["pr-corrupt".into()],
-            }
-        );
-
-        let config = DiskConfig::new_with_table_name(
-            salvage_target.to_string_lossy().into_owned(),
-            PullRequestWorkTable::name_snake_case(),
-            PullRequestWorkTable::version(),
-        );
-        let engine = PullRequestPersistenceEngine::new(config)
-            .await
-            .expect("rebuilt engine");
-        let rebuilt = PullRequestWorkTable::load(engine)
-            .await
-            .expect("rebuilt table");
-        let mut ids: Vec<String> = rebuilt
-            .select_all()
-            .execute()
-            .expect("rebuilt rows")
-            .into_iter()
-            .map(|row| row.id)
-            .collect();
-        ids.sort();
-        assert_eq!(ids, vec!["pr-good-1", "pr-good-2"]);
-        rebuilt.close().await.expect("rebuilt table closes");
+                .expect("rebuilt rows")
+                .into_iter()
+                .map(|row| row.id)
+                .collect();
+            ids.sort();
+            assert_eq!(ids, vec!["pr-good-1", "pr-good-2"]);
+            rebuilt.close().await.expect("rebuilt table closes");
+        });
     }
 }
 
@@ -3265,13 +3283,50 @@ mod scrub_tests {
      * keeps every row that is shaped like an item — including task-manager
      * rows and unfamiliar statuses — and drops only what cannot be one.
      */
-    #[tokio::test]
-    async fn shifted_debris_is_dropped_and_real_rows_survive() {
-        let dir = std::env::temp_dir().join(format!("wt-migrate-scrub-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).expect("tmp dir");
+    #[test]
+    fn shifted_debris_is_dropped_and_real_rows_survive() {
+        nagoya::block_on(async {
+            let dir = std::env::temp_dir().join(format!("wt-migrate-scrub-{}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&dir);
+            std::fs::create_dir_all(&dir).expect("tmp dir");
 
-        {
+            {
+                let config = DiskConfig::new_with_table_name(
+                    dir.to_string_lossy().into_owned(),
+                    ProjectItemWorkTable::name_snake_case(),
+                    ProjectItemWorkTable::version(),
+                );
+                let engine = ProjectItemPersistenceEngine::new(config)
+                    .await
+                    .expect("engine");
+                let table = ProjectItemWorkTable::load(engine).await.expect("table");
+
+                table
+                    .insert(item("item-1", "proj-846b"))
+                    .await
+                    .expect("good row");
+                table
+                    .insert(item("item-2", "home-task-manager"))
+                    .await
+                    .expect("tm row");
+                let mut odd = item("item-3", "proj-846b");
+                odd.status = "someday-maybe".into();
+                table.insert(odd).await.expect("odd status row");
+                // The real debris shapes, verbatim from the incident.
+                table
+                    .insert(item("proj-6cf80cb0", "Recover the item list"))
+                    .await
+                    .expect("shifted row");
+                table
+                    .insert(item("ment)", "item-03fd09c6"))
+                    .await
+                    .expect("worse row");
+                table.wait_for_ops().await.expect("items persist");
+            }
+
+            let dropped = scrub_items(&dir).await.expect("scrub");
+            assert_eq!(dropped, 2, "exactly the two debris rows go");
+
             let config = DiskConfig::new_with_table_name(
                 dir.to_string_lossy().into_owned(),
                 ProjectItemWorkTable::name_snake_case(),
@@ -3281,52 +3336,17 @@ mod scrub_tests {
                 .await
                 .expect("engine");
             let table = ProjectItemWorkTable::load(engine).await.expect("table");
-
-            table
-                .insert(item("item-1", "proj-846b"))
-                .await
-                .expect("good row");
-            table
-                .insert(item("item-2", "home-task-manager"))
-                .await
-                .expect("tm row");
-            let mut odd = item("item-3", "proj-846b");
-            odd.status = "someday-maybe".into();
-            table.insert(odd).await.expect("odd status row");
-            // The real debris shapes, verbatim from the incident.
-            table
-                .insert(item("proj-6cf80cb0", "Recover the item list"))
-                .await
-                .expect("shifted row");
-            table
-                .insert(item("ment)", "item-03fd09c6"))
-                .await
-                .expect("worse row");
-            table.wait_for_ops().await.expect("items persist");
-        }
-
-        let dropped = scrub_items(&dir).await.expect("scrub");
-        assert_eq!(dropped, 2, "exactly the two debris rows go");
-
-        let config = DiskConfig::new_with_table_name(
-            dir.to_string_lossy().into_owned(),
-            ProjectItemWorkTable::name_snake_case(),
-            ProjectItemWorkTable::version(),
-        );
-        let engine = ProjectItemPersistenceEngine::new(config)
-            .await
-            .expect("engine");
-        let table = ProjectItemWorkTable::load(engine).await.expect("table");
-        let mut kept: Vec<String> = table
-            .select_all()
-            .execute()
-            .expect("rows")
-            .into_iter()
-            .map(|row| row.id)
-            .collect();
-        kept.sort();
-        assert_eq!(kept, vec!["item-1", "item-2", "item-3"]);
-        let _ = std::fs::remove_dir_all(&dir);
+            let mut kept: Vec<String> = table
+                .select_all()
+                .execute()
+                .expect("rows")
+                .into_iter()
+                .map(|row| row.id)
+                .collect();
+            kept.sort();
+            assert_eq!(kept, vec!["item-1", "item-2", "item-3"]);
+            let _ = std::fs::remove_dir_all(&dir);
+        });
     }
 
     /// `db`, `db.next-<stamp>` and `db.pre-migration-<stamp>` are three stores.
