@@ -708,7 +708,12 @@ impl RunMeasurement {
             cache_write_tokens: count(usage.cache_write_tokens),
             cost_micro,
             duration_ms,
-            status: status.to_string(),
+            // The one field on this row a caller can hand an arbitrary
+            // provider string. Every current caller passes a stop label or a
+            // fixed literal except the failure path, which capped its error
+            // before calling; this is the backstop so the next caller does not
+            // have to know that a row must fit one page.
+            status: truncate_to_bytes(status, MAX_PERSISTED_BLOB),
             started_at: self.started_at.clone(),
             finished_at: now(),
         };
@@ -1831,8 +1836,17 @@ async fn persist_terminal_agent_chunk(
     body: String,
     started_at: Option<String>,
     last_chunk_id: Option<&str>,
-    outcome: AgentMessageOutcome,
+    mut outcome: AgentMessageOutcome,
 ) -> Result<MessageDto, String> {
+    // `body` has [`body_head`] and [`store_body`] to keep it inside the row's
+    // page; `stop` shares that page and had nothing. It is a short label for
+    // every ordinary outcome and the provider's error text for a failure, and
+    // one of those arrived as 17776 bytes of `claude` control JSON, which the
+    // engine answers with `PageTooSmall` after having twice corrupted this
+    // store on this machine. Capped here rather than at the two call sites so
+    // both the insert below and the `finalize_agent_chunk` path above it are
+    // covered.
+    outcome.stop = truncate_to_bytes(&outcome.stop, MAX_PERSISTED_BLOB);
     // A cancellation, provider failure, or clean stop can all land between two
     // deltas of an authored span. Persist the prose before it, never the
     // executable-looking fragment the agent did not finish authoring.
@@ -14076,8 +14090,29 @@ async fn drive_run(
             emit_run_stopped(&app, &project_id, agent, &model, &permission, stop, None);
         }
         Err(error) => {
-            let error_text = error.to_string();
-            let rejected_resume = claude_rejected_resume(agent, resume.as_deref(), &error_text);
+            /*
+             * Capped before it is ever persisted, and only after the
+             * classifiers have read the whole thing.
+             *
+             * A provider error is a message on a good day and an unbounded
+             * dump on a bad one: `claude` answers a rejected argument with its
+             * entire `control_response` - every skill description, every model
+             * entry - which arrived here as 17776 bytes. Both persistence
+             * paths below put this string in a row (the measurement's
+             * `status`, the failed turn's `stop`), a WorkTable row must fit
+             * one 16356-byte page, and an oversized insert has twice corrupted
+             * this store on this machine rather than merely failing. See
+             * [`MAX_PERSISTED_BLOB`].
+             *
+             * The order matters: `claude_rejected_resume` and
+             * `is_cybersecurity_refusal` below both match with `contains`, so
+             * they run against the full text. What is persisted and shown is
+             * the head, which is where a provider puts the sentence and not
+             * the dump.
+             */
+            let raw_error_text = error.to_string();
+            let rejected_resume = claude_rejected_resume(agent, resume.as_deref(), &raw_error_text);
+            let error_text = truncate_to_bytes(&raw_error_text, MAX_PERSISTED_BLOB);
             let mut visible_error = error_text.clone();
             if rejected_resume {
                 let retry_key = missing_resume_retry_key(&turn_id);
@@ -14167,7 +14202,11 @@ async fn drive_run(
              * the partial message and in the durable ledger.
              */
             let mut visible_chunk = without_incomplete_prompt_syntax_tail(&streamed_chunk);
-            if visible_chunk.trim().is_empty() && is_cybersecurity_refusal(&visible_error) {
+            // Matched against the uncapped text for the same reason the other
+            // classifier above is: a refusal marker past the cap would
+            // otherwise read as an ordinary failure. What gets stored is
+            // still `visible_error`, which is the capped copy.
+            if visible_chunk.trim().is_empty() && is_cybersecurity_refusal(&raw_error_text) {
                 // Keep the exact refusal durably in the transcript. The
                 // session-local stopped event disappears on restart, which
                 // makes a safety decision too easy to miss.
@@ -16729,6 +16768,36 @@ mod tests {
         let head: String = cut.chars().take(10).collect();
         assert_eq!(head, "字".repeat(10), "no character was split");
         assert_eq!(truncate_to_bytes("short", 8_000), "short");
+    }
+
+    /// A provider error is not a sentence when it goes wrong.
+    ///
+    /// `claude` answered a rejected argument with its whole
+    /// `control_response` - every skill description and model entry - and the
+    /// run loop put that string in two rows: the measurement's `status` and
+    /// the failed turn's `stop`. A WorkTable row must fit one 16356-byte page,
+    /// so both writes failed with `need 17776, but 12716 allowed`, and an
+    /// oversized insert has twice left this store corrupt rather than merely
+    /// refusing. Both fields are capped now, so the row fits with the rest of
+    /// its columns to spare.
+    #[test]
+    fn an_unbounded_provider_error_is_capped_before_it_reaches_a_row() {
+        // The shape that did it: a short sentence, then kilobytes of JSON.
+        let dump = format!(
+            "`claude` rejected an argument: {}",
+            r#"{"type":"control_response","commands":[]}"#.repeat(500)
+        );
+        assert!(
+            dump.len() > 16_356,
+            "the setup must exceed a page, or it proves nothing"
+        );
+
+        let capped = truncate_to_bytes(&dump, MAX_PERSISTED_BLOB);
+        assert!(capped.len() <= MAX_PERSISTED_BLOB);
+        assert!(
+            capped.starts_with("`claude` rejected an argument:"),
+            "the head is the part worth keeping"
+        );
     }
 
     #[tokio::test]
