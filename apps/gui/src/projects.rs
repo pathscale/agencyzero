@@ -1631,12 +1631,23 @@ fn body_head(body: &str) -> String {
 /// Call after the message row's id is known; the chunks key off it. A body
 /// within the cap writes nothing. Every caller mints a fresh message id, so
 /// there are never prior chunks to clear: this is insert-only.
-async fn store_body(tables: &Tables, message_id: &str, project_id: &str, body: &str) {
-    if body.len() <= MAX_MESSAGE_BODY {
+///
+/// `head_len` is what the row actually stored, which is not always
+/// [`MAX_MESSAGE_BODY`]: [`fit_message_row_to_page`] shortens the head further
+/// when the rest of the row needs the space. The spill has to start where the
+/// stored head ends, because [`full_body`] reassembles by concatenating the two
+/// and any other split point loses or repeats the bytes between them.
+async fn store_body(
+    tables: &Tables,
+    message_id: &str,
+    project_id: &str,
+    body: &str,
+    head_len: usize,
+) {
+    if body.len() <= head_len {
         return;
     }
-    let head = body_head(body);
-    let rest = &body[head.len()..];
+    let rest = &body[split_boundary(body, head_len)..];
     for (seq, chunk) in chunk_bytes(rest, MAX_MESSAGE_BODY).into_iter().enumerate() {
         let row = crate::db::schema::message_chunk::MessageChunkRow {
             id: format!("{message_id}#{seq}"),
@@ -1776,17 +1787,69 @@ struct AgentMessageOutcome {
     exit_code: i64,
 }
 
+/// What one `MessageRow`'s variable-length columns may sum to.
+///
+/// A row must fit one 16356-byte page whole. Capping each column on its own
+/// does not give that: `body` is allowed [`MAX_MESSAGE_BODY`] and `stop`
+/// [`MAX_PERSISTED_BLOB`], and 12000 + 8000 is past the page on a row that
+/// satisfies both. That is reachable, not theoretical: a reply over 12K that
+/// then fails with a large provider error is one streamed turn plus one bad
+/// response. The per-column caps stay, because each is also the right answer
+/// for what that column is worth keeping; this is the budget they share.
+///
+/// The margin covers the fixed columns (ids, agent, model, permission,
+/// timestamps) and the row framing, which together are bounded and small.
+const MAX_MESSAGE_ROW_BYTES: usize = 13_500;
+
+/// Bring `row` inside [`MAX_MESSAGE_ROW_BYTES`] by shortening the columns that
+/// have somewhere else to be.
+///
+/// Order is by what is recoverable. `body`'s tail is not lost when it is cut
+/// here: [`store_body`] writes it to `message_chunk` from the caller's full
+/// text, and the read path stitches it back, so the head shrinks with no loss
+/// at all. `stop` has nowhere to spill, so it is trimmed only once `body` is at
+/// its floor, and it keeps its head, which is the part that names the failure.
+fn fit_message_row_to_page(row: &mut MessageRow) {
+    /// Enough of a failing `stop` to classify it and show the owner why.
+    const STOP_FLOOR: usize = 1_000;
+    let fixed = row.usage.len() + row.moderation.len();
+    let Some(variable) = MAX_MESSAGE_ROW_BYTES.checked_sub(fixed) else {
+        // Usage and moderation are generated, bounded JSON, so this is not
+        // reachable from anything a provider sends. Cut both blobs to nothing
+        // rather than silently overflow if it ever becomes so.
+        row.body.clear();
+        row.stop = truncate_to_bytes(&row.stop, STOP_FLOOR);
+        return;
+    };
+    if row.body.len() + row.stop.len() <= variable {
+        return;
+    }
+    let stop_reserved = row.stop.len().min(STOP_FLOOR);
+    let body_budget = variable.saturating_sub(stop_reserved);
+    if row.body.len() > body_budget {
+        row.body.truncate(split_boundary(&row.body, body_budget));
+    }
+    let stop_budget = variable.saturating_sub(row.body.len());
+    if row.stop.len() > stop_budget {
+        row.stop = truncate_to_bytes(&row.stop, stop_budget);
+    }
+}
+
 async fn persist_message_body(
     tables: &Tables,
-    row: MessageRow,
+    mut row: MessageRow,
     body: &str,
 ) -> Result<MessageDto, String> {
+    // Every message insert goes through here, which is why the row's page
+    // budget is enforced here and not at the twelve call sites that build one.
+    fit_message_row_to_page(&mut row);
+    let head_len = row.body.len();
     tables
         .message
         .insert(row.clone())
         .await
         .map_err(|error| error.to_string())?;
-    store_body(tables, &row.id, &row.project_id, body).await;
+    store_body(tables, &row.id, &row.project_id, body, head_len).await;
     let mut dto = MessageDto::from(row);
     dto.body = body.to_string();
     Ok(dto)
@@ -5320,7 +5383,14 @@ async fn user_message_for_send(
         .insert(row.clone())
         .await
         .map_err(|error| error.to_string())?;
-    store_body(&state.tables, &row.id, &input.project_id, &input.body).await;
+    store_body(
+        &state.tables,
+        &row.id,
+        &input.project_id,
+        &input.body,
+        MAX_MESSAGE_BODY,
+    )
+    .await;
 
     // The emitted DTO carries the whole body, not just the stored head: the
     // caller has it in hand and the reader would otherwise have to round-trip
@@ -5673,7 +5743,14 @@ async fn recover_partial_reply(tables: &Tables, project_id: &str, raw: String) -
         );
         return false;
     }
-    store_body(tables, &message_id, project_id, &checkpoint_body).await;
+    store_body(
+        tables,
+        &message_id,
+        project_id,
+        &checkpoint_body,
+        MAX_MESSAGE_BODY,
+    )
+    .await;
     crate::log!(
         crate::log::Level::Info,
         "run",
@@ -6396,7 +6473,7 @@ async fn persist_grok_cliff_steer(
         );
         return None;
     }
-    store_body(tables, &row.id, project_id, body).await;
+    store_body(tables, &row.id, project_id, body, MAX_MESSAGE_BODY).await;
     let mut message = MessageDto::from(row);
     message.body = body.to_string();
     let message_id = message.id.clone();
@@ -8310,7 +8387,7 @@ async fn persist_foreign_namespace_leak(
         );
         return;
     }
-    store_body(tables, &row.id, project_id, &body).await;
+    store_body(tables, &row.id, project_id, &body, MAX_MESSAGE_BODY).await;
     let mut message = MessageDto::from(row);
     message.body = body;
     let _ = app.emit("message:appended", message);
@@ -8324,6 +8401,16 @@ async fn persist_foreign_namespace_leak(
 /// that the model cannot tell whether it wanted a native tool or an
 /// AgencyZero directive, and the usual retry is the same span with the
 /// namespace edited.
+/// The one sentence of [`foreign_namespace_resume_prompt`] that does not
+/// inflect, and so the only safe thing for the loop guard to match on.
+///
+/// The guard used to look for "was not executed:", which is the singular
+/// opening. Two or more leaked spans open with "were", so the guard missed its
+/// own correction, resumed, and corrected the correction: the run re-prompted
+/// itself for as long as the model kept quoting the spans back. Both sides name
+/// this constant now, which is what stops them drifting apart again.
+const FOREIGN_NAMESPACE_CORRECTION: &str = "Those namespaces are not live here.";
+
 fn foreign_namespace_resume_prompt(spans: &[ForeignSpan]) -> String {
     let (subject, were, them, they, subj) = if spans.len() == 1 {
         ("This span", "was", "it", "it was", "it")
@@ -8332,7 +8419,7 @@ fn foreign_namespace_resume_prompt(spans: &[ForeignSpan]) -> String {
     };
     format!(
         "{subject} in your last reply {were} not executed:\n\n{}\n\n\
-         Those namespaces are not live here. AgencyZero declares `@{agency}` \
+         {FOREIGN_NAMESPACE_CORRECTION} AgencyZero declares `@{agency}` \
          only; every other namespace stays inert text, so {subj} reached the \
          transcript verbatim and nothing ran.\n\n\
          If {they} tool calls, make {them} natively now — the calls did not \
@@ -8346,7 +8433,7 @@ fn foreign_namespace_resume_prompt(spans: &[ForeignSpan]) -> String {
 }
 
 fn should_resume_after_foreign_namespace(prompt: &str, cancelled: bool) -> bool {
-    !cancelled && !prompt.contains("was not executed:")
+    !cancelled && !prompt.contains(FOREIGN_NAMESPACE_CORRECTION)
 }
 
 fn grok_xml_resume_prompt() -> &'static str {
@@ -11567,7 +11654,14 @@ async fn append_review_message(
         .insert(row.clone())
         .await
         .map_err(|error| error.to_string())?;
-    store_body(&state.tables, &message_id, review.project_id, &body).await;
+    store_body(
+        &state.tables,
+        &message_id,
+        review.project_id,
+        &body,
+        MAX_MESSAGE_BODY,
+    )
+    .await;
     let mut appended = MessageDto::from(row);
     appended.body = body;
     let _ = app.emit("message:appended", &appended);
@@ -15222,6 +15316,52 @@ mod tests {
             "the head is what is kept"
         );
 
+        // The combination, which capping each column on its own does not
+        // cover: a reply past MAX_MESSAGE_BODY that then fails with the same
+        // oversized error. 12000 + 8000 satisfies both per-column caps and is
+        // still a row that will not fit a 16356-byte page.
+        let long_reply = format!("{}The visible tail.", "streamed prose ".repeat(1_200));
+        assert!(
+            long_reply.len() > MAX_MESSAGE_BODY,
+            "the reply must overflow the body cap, or it proves nothing"
+        );
+        let both = persist_terminal_agent_chunk(
+            &tables,
+            context,
+            long_reply.clone(),
+            Some("2026-09-18T00:00:01Z".into()),
+            None,
+            AgentMessageOutcome {
+                usage: String::new(),
+                stop: dump.clone(),
+                exit_code: -1,
+            },
+        )
+        .await
+        .expect("a long reply that then fails still persists");
+
+        let stored = tables
+            .message
+            .select(both.id.clone())
+            .expect("the combined row reads back");
+        assert!(
+            stored.body.len() + stored.stop.len() <= MAX_MESSAGE_ROW_BYTES,
+            "body {} + stop {} must fit one page",
+            stored.body.len(),
+            stored.stop.len()
+        );
+        assert!(
+            !stored.stop.is_empty() && stored.stop.starts_with("`claude` rejected"),
+            "the failure stays legible after the body takes its share"
+        );
+        // The head shrank to make room, so the spill must start where the head
+        // now ends rather than at MAX_MESSAGE_BODY, or the stitch loses bytes.
+        assert_eq!(
+            full_body(&tables, &both.id, &stored.body),
+            long_reply,
+            "the whole reply survives a shortened head"
+        );
+
         drop(tables);
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -15258,7 +15398,14 @@ mod tests {
             created_at: "2026-08-07T00:00:00Z".into(),
         };
         tables.message.insert(row).await.expect("chunk inserts");
-        store_body(&tables, "durable-chunk", "project-a", &durable_body).await;
+        store_body(
+            &tables,
+            "durable-chunk",
+            "project-a",
+            &durable_body,
+            MAX_MESSAGE_BODY,
+        )
+        .await;
 
         let legacy = serde_json::to_string(&PartialReply {
             version: 1,
@@ -17000,7 +17147,7 @@ mod tests {
             created_at: now(),
         };
         tables.message.insert(row).await.expect("head row inserts");
-        store_body(&tables, "msg-big", "proj-big", &body).await;
+        store_body(&tables, "msg-big", "proj-big", &body, MAX_MESSAGE_BODY).await;
 
         // The inline head alone is capped; the whole body comes back only once
         // the chunks are stitched on.
@@ -17596,11 +17743,30 @@ mod tests {
 
     /// The correction must not re-trigger on its own echoed text, or the run
     /// loop resumes forever.
+    ///
+    /// Both counts, because the prompt inflects: one span opens with "was not
+    /// executed", several with "were". A guard matching the singular wording
+    /// passed this test on one span while looping on two.
     #[test]
     fn the_foreign_namespace_correction_does_not_loop() {
-        let spans = leaked_foreign_namespace_spans("<ps @antml:invoke>");
-        let correction = foreign_namespace_resume_prompt(&spans);
-        assert!(!should_resume_after_foreign_namespace(&correction, false));
+        for reply in [
+            "<ps @antml:invoke>",
+            "<ps @antml:invoke>\ntext between\n<ps @other:call>",
+        ] {
+            let spans = leaked_foreign_namespace_spans(reply);
+            let correction = foreign_namespace_resume_prompt(&spans);
+            assert!(
+                !should_resume_after_foreign_namespace(&correction, false),
+                "the correction for {} span(s) re-triggered itself:\n{correction}",
+                spans.len()
+            );
+        }
+        assert_eq!(
+            leaked_foreign_namespace_spans("<ps @antml:invoke>\ntext between\n<ps @other:call>")
+                .len(),
+            2,
+            "the plural case needs two spans to exercise the plural wording"
+        );
         assert!(!should_resume_after_foreign_namespace("anything", true));
         assert!(should_resume_after_foreign_namespace(
             "ordinary prompt",
