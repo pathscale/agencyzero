@@ -954,7 +954,7 @@ impl Tables {
             pending: impl std::future::Future<Output = worktable::prelude::PersistenceResult>,
         ) -> Result<(), String> {
             let started = std::time::Instant::now();
-            let result = tokio::time::timeout(std::time::Duration::from_secs(5), pending).await;
+            let result = nagoya::timeout(std::time::Duration::from_secs(5), pending).await;
             let elapsed = started.elapsed().as_millis();
             match result {
                 Ok(Ok(())) => {

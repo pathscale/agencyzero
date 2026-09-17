@@ -34,7 +34,7 @@ pub(crate) async fn check_for_update(app: AppHandle) -> Result<Option<AvailableU
     let updater = app.updater().map_err(|e| e.to_string())?;
     let found = (|| updater.check())
         .retry(crate::retry::interactive_backoff())
-        .sleep(tokio::time::sleep)
+        .sleep(nagoya::sleep)
         .await
         .map_err(|e| e.to_string())?;
 
@@ -78,7 +78,7 @@ async fn install_update_now_with_state(app: &AppHandle, state: &AppState) -> Res
     let updater = app.updater().map_err(|e| e.to_string())?;
     let Some(update) = (|| updater.check())
         .retry(crate::retry::interactive_backoff())
-        .sleep(tokio::time::sleep)
+        .sleep(nagoya::sleep)
         .await
         .map_err(|e| e.to_string())?
     else {

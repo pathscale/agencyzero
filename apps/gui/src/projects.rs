@@ -14817,7 +14817,7 @@ mod tests {
 
         // A run loop that awaited the acknowledgement here would never reach
         // this line, because the provider is still blocked on `send`.
-        tokio::time::timeout(std::time::Duration::from_secs(5), ping_worker)
+        nagoya::timeout(std::time::Duration::from_secs(5), ping_worker)
             .await
             .expect("the ping worker finished rather than deadlocking")
             .expect("the ping worker did not panic");

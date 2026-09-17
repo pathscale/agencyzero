@@ -246,7 +246,7 @@ impl AgencyProxy {
             return Ok(run_ids.len());
         }
 
-        let deadline = tokio::time::Instant::now() + CANCEL_CONFIRMATION;
+        let deadline = crate::runtime::deadline_in(CANCEL_CONFIRMATION);
         loop {
             let snapshots = match client
                 .request(ClientMessage::ListRuns)
@@ -260,14 +260,14 @@ impl AgencyProxy {
             if still_active.is_empty() {
                 return Ok(run_ids.len());
             }
-            if tokio::time::Instant::now() >= deadline {
+            if nagoya::now_ns() >= deadline {
                 return Err(format!(
                     "AgencyProxy did not stop {} project run(s) within {}s",
                     still_active.len(),
                     CANCEL_CONFIRMATION.as_secs()
                 ));
             }
-            tokio::time::sleep(Duration::from_millis(100)).await;
+            nagoya::sleep(Duration::from_millis(100)).await;
         }
     }
 
@@ -337,7 +337,7 @@ impl AgencyProxy {
                 .await
                 .is_ok()
             {
-                tokio::time::sleep(Duration::from_millis(100)).await;
+                nagoya::sleep(Duration::from_millis(100)).await;
             }
         }
         *self
@@ -475,7 +475,7 @@ impl AgencyProxy {
                     SHUTDOWN_CONFIRMATION.as_secs()
                 ));
             }
-            tokio::time::sleep(Duration::from_millis(100)).await;
+            nagoya::sleep(Duration::from_millis(100)).await;
         }
         self.disconnected_status(detail.into())
     }
@@ -646,7 +646,7 @@ impl AgencyProxy {
                     self.set_connection_state(ConnectionState::Live);
                     return Ok(client);
                 }
-                Err(_) => tokio::time::sleep(Duration::from_millis(50)).await,
+                Err(_) => nagoya::sleep(Duration::from_millis(50)).await,
             }
         }
         Err(self.record_failure(proxy_startup_failure(&output_path, &self.socket_path)))
@@ -919,7 +919,7 @@ async fn shutdown_legacy_proxy(client: &Client, mode: ShutdownMode) -> Result<()
             ServerResponse::Error {
                 code: ErrorCode::Conflict,
                 ..
-            } => tokio::time::sleep(Duration::from_millis(100)).await,
+            } => nagoya::sleep(Duration::from_millis(100)).await,
             response => return Err(response_error(response)),
         }
     }
@@ -1028,7 +1028,7 @@ impl ProxyControl {
     }
 
     pub async fn send(&self, body: &str, interaction_id: &str) -> Result<(), String> {
-        let deadline = tokio::time::Instant::now() + INJECTION_CONFIRMATION;
+        let deadline = crate::runtime::deadline_in(INJECTION_CONFIRMATION);
         loop {
             let response = self
                 .client
@@ -1047,12 +1047,12 @@ impl ProxyControl {
                 ServerResponse::Error {
                     code: ErrorCode::Conflict,
                     ..
-                } if tokio::time::Instant::now() < deadline => {
+                } if nagoya::now_ns() < deadline => {
                     // The run owns its slot before Codex has finished opening
                     // the turn. Keep this ordered steer in flight until the
                     // daemon can attach it instead of handing it back to the
                     // visible prompt queue.
-                    tokio::time::sleep(Duration::from_millis(50)).await;
+                    nagoya::sleep(Duration::from_millis(50)).await;
                 }
                 response => return accepted(response),
             }
@@ -1245,7 +1245,7 @@ impl ProxyRun {
         let waiting_since = std::time::Instant::now();
         let mut seen = 0u32;
         while self.terminal.is_none() {
-            if tokio::time::timeout(CANCEL_CONFIRMATION, self.recv())
+            if nagoya::timeout(CANCEL_CONFIRMATION, self.recv())
                 .await
                 .is_err()
             {
