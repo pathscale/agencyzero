@@ -15172,6 +15172,84 @@ mod tests {
         );
     }
 
+    /// The write that actually failed, against a real store.
+    ///
+    /// The cap is asserted as a string elsewhere; this drives the row. On
+    /// 2026-09-18 `claude` answered a rejected argument with its whole
+    /// `control_response` and `drive_run` put that string in a message row's
+    /// `stop`. WorkTable refused it - `need 16512, but 15260 allowed` - so the
+    /// turn the owner had just watched was never persisted and the process
+    /// went down with no record of it.
+    ///
+    /// A page is 16356 bytes and the row's other columns share it, so this
+    /// also carries a body: an error capped to exactly the page would still
+    /// fail beside anything else. It asserts the insert succeeds and the row
+    /// reads back, because "the string got shorter" is not the property that
+    /// was broken.
+    #[tokio::test]
+    async fn a_turn_failing_with_an_unbounded_provider_error_still_persists() {
+        let dir = std::env::temp_dir().join(format!(
+            "az-oversized-stop-{}-{}",
+            std::process::id(),
+            uuid::Uuid::now_v7()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        let tables = Tables::open(&dir).await.expect("oversized store opens");
+        tables
+            .project
+            .insert(project_row("project-a", "Project A"))
+            .await
+            .expect("project inserts");
+
+        // The shape that did it: a sentence, then kilobytes of JSON.
+        let dump = format!(
+            "`claude` rejected an argument, which usually means its version differs: {}",
+            r#"{"type":"control_response","response":{"commands":[]}}"#.repeat(400)
+        );
+        assert!(
+            dump.len() > 16_356,
+            "the setup must exceed a page, or it proves nothing"
+        );
+
+        let context = AgentMessageContext {
+            project_id: "project-a",
+            agent: Agent::Claude,
+            model: "claude-opus-5",
+            permission: "auto",
+        };
+        let persisted = persist_terminal_agent_chunk(
+            &tables,
+            context,
+            "The answer the owner watched arrive.".into(),
+            Some("2026-09-18T00:00:00Z".into()),
+            None,
+            AgentMessageOutcome {
+                usage: String::new(),
+                stop: dump.clone(),
+                exit_code: -1,
+            },
+        )
+        .await
+        .expect("the failed turn persists despite an oversized provider error");
+
+        assert_eq!(persisted.body, "The answer the owner watched arrive.");
+        let stored = tables
+            .message
+            .select(persisted.id.clone())
+            .expect("the row reads back");
+        assert!(
+            stored.stop.len() <= MAX_PERSISTED_BLOB,
+            "the stop field is capped to fit the row's page"
+        );
+        assert!(
+            stored.stop.starts_with("`claude` rejected an argument"),
+            "the head is what is kept"
+        );
+
+        drop(tables);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[tokio::test]
     async fn recovery_discards_a_legacy_checkpoint_prefix_owned_by_a_durable_chunk() {
         let dir = std::env::temp_dir().join(format!(
