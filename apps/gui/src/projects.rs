@@ -2837,7 +2837,7 @@ pub async fn update_item(
     if title.is_empty() {
         return Err("an item needs a title".into());
     }
-    let (write, ()) = tokio::join!(
+    let (write, ()) = futures::join!(
         state
             .tables
             .project_item
@@ -2897,7 +2897,7 @@ async fn link_item_issue_inner(
     let url =
         github_issue_url(authored_url).map_err(|reason| format!("ENTITY_NOT_FOUND: {reason}"))?;
     let reference = format!("issue:{url}");
-    let (write, ()) = tokio::join!(
+    let (write, ()) = futures::join!(
         tables.project_item.update_by_id(
             id.to_string(),
             ProjectItemColumns::REFERENCE,
