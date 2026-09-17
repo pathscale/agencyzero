@@ -10821,6 +10821,7 @@ pub async fn send_message(
     let approvals = state.approvals.clone();
     let limits = state.limits.clone();
     let receipts = state.receipts.clone();
+    let pool = std::sync::Arc::clone(&state.pool);
     let item_id = input.item_id.clone();
 
     /*
@@ -10892,6 +10893,7 @@ pub async fn send_message(
             item_id,
             reservation,
             cancel,
+            pool,
             inject_rx,
             ready_for_followup,
             project_id,
@@ -11160,6 +11162,7 @@ pub async fn sync_project(
         let approvals = state.approvals.clone();
         let limits = state.limits.clone();
         let receipts = state.receipts.clone();
+        let pool = std::sync::Arc::clone(&state.pool);
         let model = snapshot.model.clone();
         let recovered_app = app.clone();
         tauri::async_runtime::spawn(async move {
@@ -11174,6 +11177,7 @@ pub async fn sync_project(
                 item_id,
                 reservation,
                 cancel,
+                pool,
                 inject_rx,
                 ready_for_followup,
                 project_id,
@@ -11630,6 +11634,9 @@ async fn drive_run(
     // run slot frees exactly when no agent can still be alive.
     _reservation: RunReservation,
     cancel: crate::cancel::Cancel,
+    // Az's own threads, for the sends this loop must not await. See
+    // `crate::runtime::Pool`.
+    pool: std::sync::Arc<crate::runtime::Pool>,
     // Messages typed while this run is live, to deliver into the open turn.
     mut inject_rx: tokio::sync::mpsc::UnboundedReceiver<InjectedMessage>,
     ready_for_followup: std::sync::Arc<std::sync::atomic::AtomicBool>,
@@ -12163,32 +12170,26 @@ async fn drive_run(
      * manufacture the deadlock instead. The loop asks for a ping and carries
      * on draining; this worker waits.
      */
-    // Bounded at the number of pings that can be outstanding at once, which
-    // `should_ping_again` already enforces: `ping_outstanding` plus
-    // `MAX_UNANSWERED_LIVENESS_PINGS` caps it at four. The queue was
-    // unbounded, which said "any depth is fine" about a thing that is
-    // arithmetically capped, and hid the cap from anyone reading this line.
-    let (ping_request_tx, mut ping_request_rx) =
-        tokio::sync::mpsc::channel::<()>(MAX_UNANSWERED_LIVENESS_PINGS as usize);
-    // One bit, set once, read by the loop that then stops. A queue allocated a
-    // node and woke a task to carry it.
+    /*
+     * No queue and no worker for the ping.
+     *
+     * There was one of each: a bounded channel of `()` and a task that read
+     * from it and called `control.send`. The channel carried no data, so all
+     * it did was move the await off this loop, and its capacity restated a
+     * bound the loop already enforces - `should_ping_again` refuses a fifth
+     * ping while four are unanswered.
+     *
+     * `ProxyControl` owns its client and run id and borrows nothing from
+     * `ProxyRun`, so the loop can hand a ping straight to the pool: the send
+     * happens somewhere else, which is the only thing the worker achieved,
+     * and the loop returns to `run.recv` without awaiting it.
+     *
+     * The attempt counter lives in the loop now rather than in the worker,
+     * which is where the decision to ping is made anyway.
+     */
     let ping_failed = signals.ping_failed.clone();
-    let ping_failed_delivery = ping_failed.clone();
     let ping_control = run.control();
     let ping_turn_id = turn_id.clone();
-    let ping_delivery = tokio::spawn(async move {
-        let mut attempt = 0u32;
-        while ping_request_rx.recv().await.is_some() {
-            attempt = attempt.saturating_add(1);
-            if ping_control
-                .send(LIVENESS_PING, &format!("{ping_turn_id}:ping:{attempt}"))
-                .await
-                .is_err()
-            {
-                ping_failed_delivery.set();
-            }
-        }
-    });
     // One slot per steer that can fire, and each is behind its own one-shot
     // flag: the 180k checkpoint, the 190k stop-now, and the post-compact
     // resume. Unbounded implied a stream; this is three messages at most for
@@ -12472,14 +12473,30 @@ async fn drive_run(
                         "{project_id}: no output for {}s with a tool still running — pinging before deciding it is wedged",
                         RUN_IDLE_TIMEOUT.as_secs()
                     );
-                    // Handed to the ping worker rather than awaited here: this
-                    // task must keep draining `run.recv`. `try_send` rather
-                    // than `send`: the bounded sender's `send` is a future that
-                    // parks when the queue is full, and awaiting it here is the
-                    // stall this worker exists to avoid. A refusal means the
-                    // worker is gone, or that four pings are already unanswered
-                    // and a fifth would tell us nothing new.
-                    if ping_request_tx.try_send(()).is_ok() {
+                    // Sent from the pool rather than awaited here: this task
+                    // must keep draining `run.recv`, because `control.send`
+                    // waits for the provider and the provider acknowledges
+                    // only after emitting a burst of events. Awaiting it here
+                    // fills the bounded event channel and manufactures the
+                    // deadlock the ping exists to detect.
+                    //
+                    // `should_ping_again` above already refused this if four
+                    // pings are outstanding, so there is no second bound to
+                    // enforce here.
+                    {
+                        let control = ping_control.clone();
+                        let failed = ping_failed.clone();
+                        let turn = ping_turn_id.clone();
+                        let attempt = unanswered_pings.saturating_add(1);
+                        pool.spawn(async move {
+                            if control
+                                .send(LIVENESS_PING, &format!("{turn}:ping:{attempt}"))
+                                .await
+                                .is_err()
+                            {
+                                failed.set();
+                            }
+                        });
                         ping_outstanding = true;
                         unanswered_pings += 1;
                         // Visible in the run's I/O trail, so a stop that follows
@@ -12507,13 +12524,6 @@ async fn drive_run(
                         idle_deadline = tokio::time::Instant::now() + LIVENESS_PING_TIMEOUT;
                         continue;
                     }
-                    // The ping worker is gone, so there is nothing alive to
-                    // answer. Fall through and stop the run.
-                    crate::log!(
-                        crate::log::Level::Warn,
-                        "run",
-                        "{project_id}: the liveness ping could not be delivered; treating the run as wedged"
-                    );
                 }
                 if opening_message_read && ping_outstanding {
                     crate::log!(
@@ -13505,9 +13515,6 @@ async fn drive_run(
      */
     drop(inject_rx);
     drop(injection_delivery_tx);
-    // Closes the ping worker's queue so it can finish; a ping still in flight
-    // is answered into a run that is already ending, which is harmless.
-    drop(ping_request_tx);
     drop(cliff_steer_tx);
 
     // A final ordinary line has no newline to make it classifiable during the
@@ -13579,13 +13586,6 @@ async fn drive_run(
             crate::log::Level::Error,
             "run",
             "{project_id}: injection delivery worker failed: {error}"
-        );
-    }
-    if let Err(error) = ping_delivery.await {
-        crate::log!(
-            crate::log::Level::Error,
-            "run",
-            "{project_id}: liveness ping worker failed: {error}"
         );
     }
     if let Err(error) = cliff_delivery.await {
