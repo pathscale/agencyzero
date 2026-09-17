@@ -1706,6 +1706,66 @@ fn full_body(tables: &Tables, message_id: &str, head: &str) -> String {
     body
 }
 
+/// Take one injected message into the live turn, and say whether the agent
+/// text it interrupted was left mid-directive.
+///
+/// Both waits in `drive_run` have to do this: the main loop, and the nested
+/// wait that runs while an approval question stands, because "the moment the
+/// user hits enter" is the delivery contract and an approval dialog on screen
+/// is exactly when someone types "deny that and do X instead".
+///
+/// It lived twice, once per wait, and the copies had already drifted: the
+/// duplicate is what this exists to delete. Everything here is common to both,
+/// and the one genuine difference between them is the return value. The main
+/// loop reads it as `last_was_text`, because a user message is normally a
+/// block boundary and an unfinished directive is the exception - the next
+/// delta must finish that line rather than gain the paragraph break that broke
+/// the span. The approval wait folds it into `preserve_text_adjacency` and
+/// applies it at the end of the turn instead, having no `last_was_text` of its
+/// own to set.
+///
+/// Delivery itself is queued, never awaited: `deliver_injection` waits for a
+/// provider receipt, and this runs on the task that must keep draining
+/// provider events.
+struct StreamedChunk<'a> {
+    /// Agent text streamed since the last row was closed.
+    body: &'a mut String,
+    /// When that text began, for the row it will eventually become.
+    started_at: &'a mut Option<String>,
+    /// The row this chunk continued, once one has been written.
+    last_id: &'a mut Option<String>,
+    /// The owner message id directives in this turn are attributed to.
+    directive_turn_id: &'a mut String,
+}
+
+async fn accept_injection(
+    app: &AppHandle,
+    tables: &Tables,
+    context: AgentMessageContext<'_>,
+    injected: InjectedMessage,
+    chunk: StreamedChunk<'_>,
+    delivery: &tokio::sync::mpsc::UnboundedSender<InjectedMessage>,
+) -> bool {
+    // The user row was persisted and broadcast by `send_message`. Close the
+    // agent text the owner was replying to before delivering the new words.
+    let partial_directive = take_incomplete_prompt_syntax_tail(chunk.body);
+    if let Some(id) =
+        flush_continued_agent_chunk(app, tables, context, chunk.body, chunk.started_at).await
+    {
+        *chunk.last_id = Some(id);
+    }
+    if let Some(partial) = partial_directive.as_deref() {
+        *chunk.started_at = Some(now());
+        chunk.body.push_str(partial);
+    }
+    if let InjectedMessage::Owner { message_id, .. } = &injected {
+        chunk.directive_turn_id.clear();
+        chunk.directive_turn_id.push_str(message_id);
+    }
+    let _ = delivery.send(injected);
+    partial_directive.is_some()
+}
+
 /// A non-terminal slice of one agent turn, closed when the owner speaks into
 /// the live run. The final slice carries the run's real stop and usage.
 const CONTINUED_STOP: &str = "continued";
@@ -12630,34 +12690,24 @@ async fn drive_run(
                 // Injection is exposed only after a real turn event, so this is
                 // activity on an already-started turn.
                 idle_window = RUN_IDLE_TIMEOUT;
-                // A correction typed mid-turn. The user row was persisted and
-                // broadcast by `send_message`. Close the agent text the owner
-                // was replying to before delivering the new words.
-                let partial_directive = take_incomplete_prompt_syntax_tail(&mut streamed_chunk);
-                if let Some(id) = flush_continued_agent_chunk(
+                // A correction typed mid-turn. Shared with the approval wait
+                // below, which must accept one on exactly the same terms; see
+                // [`accept_injection`] for why the returned flag is read as
+                // `last_was_text` here and folded into text adjacency there.
+                last_was_text = accept_injection(
                     &app,
                     &tables,
                     message_context,
-                    &mut streamed_chunk,
-                    &mut chunk_started_at,
+                    injected,
+                    StreamedChunk {
+                        body: &mut streamed_chunk,
+                        started_at: &mut chunk_started_at,
+                        last_id: &mut last_chunk_id,
+                        directive_turn_id: &mut directive_turn_id,
+                    },
+                    &injection_delivery_tx,
                 )
-                .await
-                {
-                    last_chunk_id = Some(id);
-                }
-                if let Some(partial) = partial_directive.as_deref() {
-                    chunk_started_at = Some(now());
-                    streamed_chunk.push_str(partial);
-                }
-                if let InjectedMessage::Owner { message_id, .. } = &injected {
-                    directive_turn_id.clear();
-                    directive_turn_id.push_str(message_id);
-                }
-                let _ = injection_delivery_tx.send(injected);
-                // A user message is normally a block boundary. An unfinished
-                // directive is the exception: its next delta must complete the
-                // same line, not gain the paragraph break that broke the span.
-                last_was_text = partial_directive.is_some();
+                .await;
                 continue;
             }
         };
@@ -12850,27 +12900,25 @@ async fn drive_run(
                         }
                         injected = inject_rx.recv() => {
                             if let Some(injected) = injected {
-                                let partial_directive =
-                                    take_incomplete_prompt_syntax_tail(&mut streamed_chunk);
-                                if let Some(id) = flush_continued_agent_chunk(
+                                // The same acceptance as the main loop's, and
+                                // the same function, so the two cannot drift
+                                // apart again. This wait has no `last_was_text`
+                                // to set, so the unfinished-directive flag is
+                                // folded into the turn's text adjacency.
+                                preserve_text_adjacency |= accept_injection(
                                     &app,
                                     &tables,
                                     message_context,
-                                    &mut streamed_chunk,
-                                    &mut chunk_started_at,
-                                ).await {
-                                    last_chunk_id = Some(id);
-                                }
-                                if let Some(partial) = partial_directive.as_deref() {
-                                    chunk_started_at = Some(now());
-                                    streamed_chunk.push_str(partial);
-                                }
-                                preserve_text_adjacency |= partial_directive.is_some();
-                                if let InjectedMessage::Owner { message_id, .. } = &injected {
-                                    directive_turn_id.clear();
-                                    directive_turn_id.push_str(message_id);
-                                }
-                                let _ = injection_delivery_tx.send(injected);
+                                    injected,
+                                    StreamedChunk {
+                                        body: &mut streamed_chunk,
+                                        started_at: &mut chunk_started_at,
+                                        last_id: &mut last_chunk_id,
+                                        directive_turn_id: &mut directive_turn_id,
+                                    },
+                                    &injection_delivery_tx,
+                                )
+                                .await;
                             }
                         }
                     }
