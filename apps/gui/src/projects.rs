@@ -5418,7 +5418,7 @@ async fn clear_partial_reply(tables: &Tables, project_id: &str) {
         );
     }
     // One-time cleanup for 0.1.124-0.1.131.
-    if let Err(error) = tokio::fs::remove_file(legacy_partial_reply_path(tables, project_id)).await
+    if let Err(error) = std::fs::remove_file(legacy_partial_reply_path(tables, project_id))
         && error.kind() != std::io::ErrorKind::NotFound
     {
         crate::log!(
@@ -5672,35 +5672,50 @@ pub async fn recover_partial_replies_excluding(
 
     // Upgrade path for builds 0.1.124 through 0.1.131. These files are consumed
     // and removed; no new build writes them.
+    //
+    // Synchronous on purpose. This runs once at boot over a directory that no
+    // build since 0.1.131 writes to, so it is a handful of files read before
+    // the window exists. `tokio::fs` is a thread pool behind an async facade;
+    // paying for that indirection to read three files at startup bought an
+    // executor dependency and no concurrency, because the recovery below is
+    // sequential anyway.
     let legacy_recovery_dir = tables.data_dir.join("recovery");
-    if let Ok(mut entries) = tokio::fs::read_dir(&legacy_recovery_dir).await {
-        while let Ok(Some(entry)) = entries.next_entry().await {
-            let name = entry.file_name();
-            let name = name.to_string_lossy();
-            let Some(project_id) = name
-                .strip_prefix(PARTIAL_REPLY_FILE_PREFIX)
-                .and_then(|name| name.strip_suffix(PARTIAL_REPLY_FILE_SUFFIX))
-            else {
-                if name.starts_with(PARTIAL_REPLY_FILE_PREFIX) && name.contains(".tmp-") {
-                    let _ = tokio::fs::remove_file(entry.path()).await;
-                }
-                continue;
-            };
-            match tokio::fs::read_to_string(entry.path()).await {
-                Ok(raw) => {
-                    if recover_partial_reply(tables, project_id, raw).await {
-                        let _ = tokio::fs::remove_file(entry.path()).await;
-                    }
-                }
-                Err(error) => crate::log!(
-                    crate::log::Level::Warn,
-                    "run",
-                    "{project_id}: could not read the reply checkpoint: {error}"
-                ),
+    let legacy_entries: Vec<std::path::PathBuf> = std::fs::read_dir(&legacy_recovery_dir)
+        .map(|entries| {
+            entries
+                .filter_map(std::result::Result::ok)
+                .map(|entry| entry.path())
+                .collect()
+        })
+        .unwrap_or_default();
+    for path in legacy_entries {
+        let name = path
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        let Some(project_id) = name
+            .strip_prefix(PARTIAL_REPLY_FILE_PREFIX)
+            .and_then(|name| name.strip_suffix(PARTIAL_REPLY_FILE_SUFFIX))
+        else {
+            if name.starts_with(PARTIAL_REPLY_FILE_PREFIX) && name.contains(".tmp-") {
+                let _ = std::fs::remove_file(&path);
             }
+            continue;
+        };
+        match std::fs::read_to_string(&path) {
+            Ok(raw) => {
+                if recover_partial_reply(tables, project_id, raw).await {
+                    let _ = std::fs::remove_file(&path);
+                }
+            }
+            Err(error) => crate::log!(
+                crate::log::Level::Warn,
+                "run",
+                "{project_id}: could not read the reply checkpoint: {error}"
+            ),
         }
     }
-    let _ = tokio::fs::remove_dir(&legacy_recovery_dir).await;
+    let _ = std::fs::remove_dir(&legacy_recovery_dir);
 
     // Upgrade path for builds through 0.1.123.
     let rows = tables.kv.select_all().execute().unwrap_or_default();
@@ -6380,19 +6395,19 @@ pub enum InjectedMessage {
     /// An owner-authored follow-up whose visible transcript row may need a
     /// fresh-turn retry if interactive delivery fails.
     Owner {
-        body: String,
-        original_body: String,
-        reply_question_id: Option<String>,
-        message_id: String,
+        body: Arc<str>,
+        original_body: Arc<str>,
+        reply_question_id: Option<Arc<str>>,
+        message_id: Arc<str>,
     },
     /// Reviewer output already durable as an `author = review` message. A live
     /// failure leaves it for the ordinary next-turn snapshot and never cancels
     /// the owner's active run.
     Review {
-        body: String,
-        message_id: String,
-        reviewer: String,
-        url: String,
+        body: Arc<str>,
+        message_id: Arc<str>,
+        reviewer: Arc<str>,
+        url: Arc<str>,
     },
 }
 
@@ -6506,10 +6521,10 @@ fn queue_mid_turn_review(
     };
     inject
         .send(InjectedMessage::Review {
-            body: mid_turn_review_context(reviewer, url, exit_code, body),
-            message_id: message_id.to_string(),
-            reviewer: reviewer.to_string(),
-            url: url.to_string(),
+            body: mid_turn_review_context(reviewer, url, exit_code, body).into(),
+            message_id: message_id.into(),
+            reviewer: reviewer.into(),
+            url: url.into(),
         })
         .is_ok()
 }
@@ -9643,7 +9658,7 @@ pub async fn delete_project(
         // avoidable latency. Refuse the delete if a hung provider keeps the
         // slot: its rows remain visible and retryable instead of being removed
         // while the provider can still write to them.
-        tokio::time::timeout(
+        nagoya::timeout(
             std::time::Duration::from_secs(10),
             state.active.wait_until_released(&id),
         )
@@ -10723,10 +10738,10 @@ pub async fn send_message(
 
         if inject
             .send(InjectedMessage::Owner {
-                body: provider_body,
-                original_body: input.body.clone(),
-                reply_question_id: user_message.reply_to_question_id.clone(),
-                message_id: user_message.id.clone(),
+                body: provider_body.into(),
+                original_body: input.body.as_str().into(),
+                reply_question_id: user_message.reply_to_question_id.as_deref().map(Arc::from),
+                message_id: user_message.id.as_str().into(),
             })
             .is_err()
         {
@@ -11278,13 +11293,13 @@ async fn fetch_pull_request_diff(url: &str) -> Result<PullRequestDiff, String> {
         })
     };
 
-    tokio::time::timeout(REVIEW_DIFF_TIMEOUT, collect)
+    nagoya::timeout(REVIEW_DIFF_TIMEOUT, collect)
         .await
         .map_err(|_| "GitHub CLI timed out after 60 seconds while fetching the diff".to_string())?
 }
 
 async fn fetch_pull_request_head(url: &str) -> Result<String, String> {
-    let output = tokio::time::timeout(
+    let output = nagoya::timeout(
         REVIEW_HEAD_TIMEOUT,
         tokio::process::Command::new("gh")
             .args([
@@ -12545,7 +12560,8 @@ async fn drive_run(
                     streamed_chunk.push_str(partial);
                 }
                 if let InjectedMessage::Owner { message_id, .. } = &injected {
-                    directive_turn_id.clone_from(message_id);
+                    directive_turn_id.clear();
+                    directive_turn_id.push_str(message_id);
                 }
                 let _ = injection_delivery_tx.send(injected);
                 // A user message is normally a block boundary. An unfinished
@@ -12742,7 +12758,8 @@ async fn drive_run(
                                 }
                                 preserve_text_adjacency |= partial_directive.is_some();
                                 if let InjectedMessage::Owner { message_id, .. } = &injected {
-                                    directive_turn_id.clone_from(message_id);
+                                    directive_turn_id.clear();
+                                    directive_turn_id.push_str(message_id);
                                 }
                                 let _ = injection_delivery_tx.send(injected);
                             }
@@ -13967,7 +13984,7 @@ async fn drive_run(
                     (crate::retry::interactive_delay(attempt), opening)
                 {
                     let _ = tables.kv_put(&retry_key, attempt.to_string()).await;
-                    tokio::time::sleep(delay).await;
+                    nagoya::sleep(delay).await;
                     let body = full_body(&tables, &row.id, &row.body);
                     if app
                         .emit(
@@ -15942,9 +15959,9 @@ mod tests {
         else {
             panic!("review was queued as an owner message");
         };
-        assert_eq!(message_id, "review-message");
-        assert_eq!(reviewer, "claude");
-        assert_eq!(url, "https://github.com/pathscale/WorkTable/pull/61");
+        assert_eq!(&*message_id, "review-message");
+        assert_eq!(&*reviewer, "claude");
+        assert_eq!(&*url, "https://github.com/pathscale/WorkTable/pull/61");
         assert!(body.contains("Mid-turn code review from claude"));
         assert!(body.contains(markdown));
         assert!(!body.contains("\"body\":"), "Markdown is not JSON encoded");
