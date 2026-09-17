@@ -12133,7 +12133,13 @@ async fn drive_run(
      * manufacture the deadlock instead. The loop asks for a ping and carries
      * on draining; this worker waits.
      */
-    let (ping_request_tx, mut ping_request_rx) = tokio::sync::mpsc::unbounded_channel::<()>();
+    // Bounded at the number of pings that can be outstanding at once, which
+    // `should_ping_again` already enforces: `ping_outstanding` plus
+    // `MAX_UNANSWERED_LIVENESS_PINGS` caps it at four. The queue was
+    // unbounded, which said "any depth is fine" about a thing that is
+    // arithmetically capped, and hid the cap from anyone reading this line.
+    let (ping_request_tx, mut ping_request_rx) =
+        tokio::sync::mpsc::channel::<()>(MAX_UNANSWERED_LIVENESS_PINGS as usize);
     // One bit, set once, read by the loop that then stops. A queue allocated a
     // node and woke a task to carry it.
     let ping_failed = crate::cancel::Latch::new();
@@ -12153,7 +12159,11 @@ async fn drive_run(
             }
         }
     });
-    let (cliff_steer_tx, mut cliff_steer_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
+    // One slot per steer that can fire, and each is behind its own one-shot
+    // flag: the 180k checkpoint, the 190k stop-now, and the post-compact
+    // resume. Unbounded implied a stream; this is three messages at most for
+    // the life of a turn.
+    let (cliff_steer_tx, mut cliff_steer_rx) = tokio::sync::mpsc::channel::<String>(3);
     let cliff_control = run.control();
     let cliff_turn_id = turn_id.clone();
     let cliff_delivery = tokio::spawn(async move {
@@ -12417,9 +12427,13 @@ async fn drive_run(
                         RUN_IDLE_TIMEOUT.as_secs()
                     );
                     // Handed to the ping worker rather than awaited here: this
-                    // task must keep draining `run.recv`. A send that cannot be
-                    // queued means the worker is gone, which is teardown.
-                    if ping_request_tx.send(()).is_ok() {
+                    // task must keep draining `run.recv`. `try_send` rather
+                    // than `send`: the bounded sender's `send` is a future that
+                    // parks when the queue is full, and awaiting it here is the
+                    // stall this worker exists to avoid. A refusal means the
+                    // worker is gone, or that four pings are already unanswered
+                    // and a fifth would tell us nothing new.
+                    if ping_request_tx.try_send(()).is_ok() {
                         ping_outstanding = true;
                         unanswered_pings += 1;
                         // Visible in the run's I/O trail, so a stop that follows
@@ -13224,7 +13238,10 @@ async fn drive_run(
                     {
                         emit_message_receipt(&app, &project_id, &message_id, "sent");
                     }
-                    let _ = cliff_steer_tx.send(body);
+                    // `try_send` for the same reason the ping does: this runs on the
+                    // loop that must keep draining, and each steer is behind a
+                    // one-shot flag so a full queue means it was already sent.
+                    let _ = cliff_steer_tx.try_send(body);
                 }
             }
             Event::Usage(usage) => {
@@ -13319,7 +13336,10 @@ async fn drive_run(
                         {
                             emit_message_receipt(&app, &project_id, &message_id, "sent");
                         }
-                        let _ = cliff_steer_tx.send(body);
+                        // `try_send` for the same reason the ping does: this runs on the
+                        // loop that must keep draining, and each steer is behind a
+                        // one-shot flag so a full queue means it was already sent.
+                        let _ = cliff_steer_tx.try_send(body);
                     }
                 }
             }
