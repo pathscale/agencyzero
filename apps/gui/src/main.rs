@@ -3,6 +3,7 @@
 mod agent_proxy;
 mod agents;
 mod angel;
+mod cancel;
 mod chat_import;
 mod db;
 mod directives;
