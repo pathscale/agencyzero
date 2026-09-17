@@ -144,6 +144,54 @@ restart angel re-executing the binary after a rebuild (see
 `$TMPDIR/tauri-blitz-agent/<instance>.json`; ps-qa validates its PID during
 discovery and can pin a known instance with `--descriptor`.
 
+### The descriptor is a socket you can talk to, not just a file ps-qa reads
+
+This is the capability agents keep missing, and missing it costs hours. The
+`address` field in that descriptor is a live unix socket speaking **MCP over a
+length-prefixed frame**, and anything ps-qa can do you can do directly, plus
+whatever ps-qa has no subcommand for. Read the tree, click a control, capture a
+node's pixels, quit the app - without a ps-qa release in between.
+
+Do not infer what the running app is doing by reading source and guessing. Ask
+it.
+
+Framing, which is the only part that is not obvious: 4-byte big-endian length,
+then a **1-byte tag** (`0x00`), then the JSON. Newline-delimited JSON gets you
+`frame size too big`, which reads like a protocol mismatch and is really a
+missing header.
+
+```python
+import socket, json, struct
+sock = json.load(open(descriptor_path))["address"].removeprefix("unix://")
+s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM); s.connect(sock)
+def send(o):
+    b = json.dumps(o).encode(); s.sendall(struct.pack(">I", len(b) + 1) + b"\x00" + b)
+def recv():
+    h = b""
+    while len(h) < 4: h += s.recv(4 - len(h))
+    n = struct.unpack(">I", h)[0]; buf = b""
+    while len(buf) < n: buf += s.recv(n - len(buf))
+    return json.loads(buf[1:])          # drop the tag byte
+
+send({"jsonrpc": "2.0", "id": 1, "method": "initialize",
+      "params": {"protocolVersion": 1, "clientInfo": {"name": "probe", "version": "1"}}})
+recv()
+send({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
+print(recv())                            # blitz.agent.control, blitz.diagnostics
+```
+
+`blitz.agent.control` takes one of `act, click, focus, hover, input, inspect,
+key, pointer, wheel, quit, relaunch`. `blitz.diagnostics` captures pixels and
+metrics. Read each tool's `inputSchema` from `tools/list` rather than guessing
+argument names; the schemas carry the reasoning, including why `focus` exists
+separately from `click` (focusing a delete button by clicking it performs the
+action before the key under test is delivered).
+
+**There is no JS eval.** The socket exposes the semantic tree and real input,
+not the app's internals. A question like "what did this Tauri command return"
+is answered by the app log or a unit test, not here. For `execute`/element
+queries you need the separate debug driver (`TAURI_BLITZ_DRIVER`, below).
+
 For a disposable QA or rescue process, pass `--blitz-control`. Running the
 binary directly is also useful because it is the only way to see
 `log-phase-times` output, which goes to stdout and is discarded by a Finder
