@@ -6428,7 +6428,7 @@ pub enum InjectedMessage {
 #[derive(Default)]
 pub struct ActiveRuns {
     runs: std::sync::Mutex<std::collections::HashMap<String, ActiveRun>>,
-    released: tokio::sync::Notify,
+    released: nagoya::sync::Notify,
 }
 
 impl ActiveRuns {
@@ -6462,9 +6462,12 @@ impl ActiveRuns {
 
     pub async fn wait_until_idle(&self) -> Result<(), String> {
         loop {
+            // Built before the state is read, and that order is the whole
+            // guarantee: `notified()` snapshots the broadcast generation, so a
+            // release landing between the check below and the await is seen as
+            // a generation that moved rather than a wake that arrived with
+            // nobody parked. Tokio needed `enable()` to buy the same thing.
             let released = self.released.notified();
-            tokio::pin!(released);
-            released.as_mut().enable();
             if self
                 .runs
                 .lock()
@@ -6479,9 +6482,8 @@ impl ActiveRuns {
 
     pub async fn wait_until_released(&self, project_id: &str) -> Result<(), String> {
         loop {
+            // Same order as [`Self::wait_until_idle`], for the same reason.
             let released = self.released.notified();
-            tokio::pin!(released);
-            released.as_mut().enable();
             if !self
                 .runs
                 .lock()
@@ -12809,29 +12811,18 @@ async fn drive_run(
                  * worker; the deadline is absolute so servicing a message
                  * cannot extend the timeout.
                  */
-                let deadline = tokio::time::Instant::now() + APPROVAL_TIMEOUT;
+                // Nagoya's clock, read once: `sleep_until` takes the instant
+                // as nanoseconds on it, so each pass of the loop arms a fresh
+                // timer on the same point rather than restarting a window.
+                let deadline = nagoya::now_ns()
+                    .saturating_add(u64::try_from(APPROVAL_TIMEOUT.as_nanos()).unwrap_or(u64::MAX));
                 let mut answer_rx = answer_rx;
                 let answer = loop {
                     tokio::select! {
                         answer = &mut answer_rx => break answer.ok(),
-                        () = tokio::time::sleep_until(deadline) => break None,
+                        () = nagoya::sleep_until(deadline) => break None,
                         // Stop can arrive while the question stands; the pending
                         // tool call is denied and the loop tail tears down.
-                        /*
-                         * One arm for every reason this wait ends early.
-                         *
-                         * This was two arms, `cancel` and `injection_failure`,
-                         * and it silently omitted `ping_failed`: a liveness
-                         * ping that could not be delivered went unobserved
-                         * until the approval resolved, because the outer loop
-                         * that watches for it is not running while this one
-                         * is. Duplicating a poll set is how that happens, and
-                         * adding a third arm here would only postpone the next
-                         * divergence.
-                         *
-                         * The facts share a wake, so this parks once and reads
-                         * the flags to learn which fired.
-                         */
                         /*
                          * One arm for every reason this wait ends early.
                          *
