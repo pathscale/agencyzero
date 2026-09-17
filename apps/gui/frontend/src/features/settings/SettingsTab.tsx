@@ -66,6 +66,7 @@ import type {
   TaskManagerSettings,
   ThemeSettings,
 } from "~/types";
+import { sectionIsVisible } from "./searchVisibility";
 import { ThemePicker } from "./ThemePicker";
 
 const STATE_TONE: Record<AgentState, string> = {
@@ -3360,16 +3361,17 @@ function Section(props: {
       if (matched) setSearchRetained(true);
     },
   );
-  // `indexedCorpus() === undefined` under a live query means this section is
-  // still learning its words for the current language, so `hits()` is empty
-  // because nothing has reported yet, not because nothing matches. Hiding on
-  // that emptiness is what made a section vanish mid-reindex; it un-hides on
-  // its own an instant later when the rows report.
+  // The predicate lives in `searchVisibility.ts` so it can be tested: this
+  // component cannot be mounted under vitest (see `vitest.config.ts`), and the
+  // re-index case it exists for is the one that broke.
   const visible = () =>
-    settingsQuery().trim() === "" ||
-    titleMatches() ||
-    hits().size > 0 ||
-    (mounted() && indexedCorpus() === undefined);
+    sectionIsVisible({
+      query: settingsQuery().trim(),
+      titleMatches: titleMatches(),
+      hits: hits().size,
+      mounted: mounted(),
+      indexedCorpus: indexedCorpus(),
+    });
   const report = (label: string, hit: boolean): void => {
     setHits((prev) => {
       const next = new Set(prev);
