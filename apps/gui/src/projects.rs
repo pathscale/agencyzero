@@ -6343,7 +6343,12 @@ pub struct ActiveRun {
     /// Identifies this reservation, so an older driver finishing late cannot
     /// remove a newer run that has already claimed the same project slot.
     pub reservation_id: String,
-    pub cancel: tokio::sync::watch::Sender<bool>,
+    /// The run's stop switch.
+    ///
+    /// A `watch::Sender<bool>` before, which split one fact across a sender
+    /// and its receivers and made "has it stopped" a channel question. This is
+    /// the fact itself: any holder can throw it, and every waiter is woken.
+    pub cancel: crate::cancel::Cancel,
     /// Provider owning the live session. A tab may switch providers while it
     /// runs, but its next message must not be injected into the old provider.
     pub agent: Agent,
@@ -7778,7 +7783,7 @@ pub async fn cancel_run(project_id: String, state: State<'_, AppState>) -> Resul
     if canceled_proxy_runs == 0
         && let Some((_, cancel)) = &registered
     {
-        let _ = cancel.send(true);
+        cancel.cancel();
     }
 
     if let Some((reservation_id, _)) = &registered {
@@ -8468,7 +8473,7 @@ pub async fn compact_project_with(
 
     // Held for the rest of the body: the slot is released when this drops,
     // however the compaction ends.
-    let (_reservation, mut cancel) = {
+    let (_reservation, cancel) = {
         let mut active = state
             .active
             .lock()
@@ -8476,7 +8481,8 @@ pub async fn compact_project_with(
         if active.contains_key(&project_id) {
             return Err(BUSY_WITH_RUN_ALREADY.into());
         }
-        let (cancel_tx, cancel_rx) = tokio::sync::watch::channel(false);
+        let cancel_tx = crate::cancel::Cancel::new();
+        let cancel_rx = cancel_tx.clone();
         let reservation_id = id("reservation");
         active.insert(
             project_id.clone(),
@@ -8768,7 +8774,7 @@ pub async fn compact_project_with(
     let mut cancelled = false;
     loop {
         let event = tokio::select! {
-            _ = cancel.changed() => {
+            () = cancel.cancelled() => {
                 crate::log!(crate::log::Level::Info, "run", "{project_id}: stop observed while streaming a one-shot run");
                 cancelled = true;
                 break;
@@ -9033,7 +9039,7 @@ pub async fn reset_project_session(
                 );
             }
             active.get(&project_id).map(|run| {
-                let _ = run.cancel.send(true);
+                run.cancel.cancel();
                 (run.reservation_id.clone(), run.agent)
             })
         } else {
@@ -9617,7 +9623,7 @@ pub async fn delete_project(
             active
                 .get(&id)
                 .map(|run| {
-                    let _ = run.cancel.send(true);
+                    run.cancel.cancel();
                 })
                 .is_some()
         })
@@ -10596,7 +10602,7 @@ pub async fn send_message(
         Inject(tokio::sync::mpsc::UnboundedSender<InjectedMessage>),
         Start {
             reservation: Box<RunReservation>,
-            cancel: tokio::sync::watch::Receiver<bool>,
+            cancel: crate::cancel::Cancel,
             inject_rx: tokio::sync::mpsc::UnboundedReceiver<InjectedMessage>,
             ready_for_followup: std::sync::Arc<std::sync::atomic::AtomicBool>,
         },
@@ -10633,7 +10639,7 @@ pub async fn send_message(
             // invocation that resumes the same session with the wider sandbox
             // as soon as the slot clears.
             if agent == Agent::Codex && !same_roots(&running.workspace_roots, &workspace_roots) {
-                let _ = running.cancel.send(true);
+                running.cancel.cancel();
                 crate::log!(
                     crate::log::Level::Info,
                     "run",
@@ -10656,7 +10662,8 @@ pub async fn send_message(
             };
             SendRoute::Inject(inject)
         } else {
-            let (cancel_tx, cancel_rx) = tokio::sync::watch::channel(false);
+            let cancel_tx = crate::cancel::Cancel::new();
+            let cancel_rx = cancel_tx.clone();
             let (inject_tx, inject_rx) = tokio::sync::mpsc::unbounded_channel();
             let ready_for_followup = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
             let reservation_id = id("reservation");
@@ -10939,7 +10946,7 @@ pub async fn sync_project(
                 "run",
                 "{project_id}: releasing a run the proxy no longer has; the project was showing a run nothing was executing"
             );
-            let _ = run.cancel.send(true);
+            run.cancel.cancel();
             emit_run_stopped(&app, &project_id, run.agent, "", "", "orphaned", None);
         }
     }
@@ -11061,7 +11068,8 @@ pub async fn sync_project(
             if active.contains_key(&project_id) {
                 continue;
             }
-            let (cancel_tx, cancel_rx) = tokio::sync::watch::channel(false);
+            let cancel_tx = crate::cancel::Cancel::new();
+            let cancel_rx = cancel_tx.clone();
             let (inject_tx, inject_rx) = tokio::sync::mpsc::unbounded_channel();
             let ready = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(
                 recovered_run_ready_for_followup(&snapshot.state),
@@ -11600,7 +11608,7 @@ async fn drive_run(
     // Held for the whole run and dropped on any exit path, so the project's
     // run slot frees exactly when no agent can still be alive.
     _reservation: RunReservation,
-    mut cancel: tokio::sync::watch::Receiver<bool>,
+    cancel: crate::cancel::Cancel,
     // Messages typed while this run is live, to deliver into the open turn.
     mut inject_rx: tokio::sync::mpsc::UnboundedReceiver<InjectedMessage>,
     ready_for_followup: std::sync::Arc<std::sync::atomic::AtomicBool>,
@@ -12103,8 +12111,11 @@ async fn drive_run(
      */
     let (injection_delivery_tx, mut injection_delivery_rx) =
         tokio::sync::mpsc::unbounded_channel::<InjectedMessage>();
-    let (injection_failure_tx, mut injection_failure_rx) =
-        tokio::sync::mpsc::unbounded_channel::<()>();
+    // A latch, not a queue. This is awaited from two different loops below,
+    // and `recv()` consumes: whichever polled first took the one `()` and the
+    // other waited forever for a failure that had already happened.
+    let injection_failure = crate::cancel::Latch::new();
+    let injection_failure_delivery = injection_failure.clone();
     let injection_app = app.clone();
     let injection_tables = tables.clone();
     let injection_io = io.clone();
@@ -12123,7 +12134,10 @@ async fn drive_run(
      * on draining; this worker waits.
      */
     let (ping_request_tx, mut ping_request_rx) = tokio::sync::mpsc::unbounded_channel::<()>();
-    let (ping_failed_tx, mut ping_failed_rx) = tokio::sync::mpsc::unbounded_channel::<()>();
+    // One bit, set once, read by the loop that then stops. A queue allocated a
+    // node and woke a task to carry it.
+    let ping_failed = crate::cancel::Latch::new();
+    let ping_failed_delivery = ping_failed.clone();
     let ping_control = run.control();
     let ping_turn_id = turn_id.clone();
     let ping_delivery = tokio::spawn(async move {
@@ -12135,7 +12149,7 @@ async fn drive_run(
                 .await
                 .is_err()
             {
-                let _ = ping_failed_tx.send(());
+                ping_failed_delivery.set();
             }
         }
     });
@@ -12167,7 +12181,7 @@ async fn drive_run(
             )
             .await;
             if !delivered {
-                let _ = injection_failure_tx.send(());
+                injection_failure_delivery.set();
             }
         }
     });
@@ -12307,12 +12321,12 @@ async fn drive_run(
              * `Ok` is the signal; `Err` means the sender vanished from the
              * registry, which only teardown paths do — both read as "stop".
              */
-            _ = cancel.changed() => {
+            () = cancel.cancelled() => {
                 crate::log!(crate::log::Level::Info, "run", "{project_id}: stop observed in the main event loop");
                 cancelled = true;
                 break;
             }
-            Some(()) = injection_failure_rx.recv() => {
+            () = injection_failure.waited() => {
                 // The visible message is already queued for retry. Free the
                 // one-run-per-project slot so that retry can resume the same
                 // session instead of waiting behind a dead app-server forever.
@@ -12326,7 +12340,7 @@ async fn drive_run(
              * decision in one place: the next expiry finds no outstanding ping
              * and takes the ordinary wedged path.
              */
-            Some(()) = ping_failed_rx.recv() => {
+            () = ping_failed.waited() => {
                 crate::log!(
                     crate::log::Level::Warn,
                     "run",
@@ -12679,12 +12693,12 @@ async fn drive_run(
                         () = tokio::time::sleep_until(deadline) => break None,
                         // Stop can arrive while the question stands; the pending
                         // tool call is denied and the loop tail tears down.
-                        _ = cancel.changed() => {
+                        () = cancel.cancelled() => {
                             crate::log!(crate::log::Level::Info, "run", "{project_id}: stop observed while waiting on an approval");
                             cancelled = true;
                             break None;
                         }
-                        Some(()) = injection_failure_rx.recv() => {
+                        () = injection_failure.waited() => {
                             cancelled = true;
                             stalled_injection = true;
                             break None;
@@ -15721,7 +15735,7 @@ mod tests {
 
     #[test]
     fn an_old_driver_cannot_release_a_newer_run_slot() {
-        let (cancel, _) = tokio::sync::watch::channel(false);
+        let cancel = crate::cancel::Cancel::new();
         let active = std::sync::Arc::new(ActiveRuns::default());
         active.lock().expect("registry locks").insert(
             "project-race".to_string(),
@@ -15753,7 +15767,7 @@ mod tests {
 
     #[tokio::test]
     async fn run_registry_wakes_when_the_matching_reservation_releases() {
-        let (cancel, _) = tokio::sync::watch::channel(false);
+        let cancel = crate::cancel::Cancel::new();
         let active = std::sync::Arc::new(ActiveRuns::default());
         active.lock().expect("registry locks").insert(
             "project-idle".into(),
@@ -15793,7 +15807,7 @@ mod tests {
             ("project-delete", "reservation-delete"),
             ("project-stays", "reservation-stays"),
         ] {
-            let (cancel, _) = tokio::sync::watch::channel(false);
+            let cancel = crate::cancel::Cancel::new();
             active.lock().expect("registry locks").insert(
                 project_id.into(),
                 ActiveRun {
@@ -15836,7 +15850,7 @@ mod tests {
 
     #[test]
     fn optional_side_channel_delivery_waits_for_the_first_turn_event() {
-        let (cancel, _) = tokio::sync::watch::channel(false);
+        let cancel = crate::cancel::Cancel::new();
         let ready = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
         let run = ActiveRun {
             reservation_id: "reservation-ready".into(),
@@ -15865,7 +15879,7 @@ mod tests {
 
     #[test]
     fn completed_review_queues_plain_markdown_for_the_active_turn() {
-        let (cancel, _) = tokio::sync::watch::channel(false);
+        let cancel = crate::cancel::Cancel::new();
         let ready = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
         let (inject, mut injected) = tokio::sync::mpsc::unbounded_channel();
         let active = ActiveRuns::default();
