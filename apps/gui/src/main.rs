@@ -19,6 +19,7 @@ mod qa_profile;
 mod questions;
 mod quota;
 mod retry;
+mod runtime;
 mod settings;
 mod store_backup;
 mod study;
@@ -308,6 +309,9 @@ const IMPLEMENTED: &[&str] = &[
 /// What the GUI carries for the life of the process.
 pub(crate) struct AppState {
     tables: Arc<Tables>,
+    /// The threads az's own synchronous work runs on, owned rather than
+    /// borrowed from tokio's process-wide blocking pool. See [`runtime::Pool`].
+    pub(crate) pool: runtime::Pool,
     /// Persistent provider runtime. The GUI is only a client; live agent
     /// processes survive this application's restart inside AgencyProxy.
     proxy: Arc<agent_proxy::AgencyProxy>,
@@ -612,6 +616,16 @@ impl AppState {
         if result.is_ok() {
             self.exit_drain_succeeded
                 .store(true, std::sync::atomic::Ordering::Release);
+            // Only once the store is safely down, because only then is the
+            // process definitely going away. A failed drain leaves the app
+            // running with quit blocked, and a pool stopped there would take
+            // every store read in the window down with it, turning a state the
+            // owner can still look at into a dead one.
+            //
+            // `stop` is graceful: work already queued runs to completion before
+            // a worker exits. Nothing is queued by this point, because the
+            // drain is reached after the window has stopped asking.
+            self.pool.stop();
         }
         result
     }
@@ -3016,6 +3030,7 @@ fn main() {
             let restart_resume = take_restart_resume(&config_dir);
             app.manage(AppState {
                 tables: Arc::new(tables),
+                pool: runtime::Pool::new(),
                 proxy,
                 running: Arc::default(),
                 io: Arc::default(),

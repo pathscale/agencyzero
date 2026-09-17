@@ -881,7 +881,7 @@ async fn delete_imported_usage(tables: &Tables, message_id: &str) {
 ///
 /// Called before Analytics is assembled. Rows already reconstructed are
 /// primary-key hits and a durable marker makes later refreshes constant-time.
-pub async fn backfill_imported_usage(tables: &Tables) -> usize {
+pub async fn backfill_imported_usage(tables: &Tables, pool: &crate::runtime::Pool) -> usize {
     const MARKER: &str = "analytics-import-backfill:v1";
     if tables.kv_get(MARKER).as_deref() == Some("complete") {
         return 0;
@@ -931,9 +931,9 @@ pub async fn backfill_imported_usage(tables: &Tables) -> usize {
         stored.sort_by(|left, right| left.created_at.cmp(&right.created_at));
         let source = source.to_string();
         let session_id = session_id.to_string();
-        let loaded =
-            tokio::task::spawn_blocking(move || crate::chat_import::load(&source, &session_id))
-                .await;
+        let loaded = pool
+            .run(move || crate::chat_import::load(&source, &session_id))
+            .await;
         let chat = match loaded {
             Ok(Ok(chat)) => chat,
             Ok(Err(error)) => {
@@ -2128,9 +2128,10 @@ pub async fn list_items(
     state: State<'_, AppState>,
 ) -> Result<Vec<ProjectItemDto>, String> {
     let tables = std::sync::Arc::clone(&state.tables);
-    tokio::task::spawn_blocking(move || list_item_rows(&tables, project_id))
+    state
+        .pool
+        .run(move || list_item_rows(&tables, project_id))
         .await
-        .map_err(|error| error.to_string())
 }
 
 /// The read itself, off both the window thread and the async workers.
@@ -2142,9 +2143,10 @@ pub async fn list_items(
 /// store read there stops it queueing behind other reads and starts it queueing
 /// behind those.
 ///
-/// `spawn_blocking` is a tokio task on the dedicated blocking pool, which is
-/// neither the window thread nor an async worker, so a read waits on nothing it
-/// has no reason to wait on.
+/// So it runs on [`crate::runtime::Pool`], which is neither the window thread
+/// nor an async worker, and a read waits on nothing it has no reason to wait
+/// on. That was `tokio::task::spawn_blocking` first, which got the same result
+/// on a pool az neither sizes nor stops; see the module for why az owns one.
 fn list_item_rows(tables: &Tables, project_id: String) -> Vec<ProjectItemDto> {
     let mut rows: Vec<ProjectItemDto> = tables
         .project_item
@@ -3057,9 +3059,10 @@ pub async fn list_messages(
     state: State<'_, AppState>,
 ) -> Result<MessagePage, String> {
     let tables = std::sync::Arc::clone(&state.tables);
-    tokio::task::spawn_blocking(move || message_page(&tables, project_id, limit))
+    state
+        .pool
+        .run(move || message_page(&tables, project_id, limit))
         .await
-        .map_err(|error| error.to_string())
 }
 
 /// See [`list_item_rows`] for why this is a blocking-pool task and not an
@@ -6597,15 +6600,16 @@ pub async fn list_running_tasks(
     state: State<'_, AppState>,
 ) -> Result<Vec<RunningTaskDto>, String> {
     let running = std::sync::Arc::clone(&state.running);
-    // See [`list_item_rows`]: a tokio blocking task, not an async worker.
-    tokio::task::spawn_blocking(move || {
-        running
-            .lock()
-            .map(|tasks| tasks.get(&project_id).cloned().unwrap_or_default())
-            .unwrap_or_default()
-    })
-    .await
-    .map_err(|error| error.to_string())
+    // See [`list_item_rows`]: az's own pool, not an async worker.
+    state
+        .pool
+        .run(move || {
+            running
+                .lock()
+                .map(|tasks| tasks.get(&project_id).cloned().unwrap_or_default())
+                .unwrap_or_default()
+        })
+        .await
 }
 
 /// A page of the task log, plus the total the page came out of.
@@ -7213,7 +7217,7 @@ pub async fn get_usage_analytics(state: State<'_, AppState>) -> Result<UsageAnal
     // before the matching ledger rows do, producing a trustworthy-looking
     // partial report from an import that is still in flight.
     let _import_guard = state.chat_imports.lock().await;
-    let reconstructed = backfill_imported_usage(&state.tables).await;
+    let reconstructed = backfill_imported_usage(&state.tables, &state.pool).await;
     if reconstructed > 0 {
         crate::log!(
             crate::log::Level::Info,
@@ -10092,7 +10096,9 @@ pub async fn discover_chat_imports(
 ) -> Result<Vec<crate::chat_import::SourceStatus>, String> {
     let claude = owned_provider_sessions(&state.tables, Agent::Claude);
     let codex = owned_provider_sessions(&state.tables, Agent::Codex);
-    let mut sources = tokio::task::spawn_blocking(crate::chat_import::discover)
+    let mut sources = state
+        .pool
+        .run(crate::chat_import::discover)
         .await
         .map_err(|error| format!("chat discovery stopped unexpectedly: {error}"))??;
     exclude_owned_imports(&mut sources, &claude, &codex);
@@ -10187,11 +10193,11 @@ pub async fn import_chat_session(
 
     let parse_source = source.clone();
     let parse_session = session_id.clone();
-    let chat = tokio::task::spawn_blocking(move || {
-        crate::chat_import::load(&parse_source, &parse_session)
-    })
-    .await
-    .map_err(|error| format!("chat import stopped unexpectedly: {error}"))??;
+    let chat = state
+        .pool
+        .run(move || crate::chat_import::load(&parse_source, &parse_session))
+        .await
+        .map_err(|error| format!("chat import stopped unexpectedly: {error}"))??;
     if chat.messages.is_empty() {
         return Err("the selected session contains no importable user or agent messages".into());
     }
@@ -16441,8 +16447,10 @@ mod tests {
             .await
             .expect("provider session persists");
 
-        assert_eq!(backfill_imported_usage(&tables).await, 1);
-        assert_eq!(backfill_imported_usage(&tables).await, 0);
+        let pool = crate::runtime::Pool::new();
+        assert_eq!(backfill_imported_usage(&tables, &pool).await, 1);
+        assert_eq!(backfill_imported_usage(&tables, &pool).await, 0);
+        pool.stop();
 
         let ledger = tables
             .usage_ledger

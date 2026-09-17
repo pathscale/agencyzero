@@ -8,6 +8,13 @@
         group: "agent-io",
         what: "the agent I/O viewport expands without remounting the panel",
         open: Some("theta theta north indi"),
+        // The section is collapsed on a fresh profile, and its inner controls
+        // do not exist until it is opened. `reveal_before_capture` only
+        // scrolls, so without this the check looks for a button that is not
+        // in the tree yet. `prepare_unless` keeps it idempotent: already
+        // expanded, and there is nothing to click.
+        prepare: Some("Expand Agent I/O"),
+        prepare_unless: Some("Collapse Agent I/O"),
         reveal_before_capture: Some("Agent I/O"),
         hover: None,
         click: Some("button:Agent I/O: Expand"),
@@ -19,6 +26,13 @@
         group: "agent-io",
         what: "the expanded agent I/O viewport returns to its compact height",
         open: Some("theta theta north indi"),
+        // The section is collapsed on a fresh profile, and its inner controls
+        // do not exist until it is opened. `reveal_before_capture` only
+        // scrolls, so without this the check looks for a button that is not
+        // in the tree yet. `prepare_unless` keeps it idempotent: already
+        // expanded, and there is nothing to click.
+        prepare: Some("Expand Agent I/O"),
+        prepare_unless: Some("Collapse Agent I/O"),
         reveal_before_capture: Some("Agent I/O"),
         hover: None,
         click: Some("button:Agent I/O: Shrink"),
@@ -30,6 +44,13 @@
         group: "agent-io",
         what: "copying every agent I/O entry reports clipboard success",
         open: Some("theta theta north indi"),
+        // The section is collapsed on a fresh profile, and its inner controls
+        // do not exist until it is opened. `reveal_before_capture` only
+        // scrolls, so without this the check looks for a button that is not
+        // in the tree yet. `prepare_unless` keeps it idempotent: already
+        // expanded, and there is nothing to click.
+        prepare: Some("Expand Agent I/O"),
+        prepare_unless: Some("Collapse Agent I/O"),
         reveal_before_capture: Some("Agent I/O"),
         hover: None,
         click: Some("button:Copy all"),
