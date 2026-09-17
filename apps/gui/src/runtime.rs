@@ -1,59 +1,71 @@
-//! The threads az's own synchronous work runs on.
+//! The threads az's own detached work runs on.
 //!
-//! # Why az owns a pool at all
+//! # What this is not for
 //!
-//! Several reads here are cheap and synchronous, and every one of them was
-//! written as `tokio::task::spawn_blocking` for a measured reason recorded at
-//! [`crate::projects::list_item_rows`]: running them as a plain `async fn` put
-//! them on Tauri's async workers, where the slow network commands already live,
-//! and `list_items` went from 10.8ms to 52.5ms because a store read started
-//! queueing behind a quota call that has been seen to take five seconds.
+//! It is not for a read whose answer a caller needs. Five commands used to
+//! hand a synchronous store read to this pool and await the result, and that
+//! await was a defect rather than a cost: the caller is a `#[tauri::command]`
+//! parked on Tauri's tokio executor while the work finishes on a nagoya
+//! worker, so the waker is registered with one executor and woken from the
+//! other. A wake lost in that handoff is not a slow command, it is a command
+//! that never returns, and the webview promise behind it stays pending for the
+//! life of the window. `discover_chat_imports` was dispatched sixteen times in
+//! one session and answered seven, the last eight wedged, which left Settings
+//! showing "No sessions discovered" while discovery itself worked.
 //!
-//! `spawn_blocking` fixed that by moving the work somewhere else. What it did
-//! not fix is *whose* somewhere else. Tokio's blocking pool is process-wide and
-//! implicit: az does not size it, does not name its threads, cannot tell its
-//! work apart from a dependency's on a stack trace, and has nothing to shut
-//! down at exit. It is the ambient runtime in another costume, and finding it
-//! by calling a free function is precisely the shape this port is removing.
+//! Those five are plain synchronous `#[tauri::command]` functions now. Tauri
+//! runs those on the invoke thread rather than the async runtime, which is
+//! what they wanted in the first place: the measurement at
+//! [`crate::projects::list_item_rows`] is about staying off the async workers,
+//! where `list_quota` averages over a second, and a synchronous command is
+//! never on them. No executor between the caller and the answer means no
+//! handoff to lose.
 //!
-//! So az owns one. The work is the same work; the difference is that the pool
-//! is a field on [`crate::AppState`], sized here, named here, and stopped on
-//! the same drain every exit path already shares.
+//! # What it is for
 //!
-//! # Why not `nagoya::runtime::background()`
+//! Work nobody waits for. The run loop's liveness ping and its cliff steers
+//! are the cases: each has to happen somewhere other than the task draining
+//! provider events, because `control.send` waits for a provider that
+//! acknowledges only after emitting a burst of events, and none of them has an
+//! answer the loop reads. [`Pool::spawn`] takes those, and it returns nothing
+//! precisely so that no caller can reintroduce the await this module exists
+//! without.
 //!
-//! Nagoya ships a shared pool started on first use. It is honest about being
-//! the same shape as tokio's global and about why it exists: so that five
-//! library crates in one process do not start five pools. That reasoning is
-//! about *libraries*. az is the binary. It is the one component that knows how
-//! many threads the machine should give this app and when the app is exiting,
-//! and a binary reaching for the convenience global gives away both.
+//! # Why az owns a pool rather than calling `nagoya::runtime::background()`
+//!
+//! Nagoya ships a shared pool started on first use, and it is honest about
+//! being the same shape as tokio's global: it exists so five library crates in
+//! one process do not start five pools. That reasoning is about *libraries*.
+//! az is the binary. It is the one component that knows how many threads the
+//! machine should give this app and when the app is exiting, and a binary
+//! reaching for the convenience global gives away both.
 //!
 //! # Why `Drop` is not the shutdown
 //!
 //! Nagoya's `Runtime` detaches its threads when dropped, deliberately: the
 //! tasks on it are the ones nobody is watching, and tearing them down under a
 //! running sweep is worse than letting them finish. That makes drop the wrong
-//! shutdown here and an explicit [`Pool::stop`] the right one, called from
-//! the persistence drain, after the last read that could still be in flight.
+//! shutdown here and an explicit [`Pool::stop`] the right one, called from the
+//! persistence drain, after the last send that could still be in flight.
 
 use std::future::Future;
 
 use nagoya::runtime::Runtime;
 
-/// A pool for work that finishes rather than work that waits.
+/// A pool for work whose answer nobody is waiting for.
 ///
-/// Everything submitted here is a synchronous unit with no suspension point: a
-/// WorkTable select, a transcript parse, a mutex read. It occupies one worker
-/// start to finish and hands back an answer.
+/// Everything submitted here is detached: a liveness ping, a cliff steer. It
+/// is sent from the task that must keep draining provider events, and the
+/// sender carries its own failure back rather than returning one, because
+/// there is no handle to return it through. See the module for why the
+/// answer-returning half of this was a defect and is gone.
 ///
 /// That is what bounds the size. A pool for futures wants a thread per core; a
 /// pool that also absorbs blocking wants tokio's 512, because it cannot know
-/// how long a unit holds its thread. This one can: the long unit is a chat
-/// transcript scan, which happens once per Import click, and the short unit is
-/// a store read measured in milliseconds. Concurrency here is single digits,
-/// so a worker per core leaves a read able to start immediately even while a
-/// scan is running, without dedicating hundreds of stacks to proving it.
+/// how long a unit holds its thread. This one can: what it holds is a provider
+/// send waiting on an acknowledgement, and there are a handful per turn, so a
+/// worker per core leaves one able to start immediately while another waits,
+/// without dedicating hundreds of stacks to proving it.
 pub struct Pool {
     runtime: Runtime,
 }
@@ -83,23 +95,6 @@ impl Pool {
             // transcript scan and seven store reads that then wait behind it.
             runtime: Runtime::with_tuning(workers, nagoya::Tuning::spread(), "az"),
         }
-    }
-
-    /// Run `work` on the pool and wait for what it returns.
-    ///
-    /// The error is a cancellation, not a failure of `work`: nagoya propagates
-    /// a panic to whoever awaits the handle, so a closure that panics unwinds
-    /// here rather than arriving as a string. Nothing in az cancels one of
-    /// these, which is why the message says so instead of guessing.
-    pub async fn run<T, F>(&self, work: F) -> Result<T, String>
-    where
-        F: FnOnce() -> T + Send + 'static,
-        T: Send + 'static,
-    {
-        self.runtime
-            .spawn(async move { work() })
-            .await
-            .ok_or_else(|| "the work was cancelled before it produced an answer".to_string())
     }
 
     /// Start `work` on the pool and do not wait for it.
