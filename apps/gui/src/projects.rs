@@ -12322,8 +12322,15 @@ async fn drive_run(
     // Set when the idle deadline trips: a run that went silent long enough to be
     // treated as wedged. Recovered like a stall rather than reported as a crash.
     let mut idle_stalled = false;
-    let cleanup_deadline =
-        (stateless && is_task_manager).then(|| tokio::time::Instant::now() + TASK_CLEANUP_TIMEOUT);
+    // A bound on the whole run rather than a thing to wait for.
+    //
+    // Only the stateless task manager has one, so this was a `select!` arm
+    // wrapping `pending()` to be never-ready for every other run - a branch
+    // whose job was to never fire, re-polled on every provider event. The
+    // bound is the same fact stated as what it is: when this run started, and
+    // how long it is allowed.
+    let cleanup_started = std::time::Instant::now();
+    let cleanup_limit = (stateless && is_task_manager).then_some(TASK_CLEANUP_TIMEOUT);
     let mut cleanup_timed_out = false;
 
     /// What woke the loop: an agent event, or a message to queue for the
@@ -12332,13 +12339,21 @@ async fn drive_run(
     enum Wake {
         Event(Event),
         Inject(InjectedMessage),
+        /// The idle window closed with no provider event. A run that has gone
+        /// quiet long enough to be worth asking about, not necessarily a
+        /// wedged one: the handler decides.
+        Idle,
     }
 
     // Before the turn begins this is an absolute startup bound: thread setup
     // events do not extend it. After the first real turn event it becomes the
     // ordinary sliding idle deadline.
     let start_timeout = run_start_timeout(resume.as_deref());
-    let mut idle_deadline = tokio::time::Instant::now() + start_timeout;
+    // How long this loop will wait for the next provider event, not a point in
+    // time. It was `Instant::now() + window`, which is the same thing said in
+    // a way a `select!` arm could race; the window is what every assignment
+    // below actually means.
+    let mut idle_window = start_timeout;
     // Set when a liveness ping has been injected and not yet answered. One ping
     // per silence: a second expiry with this still set is the wedged case.
     // Facts this loop has acted on and does not want woken for again. A
@@ -12350,10 +12365,49 @@ async fn drive_run(
     // not mistaken for a wedged run. Reset wherever the ping itself is.
     let mut unanswered_pings: u32 = 0;
     loop {
+        // The run-level bound, checked rather than awaited. Only the stateless
+        // task manager has one; every other run has nothing to check.
+        if let Some(limit) = cleanup_limit
+            && cleanup_started.elapsed() >= limit
+        {
+            crate::log!(
+                crate::log::Level::Warn,
+                "tasks",
+                "Home cleanup exceeded {}s; stopping its one-shot run",
+                TASK_CLEANUP_TIMEOUT.as_secs()
+            );
+            cancelled = true;
+            cleanup_timed_out = true;
+            break;
+        }
+        // Wait no longer than whichever bound comes first. Without this a run
+        // that goes silent would sit in the idle window past its cleanup
+        // limit, and the check above would only notice once an event happened
+        // to arrive.
+        let wait_for = match cleanup_limit {
+            Some(limit) => idle_window.min(limit.saturating_sub(cleanup_started.elapsed())),
+            None => idle_window,
+        };
         let wake = tokio::select! {
-            event = run.recv() => match event {
-                Some(event) => Wake::Event(event),
-                None => break,
+            /*
+             * The idle window belongs to the receive, not beside it.
+             *
+             * It was a seventh arm, `sleep_until(idle_deadline)`, racing this
+             * one, with the deadline recomputed as `Instant::now() + window`
+             * at four places - every one of them on a provider event. That is
+             * not a clock. It is "how long since the last event", which is a
+             * property of this receive, and saying it as a peer was what
+             * forced the `Instant` in the first place: a duration cannot be
+             * raced, only a point in time can.
+             *
+             * `timeout` polls the inner future first on every wake, so an
+             * event arriving as the window closes is delivered rather than
+             * discarded.
+             */
+            received = nagoya::timeout(wait_for, run.recv()) => match received {
+                Ok(Some(event)) => Wake::Event(event),
+                Ok(None) => break,
+                Err(_) => Wake::Idle,
             },
             /*
              * One arm for the three facts that stop or redirect this loop.
@@ -12400,23 +12454,24 @@ async fn drive_run(
                 handled.ping_failed = true;
                 continue;
             }
-            () = async {
-                match cleanup_deadline.as_ref() {
-                    Some(deadline) => tokio::time::sleep_until(*deadline).await,
-                    None => std::future::pending::<()>().await,
+            injected = inject_rx.recv() => match injected {
+                Some(body) => Wake::Inject(body),
+                // The sender lives in the registry this run owns a slot in;
+                // it closing early is a teardown already in progress.
+                None => continue,
+            },
+        };
+        let event = match wake {
+            Wake::Event(event) => event,
+            Wake::Idle => {
+                // The cleanup bound and the idle window share one wait, so a
+                // wait that ended because the bound arrived must not be read
+                // as silence. The top of the loop owns that decision.
+                if let Some(limit) = cleanup_limit
+                    && cleanup_started.elapsed() >= limit
+                {
+                    continue;
                 }
-            } => {
-                crate::log!(
-                    crate::log::Level::Warn,
-                    "tasks",
-                    "Home cleanup exceeded {}s; stopping its one-shot run",
-                    TASK_CLEANUP_TIMEOUT.as_secs()
-                );
-                cancelled = true;
-                cleanup_timed_out = true;
-                break;
-            }
-            () = tokio::time::sleep_until(idle_deadline) => {
                 /*
                  * A tool still in flight is the turn working, not a wedged run.
                  *
@@ -12514,7 +12569,7 @@ async fn drive_run(
                                 "waitSeconds": LIVENESS_PING_TIMEOUT.as_secs(),
                             }),
                         );
-                        idle_deadline = tokio::time::Instant::now() + LIVENESS_PING_TIMEOUT;
+                        idle_window = LIVENESS_PING_TIMEOUT;
                         continue;
                     }
                 }
@@ -12555,19 +12610,10 @@ async fn drive_run(
                 idle_stalled = true;
                 break;
             }
-            injected = inject_rx.recv() => match injected {
-                Some(body) => Wake::Inject(body),
-                // The sender lives in the registry this run owns a slot in;
-                // it closing early is a teardown already in progress.
-                None => continue,
-            },
-        };
-        let event = match wake {
-            Wake::Event(event) => event,
             Wake::Inject(injected) => {
                 // Injection is exposed only after a real turn event, so this is
                 // activity on an already-started turn.
-                idle_deadline = tokio::time::Instant::now() + RUN_IDLE_TIMEOUT;
+                idle_window = RUN_IDLE_TIMEOUT;
                 // A correction typed mid-turn. The user row was persisted and
                 // broadcast by `send_message`. Close the agent text the owner
                 // was replying to before delivering the new words.
@@ -12612,7 +12658,7 @@ async fn drive_run(
         // Once the turn is real, every provider event extends the ordinary idle
         // window. Setup events before that point never extend startup.
         if opening_message_read || turn_started {
-            idle_deadline = tokio::time::Instant::now() + RUN_IDLE_TIMEOUT;
+            idle_window = RUN_IDLE_TIMEOUT;
             // Any provider event answers the question a ping asks, so a run
             // that simply resumed streaming is not held to replying in words.
             ping_outstanding = false;
@@ -12990,8 +13036,7 @@ async fn drive_run(
                                 "seconds": granted,
                             }),
                         );
-                        idle_deadline =
-                            tokio::time::Instant::now() + std::time::Duration::from_secs(granted);
+                        idle_window = std::time::Duration::from_secs(granted);
                         ping_outstanding = false;
                         unanswered_pings = 0;
                         continue;
