@@ -24,8 +24,21 @@
         open: Some("theta theta north indi"),
         hover: None,
         click: None,
-        scroll_over: Some("kappa eta north cobalt epsilon north delta east eta zeta beta"),
-        scroll_ticks: 4,
+        // The first row of the first page, and it has to be all three of those.
+        //
+        // `scroll` sends its wheel events to the first node matching this name.
+        // The old target was a row whose title is also a project tab's name,
+        // and the tab strip sorts ahead of the list, so the events went to a
+        // bar that does not scroll. A row further down the list is not mounted
+        // yet, so it matches nothing at all. The row's status button matches
+        // but is a 30px control, and the wheel lands on the button rather than
+        // the pane behind it. Each of those left the list unmoved at 12 rows,
+        // which reads as broken pagination rather than a fixture that missed.
+        //
+        // This title belongs to no tab, so the listitem is the first match: a
+        // full-width row inside the scroller, present on first paint.
+        scroll_over: Some("theta theta epsilon cobalt cobalt zeta alpha sigma lambda kappa n"),
+        scroll_ticks: 8,
         scroll_delta: -300.0,
         subject: "@project-item",
         expect: Grows,
