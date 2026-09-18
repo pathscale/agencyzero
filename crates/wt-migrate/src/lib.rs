@@ -1186,10 +1186,18 @@ fn finish_page_format_promotion(store: &Path, paths: &PageMigrationPaths) -> eyr
     // `store` is the v2 source: deleting the backup then would destroy the only
     // copy of the owner's data.
     if store.is_dir() && paths.backup.is_dir() && !paths.stage.exists() {
+        // Refusing is the safe answer, and the only one available: the two
+        // states differ by which tree is live, and without the sentinel there
+        // is nothing on disk that says. The alternative is a coin flip whose
+        // losing side deletes the owner's only copy.
         eyre::ensure!(
             is_promoted(store),
             "refusing to discard the preserved v2 backup: {} is not the promoted v3 store, \
-             so this is an interrupted rollback rather than a completed promotion",
+             so this is an interrupted rollback rather than a completed promotion. \
+             If {} is the wanted store, move it back over {} by hand; if it is not, \
+             the v2 data is the one already live.",
+            store.display(),
+            paths.backup.display(),
             store.display()
         );
         write_migration_phase(&paths.state, "complete")?;
@@ -1316,14 +1324,15 @@ pub fn resume_page_format_migration(store: &Path) -> eyre::Result<bool> {
                 store.is_dir() && !paths.stage.exists(),
                 "completed migration state does not match the live v3 store"
             );
-            // `complete` is only written once the v3 tree is at `store`, so the
-            // marker must be there. Checked rather than assumed, because this
-            // arm's next act is deleting the owner's only other copy.
-            eyre::ensure!(
-                is_promoted(store),
-                "migration state says complete, but {} is not the promoted v3 store",
-                store.display()
-            );
+            // No sentinel check here, deliberately. `complete` is written only
+            // after the v3 tree is live, so the phase is already the proof, and
+            // it is the one phase that is unambiguous without help. Demanding
+            // the sentinel as well would refuse to boot every store migrated
+            // before the sentinel existed: their marker says `complete` and
+            // their tree, correctly, has no such file. The ambiguity this
+            // guards against lives in `source-preserved`, where the phase
+            // cannot distinguish a promotion from a rollback, and that is
+            // where `finish_page_format_promotion` checks it.
             remove_derived(&paths.backup)?;
             remove_derived(&paths.export)?;
             sync_parent(store)?;
@@ -3582,6 +3591,36 @@ mod scrub_tests {
         assert!(store.is_dir(), "the profile boots again");
         assert_eq!(which(&store), "v3", "the staged v3 tree is promoted");
         assert!(is_promoted(&store), "and says so durably");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Every store migrated before the sentinel existed carries `complete` and
+    /// no sentinel, so requiring one there refuses to open the owner's data.
+    ///
+    /// This is not hypothetical: it panicked the app on boot against the QA
+    /// profile fixture, which is exactly such a store, and the whole local gate
+    /// was green at the time. `complete` is written only once the v3 tree is
+    /// live, so the phase is already proof and needs no corroboration.
+    #[test]
+    fn a_store_completed_before_the_sentinel_still_opens() {
+        let dir = scratch("legacy-complete");
+        let store = dir.join("db");
+        let paths = PageMigrationPaths::for_store(&store);
+
+        tree_with(&store, "v3");
+        assert!(
+            !is_promoted(&store),
+            "a pre-sentinel store has no such file"
+        );
+        write_migration_phase(&paths.state, "complete").expect("the marker is written");
+
+        assert!(
+            resume_page_format_migration(&store)
+                .expect("a store completed before the sentinel must still open"),
+            "the completed migration is reported as settled"
+        );
+        assert_eq!(which(&store), "v3", "the owner's data is untouched");
 
         let _ = std::fs::remove_dir_all(&dir);
     }
