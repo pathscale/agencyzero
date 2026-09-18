@@ -105,6 +105,11 @@ jobs:
       # today, but a local `[patch]` or a temporary override reintroduces that
       # the moment someone adds one, and the failure reads as ours.
       - run: cargo fmt --check -p az-gui -p az-core -p az-mcp-proxy -p wt-migrate -p agency-tools
+      # Excluded from the workspace so its pinned v2-era WorkTable resolves on
+      # its own, which also puts it out of reach of every `-p` above and every
+      # workspace-wide gate. Its compile is covered by the staging step; this is
+      # the formatting half of the same blind spot.
+      - run: cargo fmt --check --manifest-path crates/wt-migrate/v2-reader/Cargo.toml --all
       # Blitz is currently a macOS preview runtime. Enabling every feature on
       # this Linux runner asks it to implement Tauri's GTK-only runtime traits,
       # which is separate portability work rather than Linux CI for AgencyZero.

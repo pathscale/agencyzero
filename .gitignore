@@ -16,6 +16,9 @@
 /apps/gui/binaries/agency-proxy-*
 /apps/gui/binaries/agencyzero-wt-v2-reader-*
 /crates/wt-migrate/v2-reader/Cargo.lock
+# Excluded from the workspace so its pinned v2-era WorkTable resolves on its
+# own, which also means it builds into its own target directory.
+/crates/wt-migrate/v2-reader/target
 node_modules
 /output/pdf/
 /docs/agencyzero-overview.md
