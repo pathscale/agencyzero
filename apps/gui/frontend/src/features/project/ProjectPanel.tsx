@@ -1883,7 +1883,13 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                 </div>
                 <Show when={issueDraft()?.item.id === item.id ? issueDraft() : null}>
                   {(draft) => (
-                    <section class="flex items-center gap-2 rounded-b-[9px] border-primary/24 border-t bg-az-inset px-3 py-2.5 shadow-[inset_2px_0_0_color-mix(in_srgb,var(--color-primary)_55%,transparent)]">
+                    /* `flex-wrap`, because this row carries a button labelled
+                       "Link a GitHub issue" whose width does not depend on the
+                       panel's. Without it the only flexible child is the input,
+                       and the row balances by taking the field down to 27px:
+                       still painted, still focusable, no longer a URL editor.
+                       Wrapping moves the buttons to a second line instead. */
+                    <section class="flex flex-wrap items-center gap-2 rounded-b-[9px] border-primary/24 border-t bg-az-inset px-3 py-2.5 shadow-[inset_2px_0_0_color-mix(in_srgb,var(--color-primary)_55%,transparent)]">
                       <Input.Field
                         size="md"
                         id={`project-${props.projectId}-item-${item.id}-issue-url`}
@@ -1901,7 +1907,7 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
                           if (event.key === "Enter") void saveIssue();
                           if (event.key === "Escape") setIssueDraft(null);
                         }}
-                        class="min-w-0 flex-1 rounded-lg border border-primary/28 bg-base-300 px-2.5 py-1.5 font-mono text-az-body text-ui-detail outline-none placeholder:text-az-faint focus:border-primary/60"
+                        class="min-w-[7rem] flex-1 rounded-lg border border-primary/28 bg-base-300 px-2.5 py-1.5 font-mono text-az-body text-ui-detail outline-none placeholder:text-az-faint focus:border-primary/60"
                       />
                       <Button
                         id={`project-${props.projectId}-item-${item.id}-issue-cancel`}
