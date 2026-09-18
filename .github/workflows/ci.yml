@@ -19,6 +19,10 @@ jobs:
     # cheap because it runs on every push. The only macOS in this repository
     # is the release bundle, which cannot be built anywhere else.
     runs-on: ubicloud-standard-2
+    # This job is 1m20s warm and has no network wait that can stall. Without a
+    # ceiling a hang runs to GitHub's six-hour default, which is how a wedged
+    # step reads as an afternoon of queued CI rather than a failure.
+    timeout-minutes: 6
     defaults:
       run:
         working-directory: apps/gui/frontend
@@ -49,6 +53,12 @@ jobs:
   rust:
     name: Rust
     runs-on: ubicloud-standard-4
+    # Warm, this job is about five minutes end to end, and cold it is closer to
+    # fifteen because the whole dependency graph compiles. Twenty leaves room
+    # for a cold cache after a dependency bump without leaving a genuinely
+    # wedged step to run for six hours, which is the default and is how a hang
+    # becomes invisible: the run just never finishes.
+    timeout-minutes: 20
     env:
       # CI needs diagnostics, not debugger symbol tables. This substantially
       # shrinks compile and link work without changing which tests execute.
@@ -93,10 +103,25 @@ jobs:
           bun install --no-save
           bun run build
 
+      # Both sidecars build outside the workspace target directory, which is
+      # what `rust-cache` keys on, so neither was cached and together they cost
+      # about two and a half minutes of every run. They are also the two things
+      # least likely to change: the proxy is a fixed-version crates.io install,
+      # and the reader is pinned to a v2-era WorkTable it must never move off.
+      # Cache the produced binaries against the inputs that decide them.
+      - name: Cache the built sidecars
+        id: sidecars
+        uses: actions/cache@v4
+        with:
+          path: apps/gui/binaries
+          key: sidecars-${{ runner.os }}-${{ hashFiles('Cargo.toml', 'crates/wt-migrate/v2-reader/Cargo.toml', 'crates/wt-migrate/v2-reader/**/*.rs', 'apps/gui/src/db/schema/*.rs', 'scripts/stage-agency-proxy-sidecar.sh', 'scripts/stage-wt-v2-reader-sidecar.sh') }}
+
       - name: Build the AgencyProxy sidecar
+        if: steps.sidecars.outputs.cache-hit != 'true'
         run: scripts/stage-agency-proxy-sidecar.sh
 
       - name: Build the WorkTable v2 migration reader
+        if: steps.sidecars.outputs.cache-hit != 'true'
         run: scripts/stage-wt-v2-reader-sidecar.sh
 
       # Named per workspace member rather than `--all`, which reaches into any
