@@ -252,7 +252,27 @@ impl Future for Cancelled<'_> {
                         .waiting
                         .get_or_insert_with(|| Box::pin(this.inner.wake.notified()));
                     match waiting.as_mut().poll(context) {
-                        Poll::Ready(()) => Poll::Ready(()),
+                        // The same rule as above, and it was missing here: a
+                        // second wake is no more evidence of a cancellation
+                        // than the first was. `Signals::around` shares one
+                        // queue between the run's stop facts and its
+                        // `ActiveRun::cancel`, so the wake that lands here is
+                        // routinely a sibling's, and reporting it as a
+                        // cancellation stops a run nobody asked to stop.
+                        Poll::Ready(()) => {
+                            this.waiting = None;
+                            if this.inner.stopped.load(Ordering::Acquire) {
+                                Poll::Ready(())
+                            } else {
+                                // Woken twice by siblings. Park on a fresh
+                                // registration and wait to be polled again.
+                                let waiting = this
+                                    .waiting
+                                    .get_or_insert_with(|| Box::pin(this.inner.wake.notified()));
+                                let _ = waiting.as_mut().poll(context);
+                                Poll::Pending
+                            }
+                        }
                         Poll::Pending => Poll::Pending,
                     }
                 }
@@ -295,6 +315,51 @@ mod tests {
             cancel.cancelled().await;
         });
         assert!(cancel.is_cancelled());
+    }
+
+    /// A sibling's wake is not a cancellation, however many of them arrive.
+    ///
+    /// `Signals::around` puts the run's two failure latches on the same queue
+    /// as its cancel, so a waiter on `cancelled()` is woken by facts that have
+    /// nothing to do with stopping. `poll` re-read the flag after the first
+    /// such wake but not after the second, and reported a cancellation nobody
+    /// requested: the run ends while the owner is still watching it.
+    ///
+    /// Polled by hand rather than through `block_on`, because the property is
+    /// about what one `poll` does with a wake it was not the target of.
+    ///
+    /// This asserts the invariant; it does not reproduce the race. The branch
+    /// that was wrong needs a `notify_waiters` to land between the
+    /// re-registration and its immediate poll, both inside this one call, and
+    /// nagoya's `Notified` snapshots the broadcast generation at construction,
+    /// so a single thread cannot open that window. Two sibling wakes before a
+    /// poll is the closest deterministic approach to it.
+    #[test]
+    fn repeated_sibling_wakes_are_not_a_cancellation() {
+        let signals = Signals::around(Cancel::new());
+        let cancel = signals.cancel.clone();
+        let waker = futures::task::noop_waker();
+        let mut context = Context::from_waker(&waker);
+        let mut cancelled = Box::pin(cancel.cancelled());
+
+        assert!(
+            cancelled.as_mut().poll(&mut context).is_pending(),
+            "nothing has happened yet"
+        );
+        // Both land before the next poll, which is the case `poll` has to
+        // survive on its own: it re-registers after the first and must not
+        // read the second as the run being stopped.
+        signals.injection_failure.set();
+        signals.ping_failed.set();
+        assert!(
+            cancelled.as_mut().poll(&mut context).is_pending(),
+            "a sibling wake was reported as a cancellation"
+        );
+        assert!(!cancel.is_cancelled());
+
+        // And a real cancel still lands, so the fix did not park it forever.
+        cancel.cancel();
+        assert!(cancelled.as_mut().poll(&mut context).is_ready());
     }
 
     /// A stop is a broadcast, so every parked waiter has to wake, not one.

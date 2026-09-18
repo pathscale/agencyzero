@@ -3136,9 +3136,17 @@ pub async fn unmark_item_deletion(
 /// stable enough for the desktop-sized lists this handles, and refusing a
 /// partial list would make every caller re-fetch before every move.
 ///
+/// Returns the rows it moved, not the project's whole list. This is an async
+/// command, so its body runs on the async workers, and [`list_items`] is
+/// synchronous precisely because that is the wrong place for a scan of every
+/// item in a project: see [`list_item_rows`] for the 10.8ms to 52.5ms this
+/// cost when the read sat there. The moved rows are point lookups by id, and
+/// they are all the caller consumes, which the store's `reorderItems` shows by
+/// upserting each returned row and dropping the rest.
+///
 /// # Errors
 /// Returns the first store failure; positions written before it stand, which
-/// the returned (re-read) list makes visible rather than papering over.
+/// the returned rows make visible rather than papering over.
 #[tauri::command]
 pub async fn reorder_items(
     app: AppHandle,
@@ -3148,9 +3156,12 @@ pub async fn reorder_items(
 ) -> Result<Vec<ProjectItemDto>, String> {
     let started = std::time::Instant::now();
     let moved = write_item_positions(&state.tables, &ids, 0).await?;
-    let items = list_items(project_id.clone(), state.clone());
-    let moved: std::collections::HashSet<&str> = moved.iter().map(String::as_str).collect();
-    for item in items.iter().filter(|item| moved.contains(item.id.as_str())) {
+    let items: Vec<ProjectItemDto> = moved
+        .iter()
+        .filter_map(|id| state.tables.project_item.select(id.clone()))
+        .map(|row| item_dto(row, &state.tables))
+        .collect();
+    for item in &items {
         let _ = app.emit("item:updated", item.clone());
     }
     let mut study =
