@@ -4,6 +4,12 @@ on:
   push:
     branches: [master]
   pull_request:
+  workflow_dispatch:
+    inputs:
+      clippy:
+        description: "Also run cargo clippy (slow: it type-checks every test target too)"
+        type: boolean
+        default: false
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -135,8 +141,22 @@ jobs:
       # workspace-wide gate. Its compile is covered by the staging step; this is
       # the formatting half of the same blind spot.
       - run: cargo fmt --check --manifest-path crates/wt-migrate/v2-reader/Cargo.toml --all
+      # Clippy runs on request, not on every push. It was the longest step in
+      # this job, 65 seconds warm and minutes cold, because `--all-targets`
+      # type-checks the test and bench targets on top of the lib and bins:
+      # close to double the compile work, nearly all of it repeated by
+      # `cargo test` below. A lint wants to be read and fixed while the code is
+      # open, so it belongs on the machine doing the writing:
+      #
+      #     cargo clippy --workspace --all-targets --no-default-features \
+      #       --features experimental,webview-runtime -- -D warnings
+      #
+      # To get the machine's answer anyway, run this workflow from the Actions
+      # tab with `clippy: true`.
+      #
       # Blitz is currently a macOS preview runtime. Enabling every feature on
       # this Linux runner asks it to implement Tauri's GTK-only runtime traits,
       # which is separate portability work rather than Linux CI for AgencyZero.
-      - run: cargo clippy --workspace --all-targets --no-default-features --features experimental,webview-runtime -- -D warnings
+      - if: inputs.clippy
+        run: cargo clippy --workspace --all-targets --no-default-features --features experimental,webview-runtime -- -D warnings
       - run: cargo test --workspace --no-default-features --features experimental,webview-runtime
