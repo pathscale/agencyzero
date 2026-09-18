@@ -1146,11 +1146,52 @@ fn remove_derived(path: &Path) -> eyre::Result<()> {
     Ok(())
 }
 
+/// A file written inside the staged tree, so the promoted directory says what
+/// it is rather than being inferred from where it sits.
+///
+/// The phase marker records how far the sequence got, never which tree ended up
+/// at `store`, and every ambiguity in this state machine came from that. The
+/// rollback below can leave the **v2** directory back at `store` with the marker
+/// still reading `source-preserved`, which is byte for byte the shape a crash
+/// between the stage rename and the final marker leaves behind. One of those
+/// wants the backup deleted and the other wants it kept, and from outside the
+/// two are indistinguishable. Because this rides inside the tree, the rename
+/// that publishes v3 carries it atomically: if it is at `store`, the promotion
+/// happened.
+const PROMOTED_MARKER: &str = ".agencyzero-v3-promoted";
+
+fn write_promotion_marker(tree: &Path) -> eyre::Result<()> {
+    let path = tree.join(PROMOTED_MARKER);
+    {
+        use std::io::Write as _;
+        let mut file = std::fs::File::create(&path)?;
+        writeln!(file, "v3")?;
+        file.sync_all()?;
+    }
+    sync_parent(&path)
+}
+
+/// Whether `tree` is the migrated v3 store rather than the preserved v2 source.
+fn is_promoted(tree: &Path) -> bool {
+    tree.join(PROMOTED_MARKER).is_file()
+}
+
 fn finish_page_format_promotion(store: &Path, paths: &PageMigrationPaths) -> eyre::Result<()> {
     // The stage rename may have reached disk before the final phase marker.
     // In that state the live v3 directory and retained v2 backup are already
     // exactly where they belong; only the durable state needs catching up.
+    //
+    // `is_promoted` is what makes that safe to act on. The same directory
+    // shape is also what a rolled-back promotion leaves, and there the tree at
+    // `store` is the v2 source: deleting the backup then would destroy the only
+    // copy of the owner's data.
     if store.is_dir() && paths.backup.is_dir() && !paths.stage.exists() {
+        eyre::ensure!(
+            is_promoted(store),
+            "refusing to discard the preserved v2 backup: {} is not the promoted v3 store, \
+             so this is an interrupted rollback rather than a completed promotion",
+            store.display()
+        );
         write_migration_phase(&paths.state, "complete")?;
         remove_derived(&paths.backup)?;
         remove_derived(&paths.export)?;
@@ -1174,10 +1215,38 @@ fn finish_page_format_promotion(store: &Path, paths: &PageMigrationPaths) -> eyr
     write_migration_phase(&paths.state, "source-preserved")?;
 
     if paths.stage.is_dir() {
+        // Written before the rename, not after, so it travels with the tree.
+        // A marker written afterwards would leave the window this exists to
+        // close: promoted on disk, and no durable way to know it.
+        write_promotion_marker(&paths.stage)?;
         if let Err(error) = std::fs::rename(&paths.stage, store) {
             if !store.exists() {
-                let _ = std::fs::rename(&paths.backup, store);
-                let _ = sync_parent(store);
+                // The rollback's own failures used to be discarded with
+                // `let _`, so a rollback that did not happen was reported as
+                // one that did: the owner was told their v2 data was "retained
+                // at its durable v2-preserved path" by code that had no idea
+                // whether it was. Both outcomes are now spelled out, because
+                // they need different things from whoever reads the error.
+                let restored = std::fs::rename(&paths.backup, store)
+                    .map_err(eyre::Report::from)
+                    .and_then(|()| sync_parent(store))
+                    // Back to `validated`: the source is no longer preserved
+                    // elsewhere, and leaving the marker claiming it is would
+                    // send the next boot to finish a promotion that was undone.
+                    .and_then(|()| write_migration_phase(&paths.state, "validated"));
+                return Err(match restored {
+                    Ok(()) => eyre::eyre!(
+                        "could not promote staged v3 store: {error}. The original v2 store \
+                         was restored and is live again."
+                    ),
+                    Err(rollback) => eyre::eyre!(
+                        "could not promote staged v3 store: {error}. Restoring the original \
+                         also failed: {rollback}. The v2 store is intact at {}, and must be \
+                         moved back to {} by hand.",
+                        paths.backup.display(),
+                        store.display()
+                    ),
+                });
             }
             return Err(eyre::eyre!("could not promote staged v3 store: {error}"));
         }
@@ -1207,7 +1276,23 @@ pub fn resume_page_format_migration(store: &Path) -> eyre::Result<bool> {
     let paths = PageMigrationPaths::for_store(store);
     let phase = match std::fs::read_to_string(&paths.state) {
         Ok(phase) => phase.trim().to_string(),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            // No marker does not always mean nothing happened. The marker is
+            // published by create-temp-then-rename, so a run that died after
+            // `rename(store -> backup)` but before that rename landed leaves
+            // the source preserved and no record of it. Read as "nothing to
+            // do", the app then finds no store, and `migrate_page_format_v2`
+            // refuses for as long as the backup exists: unbootable, with no
+            // path out that the app can take on its own.
+            //
+            // The backup is the durable fact here, so trust it over the
+            // missing marker and finish what the interrupted run started.
+            if !store.exists() && paths.backup.is_dir() {
+                finish_page_format_promotion(store, &paths)?;
+                return Ok(true);
+            }
+            return Ok(false);
+        }
         Err(error) => return Err(error.into()),
     };
     match phase.as_str() {
@@ -1230,6 +1315,14 @@ pub fn resume_page_format_migration(store: &Path) -> eyre::Result<bool> {
             eyre::ensure!(
                 store.is_dir() && !paths.stage.exists(),
                 "completed migration state does not match the live v3 store"
+            );
+            // `complete` is only written once the v3 tree is at `store`, so the
+            // marker must be there. Checked rather than assumed, because this
+            // arm's next act is deleting the owner's only other copy.
+            eyre::ensure!(
+                is_promoted(store),
+                "migration state says complete, but {} is not the promoted v3 store",
+                store.display()
             );
             remove_derived(&paths.backup)?;
             remove_derived(&paths.export)?;
@@ -3390,6 +3483,123 @@ mod scrub_tests {
 
         drop(first);
         super::lock_store(&store).expect("the OS releases the lock with its owner");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A scratch profile directory, removed by the caller.
+    fn scratch(name: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "wt-migrate-{name}-{}-{}",
+            std::process::id(),
+            uuid::Uuid::now_v7()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("the scratch profile is created");
+        dir
+    }
+
+    /// A directory standing in for a store, holding one identifying file.
+    fn tree_with(path: &std::path::Path, contents: &str) {
+        std::fs::create_dir_all(path).expect("the tree is created");
+        std::fs::write(path.join("which"), contents).expect("the tree is identified");
+    }
+
+    fn which(path: &std::path::Path) -> String {
+        std::fs::read_to_string(path.join("which")).unwrap_or_else(|_| "<absent>".into())
+    }
+
+    /// The shape a failed rollback leaves is the shape a completed promotion
+    /// leaves, and the old fast path could not tell them apart. It took the v2
+    /// data sitting at `store` for the promoted v3 tree and deleted the backup,
+    /// which is the owner's only other copy.
+    #[test]
+    fn a_rolled_back_promotion_is_not_mistaken_for_a_completed_one() {
+        let dir = scratch("rollback-shape");
+        let store = dir.join("db");
+        let paths = PageMigrationPaths::for_store(&store);
+
+        // Exactly what the rollback branch leaves behind: v2 restored to the
+        // live path, the backup still there, no stage, marker unmoved.
+        tree_with(&store, "v2");
+        tree_with(&paths.backup, "v2");
+        write_migration_phase(&paths.state, "source-preserved").expect("the marker is written");
+
+        let error = finish_page_format_promotion(&store, &paths)
+            .expect_err("an unpromoted store must not have its backup deleted");
+        assert!(
+            error.to_string().contains("not the promoted v3 store"),
+            "the refusal must say why: {error}"
+        );
+        assert!(paths.backup.is_dir(), "the only v2 copy must survive");
+        assert_eq!(which(&store), "v2");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The same shape, but the tree really was promoted. The marker travels
+    /// inside it, so this one is safe to finish and the backup is reclaimed.
+    #[test]
+    fn a_promoted_store_finishes_and_releases_its_backup() {
+        let dir = scratch("promoted-shape");
+        let store = dir.join("db");
+        let paths = PageMigrationPaths::for_store(&store);
+
+        tree_with(&store, "v3");
+        write_promotion_marker(&store).expect("the promoted tree is marked");
+        tree_with(&paths.backup, "v2");
+        write_migration_phase(&paths.state, "source-preserved").expect("the marker is written");
+
+        finish_page_format_promotion(&store, &paths).expect("a promoted store completes");
+        assert!(!paths.backup.exists(), "the backup is reclaimed");
+        assert_eq!(which(&store), "v3");
+        assert_eq!(
+            std::fs::read_to_string(&paths.state)
+                .expect("the phase is readable")
+                .trim(),
+            "complete"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Dying between `rename(store -> backup)` and the marker's own rename left
+    /// no marker, `store` absent and `backup` holding the data. That read as
+    /// "nothing to do", and `migrate_page_format_v2` then refused forever
+    /// because the backup existed: an unbootable profile with no way out.
+    #[test]
+    fn a_preserved_source_with_no_marker_is_recovered_rather_than_ignored() {
+        let dir = scratch("no-marker");
+        let store = dir.join("db");
+        let paths = PageMigrationPaths::for_store(&store);
+
+        tree_with(&paths.backup, "v2");
+        tree_with(&paths.stage, "v3");
+        assert!(!paths.state.exists(), "the marker never landed");
+
+        let resumed = resume_page_format_migration(&store)
+            .expect("an interrupted promotion is recoverable without its marker");
+        assert!(resumed, "the recovery is reported as work done");
+        assert!(store.is_dir(), "the profile boots again");
+        assert_eq!(which(&store), "v3", "the staged v3 tree is promoted");
+        assert!(is_promoted(&store), "and says so durably");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// An ordinary store that predates this marker entirely must be left alone:
+    /// no marker file, nothing in flight, nothing to recover.
+    #[test]
+    fn a_store_with_no_migration_in_flight_is_untouched() {
+        let dir = scratch("no-migration");
+        let store = dir.join("db");
+        tree_with(&store, "v3");
+
+        assert!(
+            !resume_page_format_migration(&store).expect("a settled store resumes cleanly"),
+            "there is no migration to resume"
+        );
+        assert_eq!(which(&store), "v3");
+
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
