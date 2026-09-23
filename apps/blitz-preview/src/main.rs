@@ -486,12 +486,10 @@ fn main() {
      * can be published without depending on native app activation.
      */
     if std::env::args().any(|argument| argument == "--blitz-control") {
-        izumo::apply_runtime_debug_options(
-            izumo::RuntimeDebugOptions {
-                inspection_and_agent_control: true,
-                deep_intrusive_profiling: false,
-            },
-        )
+        izumo::apply_runtime_debug_options(izumo::RuntimeDebugOptions {
+            inspection_and_agent_control: true,
+            deep_intrusive_profiling: false,
+        })
         .expect("could not enable Blitz control for the preview");
         trace("blitz control enabled");
     }
