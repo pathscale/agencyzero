@@ -14,14 +14,17 @@ build = "build.rs"
 # with it the only genuinely headless path, from building at all.
 anyrender = { package = "ps-anyrender", version = "^0.13.0" }
 anyrender_vello_cpu = { package = "ps-anyrender-vello-cpu", version = "^0.16.0", optional = true }
-blitz-dom = { package = "ps-blitz-dom", version = "^0.3", features = ["system-fonts"] }
-blitz-paint = { package = "ps-blitz-paint", version = "^0.3", features = ["scrollbars"] }
-blitz-script = { package = "ps-blitz-script", version = "^0.3", features = ["system-fonts"] }
-blitz-traits = { package = "ps-blitz-traits", version = "^0.3" }
+# The ps-blitz line has to match izumo's: `izumo::set_document_factory` takes
+# a factory returning its own `ps-blitz-script` `ScriptDocument`, and a second
+# release line here would be a second, incompatible `ScriptDocument` type.
+blitz-dom = { package = "ps-blitz-dom", version = "^0.4", features = ["system-fonts"] }
+blitz-paint = { package = "ps-blitz-paint", version = "^0.4", features = ["scrollbars"] }
+blitz-script = { package = "ps-blitz-script", version = "^0.4", features = ["system-fonts"] }
+blitz-traits = { package = "ps-blitz-traits", version = "^0.4" }
 brotli = { version = "^8.0.4", default-features = false, features = ["std"] }
 png = { version = "^0.18.1", optional = true }
 tauri = { version = "^2.11.5", default-features = false, features = ["compression"] }
-tauri-runtime-blitz = "^0.3"
+izumo = "^0.4"
 url = "^2.5.8"
 
 # For `--offscreen`: the activation policy has to be set before any window
@@ -38,7 +41,7 @@ tauri-build = { version = "^2.6.3", features = [] }
 [dev-dependencies]
 # Use the renderer's SVG fork so geometry assertions inspect the exact tree
 # type produced by Blitz instead of compiling a second, incompatible `usvg`.
-usvg = { package = "ps-usvg", version = "^0.48.1" }
+usvg = { package = "ps-usvg", version = "^0.48" }
 
 [features]
 capture = ["dep:anyrender_vello_cpu", "dep:png"]
@@ -47,7 +50,7 @@ capture = ["dep:anyrender_vello_cpu", "dep:png"]
 # `diagnosticsUnavailable`, which reads as a broken harness rather than a
 # missing feature. It is idle-cheap: the runtime flag still gates the work.
 default = ["diagnostics"]
-diagnostics = ["tauri-runtime-blitz/diagnostics"]
+diagnostics = ["izumo/diagnostics"]
 
 [profile.release]
 codegen-units = 1

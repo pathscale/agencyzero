@@ -1,7 +1,7 @@
 # AgencyZero Blitz preview
 
 This is an isolated native preview of the production AgencyZero frontend on Blitz + Boa. It
-uses the frontend's built-in mock backend, Tauri with `tauri-runtime-blitz`, winit windowing,
+uses the frontend's built-in mock backend, Tauri with `izumo`, winit windowing,
 and Vello/wgpu rendering. On macOS, wgpu presents through Metal. The CPU renderer remains in
 the preview for deterministic headless captures and as a reference fallback. It does not link
 Wry or V8.
@@ -22,5 +22,5 @@ until each AgencyZero command is exposed through the runtime.
 The normal release bundle excludes the CPU image renderer. Build or run with `--features capture`
 when deterministic PNG capture support is required.
 
-The normal Finder launch opens no control port. Debug-control reintegration follows after the
-concrete runtime window is stable.
+The normal Finder launch opens no control port. Pass `--blitz-control` to open it, the same
+flag az-gui uses.
