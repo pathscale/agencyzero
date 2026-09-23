@@ -13,7 +13,7 @@
 # portability work — so a mismatched rev compiles green through every PR gate
 # and fails on the release job after the merge. That is exactly how 0.6.0 was
 # cut with a bundle that could not build: the app moved ps-blitz to 464444a2
-# and tauri-runtime-blitz was still asking for ada2f821.
+# and izumo was still asking for ada2f821.
 #
 # Reading the lockfile rather than running cargo keeps it honest on any runner
 # and costs nothing, and the lockfile is the resolution the release job uses.

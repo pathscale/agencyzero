@@ -13,7 +13,7 @@ Repos, already in place:
 
 - `~/code/blitz-rust` -- fork of DioxusLabs/blitz, on branch `js-engine` (PR #491 head)
 - `~/code/agencyzero` -- the app
-- `~/code/tauri-runtime-blitz` -- this repo
+- `~/code/izumo` -- this repo
 
 ## Stage 1 -- Solid on Boa
 
@@ -128,7 +128,7 @@ Commit `17b2350f` adds synchronous and asynchronous remote JavaScript plus bound
 uncaught-error capture.
 Commit `a79b9ba7` adds pointer-path event traces, focused text entry through Blitz's IME/input
 path, and fixes empty inputs being initialized with a literal space.
-This is a headless renderer result, not a `tauri-runtime-blitz` result.
+This is a headless renderer result, not a `izumo` result.
 
 ## Stage 1.5 -- Reliable debug control
 
@@ -232,7 +232,7 @@ Stage 3 passed on 2026-08-09. Order within Stage 4:
   renderer gaps; launch passed, appearance did not.
 - The preview can opt into the authenticated debug controller through the same environment and
   private descriptor contract as the headless harness. Normal Finder launches expose no port.
-- The initial `tauri-runtime-blitz` crate preserves the real AgencyZero window configuration and
+- The initial `izumo` crate preserves the real AgencyZero window configuration and
   connects Boa's `window.ipc.postMessage` host hook to Tauri's `WebviewIpcHandler`.
 - `BlitzWebviewDispatcher` implements Tauri's `eval_script` and
   `eval_script_with_callback` surfaces through a thread-safe queue drained by the owning Boa

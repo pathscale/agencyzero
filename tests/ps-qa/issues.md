@@ -12,7 +12,7 @@ current count comes from `ps-qa --app ps-qa.ron list --checks tests/ps-qa`.
 - AgencyZero PR 186, app 0.8.37
 - ps-qa PR 10 candidate, 214 checks in 24 surface-grouped outcome areas
 - PathScale UI PR 262 candidate, package version 2.9.2
-- tauri-runtime-blitz candidate based on 0.1.5; the next release will include
+- tauri-runtime-blitz (now izumo) candidate based on 0.1.5; the next release will include
   native, selected, pressed and checked state in one semantic boolean
 - disposable profile: `/tmp/qa-profile-db`
 - launch contract: `az-gui --blitz-control`; no descriptor environment variable
@@ -76,7 +76,7 @@ present on any delivery branch.
 2. The new-item editor used a nonstandard mount/blur sequence. It now uses an
    ordinary visible Input with explicit Enter/Escape behavior; a new row paints
    above every older row.
-3. TRB exposed only `aria-selected`; pressed buttons and checked radios always
+3. izumo exposed only `aria-selected`; pressed buttons and checked radios always
    reported false. The candidate now unifies native checked, `aria-selected`,
    `aria-pressed`, `aria-checked`, and option selection.
 4. `ThemePicker` waited for slow settings round trips before reflecting button
@@ -133,7 +133,7 @@ present on any delivery branch.
     5/5. The keyed store update also mutates the stable item node instead of
     rebuilding the entire items array.
 18. Dialog dismissal exposed a renderer crash in semantic inspection after a
-    popover removed a layout ancestor. TRB now rejects missing or cyclic layout
+    popover removed a layout ancestor. izumo now rejects missing or cyclic layout
     parent chains before geometry is computed and reports the node as not
     interactable instead of panicking. Dialog dismissal, Escape, welcome setup,
     and the isolated destructive fork outcome now pass 7/7.

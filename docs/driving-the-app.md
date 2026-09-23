@@ -56,7 +56,7 @@ Four rules that each cost a session to learn:
 3. **Check the instrument exists before building one.** Twice the timer being
    written already existed two crates away. `cargo tree -e features -i <crate>`
    when a feature looks like it is not compiled in, because `ps-anyrender-vello`
-   reaches the app through `tauri-runtime-blitz` rather than `ps-blitz-shell`.
+   reaches the app through `izumo` rather than `ps-blitz-shell`.
 4. **Layer counts ride the frame log, not the MCP surface.** `target/blitz-frame.log`,
    `layers_by_site=...`. Delete it before a run worth reading.
 
@@ -237,7 +237,7 @@ cargo run -q -p blitz-bench -- nodes     # tree size and role histogram
 ```
 
 `blitz-bench` speaks the protocol through
-[`blitz-control-protocol`](../../tauri-runtime-blitz/crates/blitz-control-protocol),
+[`blitz-control-protocol`](../../izumo/crates/blitz-control-protocol),
 which is the **server's own** definition of the wire rather than a second copy
 of it. That is not tidiness: the Python hand-wrote this JSON and got the
 adjacent tagging of `AgentAction` wrong, which presented as a hung app, and its
@@ -340,7 +340,7 @@ for a pushed stream, `waitForIdle`, and `snapshot`.
   not attributable to anything in particular.
 
 **Reading metrics perturbs the app.** The collection path spins the script loop
-up to 100 times and forces a resolve (`tauri-runtime-blitz/src/runtime.rs:498`
+up to 100 times and forces a resolve (`izumo/src/runtime.rs:498`
 and `:632`). Do not sample in a tight loop and then reason about the result.
 
 **All published numbers come from an inspector build.** Absolute figures carry
@@ -363,7 +363,7 @@ If a profile stops naming functions, it was built without that override.
 ## Building without breaking the build
 
 The engine is consumed through local path checkouts patched in the root
-`Cargo.toml`: `ps-blitz`, `tauri-runtime-blitz`, `ps-anyrender`.
+`Cargo.toml`: `ps-blitz`, `izumo`, `ps-anyrender`.
 
 - `cargo fmt --check` gates the bundle build. Unformatted code in **any** of
   those checkouts fails the app build with a diff that looks unrelated to what

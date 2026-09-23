@@ -1,7 +1,7 @@
 # Zero-copy, and what the hot paths actually copy
 
 Written 2026-08-11, from a read of the frontend store, `blitz-script`'s DOM bindings,
-`blitz-dom`'s mutator, `tauri-runtime-blitz`'s script queue, Tauri 2.11.5's callback
+`blitz-dom`'s mutator, `izumo`'s script queue, Tauri 2.11.5's callback
 formatter, and Boa's string implementation. **Nothing here was measured.** Every claim is
 a read of code, with file and line. Numbers quoted come from [performance.md](performance.md),
 taken 2026-08-10.
@@ -80,7 +80,7 @@ For what step 8 costs beyond the copy, see
 
 Command responses and event payloads both return through `eval_script`, which pushes a
 `String` onto a queue that Boa evaluates
-(`tauri-runtime-blitz/crates/tauri-runtime-blitz/src/script_queue.rs:16`,
+(`izumo/crates/izumo/src/script_queue.rs:16`,
 `webview.rs:255`).
 
 Tauri decides how to encode the payload in `tauri-2.11.5/src/ipc/format_callback.rs`:

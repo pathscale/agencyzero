@@ -68,7 +68,7 @@ The second can ship without the first and is where the existing groundwork is.
   `Color::TRANSPARENT` instead of the default opaque **white**) and Stage 3
   (`apply_liquid_glass` with an `apply_vibrancy` fallback, plus
   `set_window_glass(tint, radius, enabled)` over a `OnceLock`) are all in
-  `tauri-runtime-blitz`. `window-vibrancy 0.8` was taken as a dependency after
+  `izumo`. `window-vibrancy 0.8` was taken as a dependency after
   all: it had already solved the view-hierarchy placement.
 - Stage 4 shipped as **three appearance sliders** — Panel lift, edge, depth —
   writing `--az-glass-lift`, `--az-glass-border` and `--az-glass-shadow`, with
@@ -155,7 +155,7 @@ describe.
 
 Options, cheapest first:
 
-1. **Add a `skia-renderer` feature to `tauri-runtime-blitz`**, beside the
+1. **Add a `skia-renderer` feature to `izumo`**, beside the
    existing `hybrid-renderer`, selecting `SkiaWindowRenderer`. The seam is one
    `use` and one options type: `runtime.rs` already picks its renderer by
    feature. This is the only option where the blur is written already.
@@ -270,7 +270,7 @@ nothing; it is now the more expensive one, and it brings C++ back.
 
 Two things still stand between this and glass on screen:
 
-1. The `ps-blitz` and `tauri-runtime-blitz` pins have to move to the
+1. The `ps-blitz` and `izumo` pins have to move to the
    `ps-anyrender` revision carrying it.
 2. **`.rounded-panel` has no `backdrop-filter` declaration.** The only one in a
    current build is on `.modal__backdrop--blur`. Nothing will blur until the
@@ -305,7 +305,7 @@ Two things still stand between this and glass on screen:
   [`types.rs:130`](../../ps-anyrender/crates/anyrender/src/types.rs), with a
   configurable `composite_alpha_mode` on the renderer options.
 - The window is already borderless-ish: `titleBarStyle: "Overlay"` with a
-  fullsize content view ([`runtime.rs:1815`](../../tauri-runtime-blitz/crates/tauri-runtime-blitz/src/runtime.rs)),
+  fullsize content view ([`runtime.rs:1815`](../../izumo/crates/izumo/src/runtime.rs)),
   so there is no native title bar to fight.
 
 ## The blockers, in the order they bite
@@ -313,15 +313,15 @@ Two things still stand between this and glass on screen:
 ### 1. The window is always opaque
 
 `BlitzWindowBuilder` accepts `transparent`
-([`lib.rs:178`](../../tauri-runtime-blitz/crates/tauri-runtime-blitz/src/lib.rs))
+([`lib.rs:178`](../../izumo/crates/izumo/src/lib.rs))
 and stores it on the config. `window_attributes`
-([`runtime.rs:1769`](../../tauri-runtime-blitz/crates/tauri-runtime-blitz/src/runtime.rs))
+([`runtime.rs:1769`](../../izumo/crates/izumo/src/runtime.rs))
 then builds the winit `WindowAttributes` and **never calls `.with_transparent`**.
 The flag is accepted and dropped.
 
 `background_color` is the same story: the setter exists
-([`lib.rs:218`](../../tauri-runtime-blitz/crates/tauri-runtime-blitz/src/lib.rs),
-[`window_dispatch.rs:351`](../../tauri-runtime-blitz/crates/tauri-runtime-blitz/src/window_dispatch.rs))
+([`lib.rs:218`](../../izumo/crates/izumo/src/lib.rs),
+[`window_dispatch.rs:351`](../../izumo/crates/izumo/src/window_dispatch.rs))
 and nothing in `runtime.rs` reads it back.
 
 So today, `"transparent": true` in `tauri.conf.json` would be a silent no-op.
@@ -409,10 +409,10 @@ these are already here transitively (`core-foundation 0.10.1`,
 Useful as a dependency we already have, not as the route to glass.
 
 **But it must be called on the winit window, from inside the runtime crate.**
-`tauri-runtime-blitz` stubs the Tauri-facing handle out:
-[`window_dispatch.rs:213`](../../tauri-runtime-blitz/crates/tauri-runtime-blitz/src/window_dispatch.rs)
+`izumo` stubs the Tauri-facing handle out:
+[`window_dispatch.rs:213`](../../izumo/crates/izumo/src/window_dispatch.rs)
 returns `Err(HandleError::NotSupported)` for `window_handle()`, and
-[`runtime.rs:469`](../../tauri-runtime-blitz/crates/tauri-runtime-blitz/src/runtime.rs)
+[`runtime.rs:469`](../../izumo/crates/izumo/src/runtime.rs)
 does the same for `display_handle()`. Calling `apply_liquid_glass` on a
 `tauri::Window` from `az-gui` therefore fails with `NoWindowHandle`. The winit
 `Window` implements the trait properly, so that is where the call goes — which
@@ -492,7 +492,7 @@ clear the surface to transparent rather than to `background_color`.
 **Stage 3 — the effect view. Done, via `window-vibrancy` after all.**
 Enable the `NSGlassEffectView` / `NSVisualEffectView` features on the
 `objc2-app-kit` already in the graph, and insert the view behind the render
-view on the winit window, from inside `tauri-runtime-blitz`. Gate on macOS 26
+view on the winit window, from inside `izumo`. Gate on macOS 26
 with a `NSVisualEffectView` fallback. Not callable from `az-gui` — see blocker
 2. Read `window-vibrancy`'s macOS module first for the view-hierarchy details,
 and fall back to depending on it if this fights winit.
@@ -506,22 +506,22 @@ the stage most likely to look wrong in a hundred small ways.
 
 **Resolved by local `[patch]` entries**, the first option below. `.cargo/config.toml`
 in both `agencyzero` and `ps-blitz` now redirects `ps-blitz`, `ps-anyrender` and
-`tauri-runtime-blitz` to the checkouts beside them. Those files encode absolute
+`izumo` to the checkouts beside them. Those files encode absolute
 paths that exist on one machine, so they are **local only and must never be
 committed**; every pinned rev in `Cargo.toml` is still the truth for anyone else.
 The original reasoning follows.
 
 ### The original question
 
-Stages 1–3 all live in **`tauri-runtime-blitz`**, and this app consumes it from a
+Stages 1–3 all live in **`izumo`**, and this app consumes it from a
 **git rev** (`569870356`), not a path. Its local checkout at
-`~/code/tauri-runtime-blitz` is on that exact commit but has a **dirty working
+`~/code/izumo` is on that exact commit but has a **dirty working
 tree** (4 files, including `runtime.rs` and the control protocol) carrying
 unrelated deep-profiling work.
 
 So Glass cannot be implemented without either:
 
-- adding a local `[patch]` for `tauri-runtime-blitz` — which pulls that dirty
+- adding a local `[patch]` for `izumo` — which pulls that dirty
   work into the binary along with the glass change, or
 - committing or stashing that work first, or
 - landing the glass change upstream and moving the pinned rev.
