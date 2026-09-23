@@ -31,6 +31,13 @@ pub(crate) struct AvailableUpdate {
 /// the wrong thing to tell someone whose update check never reached the CDN.
 #[tauri::command]
 pub(crate) async fn check_for_update(app: AppHandle) -> Result<Option<AvailableUpdate>, String> {
+    // A disposable QA profile answers without the CDN. Its checks measure the
+    // UI's round trip, and a real one took 1 to 2s against a 2s outcome window,
+    // so the verdict was network latency. It must also never be offered a
+    // published build to install over the checkout it is testing.
+    if std::env::var_os("AZ_QA_WORKSPACE_ROOT").is_some_and(|root| !root.is_empty()) {
+        return Ok(None);
+    }
     let updater = app.updater().map_err(|e| e.to_string())?;
     let found = (|| updater.check())
         .retry(crate::retry::interactive_backoff())
