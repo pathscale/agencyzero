@@ -994,12 +994,7 @@ const BUILD: BuildInfo = BuildInfo {
 /// that decide whether a rendering fix is present, so they go in the log where
 /// they are read without asking the app anything.
 fn resolved_highlights() -> String {
-    let wanted = [
-        "ps-blitz-script",
-        "ps-boa-engine",
-        "izumo",
-        "@pathscale/ui",
-    ];
+    let wanted = ["ps-blitz-script", "ps-boa-engine", "izumo", "@pathscale/ui"];
     // `cargo tree` marks a crate it has already expanded with a trailing
     // `(*)`, so every package appears twice. Same version, no extra
     // information, and it makes the line read as though the graph were
@@ -1793,24 +1788,20 @@ pub(crate) async fn apply_settings_patch(
         || previous.blitz_deep_profiling_enabled != parsed.blitz_deep_profiling_enabled;
     #[cfg(feature = "blitz-runtime")]
     if runtime_debug_changed {
-        izumo::apply_runtime_debug_options(
-            izumo::RuntimeDebugOptions {
-                inspection_and_agent_control: parsed.blitz_control_enabled,
-                deep_intrusive_profiling: parsed.blitz_deep_profiling_enabled,
-            },
-        )
+        izumo::apply_runtime_debug_options(izumo::RuntimeDebugOptions {
+            inspection_and_agent_control: parsed.blitz_control_enabled,
+            deep_intrusive_profiling: parsed.blitz_deep_profiling_enabled,
+        })
         .map_err(|error| format!("could not update local Blitz debugging: {error}"))?;
     }
 
     if let Err(error) = state.tables.kv_put(settings::KEY, merged.to_string()).await {
         #[cfg(feature = "blitz-runtime")]
         if runtime_debug_changed {
-            let _ = izumo::apply_runtime_debug_options(
-                izumo::RuntimeDebugOptions {
-                    inspection_and_agent_control: previous.blitz_control_enabled,
-                    deep_intrusive_profiling: previous.blitz_deep_profiling_enabled,
-                },
-            );
+            let _ = izumo::apply_runtime_debug_options(izumo::RuntimeDebugOptions {
+                inspection_and_agent_control: previous.blitz_control_enabled,
+                deep_intrusive_profiling: previous.blitz_deep_profiling_enabled,
+            });
         }
         if let Some(id) = boundary_id
             && let Err(cleanup) = state.tables.study_event.delete(id).await
@@ -2483,13 +2474,17 @@ fn main() {
                     "com.pathscale.agencyzero"
                 };
                 let Some(data_dir) = dirs::data_dir() else {
-                    eprintln!("{}: no data directory for the default store", qa_profile::ENV);
+                    eprintln!(
+                        "{}: no data directory for the default store",
+                        qa_profile::ENV
+                    );
                     std::process::exit(2);
                 };
                 let source = data_dir.join(identifier).join("db");
-                let destination = std::path::PathBuf::from(
-                    concat!(env!("CARGO_MANIFEST_DIR"), "/../../target/qa-profile"),
-                );
+                let destination = std::path::PathBuf::from(concat!(
+                    env!("CARGO_MANIFEST_DIR"),
+                    "/../../target/qa-profile"
+                ));
                 println!(
                     "building from {} into {}",
                     source.display(),
@@ -3329,12 +3324,10 @@ fn main() {
     // ps-qa gets a discovery descriptor even if native app activation stalls.
     #[cfg(feature = "blitz-runtime")]
     if cli_blitz_control_enabled || cli_blitz_deep_profiling_enabled {
-        izumo::apply_runtime_debug_options(
-            izumo::RuntimeDebugOptions {
-                inspection_and_agent_control: cli_blitz_control_enabled,
-                deep_intrusive_profiling: cli_blitz_deep_profiling_enabled,
-            },
-        )
+        izumo::apply_runtime_debug_options(izumo::RuntimeDebugOptions {
+            inspection_and_agent_control: cli_blitz_control_enabled,
+            deep_intrusive_profiling: cli_blitz_deep_profiling_enabled,
+        })
         .expect("could not apply CLI Blitz debugging");
     }
 
