@@ -10,7 +10,7 @@ members = [
 exclude = ["crates/wt-migrate/v2-reader"]
 
 [workspace.package]
-version = "0.8.64"
+version = "0.8.65"
 edition = "2024"
 publish = false
 
