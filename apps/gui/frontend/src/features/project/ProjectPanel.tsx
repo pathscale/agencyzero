@@ -1197,6 +1197,24 @@ function ItemList(props: { projectId: string; items: ProjectItem[] }): JSX.Eleme
   const [savingIssueId, setSavingIssueId] = createSignal<string | null>(null);
   let issueField: HTMLInputElement | undefined;
 
+  // The issue editor mounts under its row, so a row near the bottom of the
+  // list opens it below the fold: in a 1344x900 window the field laid out at
+  // y=936, focused but invisible, and the person who clicked saw nothing
+  // happen. `autofocus` does not help, because focusing moves no scrollport.
+  // Reveal the block that holds both the row and its editor: `nearest` on it
+  // brings the editor's bottom edge in without hiding the title it acts on.
+  createEffect(
+    () => issueDraft()?.item.id,
+    (id) => {
+      if (!id) return;
+      queueMicrotask(() => {
+        const row = document.querySelector<HTMLElement>(`[data-item-id="${id}"]`);
+        row?.parentElement?.scrollIntoView?.({ block: "nearest" });
+        issueField?.focus();
+      });
+    },
+  );
+
   const saveEdit = async (item: ProjectItem): Promise<void> => {
     const value = editTitle().trim();
     setEditingId(null);
