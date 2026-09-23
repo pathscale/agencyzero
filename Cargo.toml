@@ -33,7 +33,7 @@ worktable = "1.10.0-beta1"
 # Tauri stack, so agent/proxy builds never trigger a webview toolchain build.
 
 # Local debugging only, alongside the path overrides in apps/gui/Cargo.toml.
-# `tauri-runtime-blitz` takes blitz-dom and blitz-script by path but blitz-shell
+# `izumo` takes blitz-dom and blitz-script by path but blitz-shell
 # and blitz-traits from git at the same rev. Cargo treats those as two distinct
 # crates, so the same trait exists twice and `ScriptDocument` stops satisfying
 # `Document`, which reads as eleven unrelated type errors inside a dependency

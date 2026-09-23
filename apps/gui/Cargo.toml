@@ -27,7 +27,7 @@ blitz-runtime = [
     "dep:blitz-dom",
     "dep:blitz-script",
     "dep:brotli",
-    "dep:tauri-runtime-blitz",
+    "dep:izumo",
     "dep:url",
 ]
 # Compile the full diagnostics capability into the binary. The engine-wide
@@ -52,10 +52,10 @@ blitz-inspector = [
     # Fixed by `ps-anyrender-vello 0.14.1` and `ps-debug-timer 0.1.4`, both now
     # on crates.io. chuzz never hit either, because it does not enable this.
     "blitz-dom/log-phase-times",
-    "tauri-runtime-blitz/diagnostics",
+    "izumo/diagnostics",
 ]
 # The lighter render pipeline, for measuring against the default Vello one.
-blitz-hybrid = ["blitz-inspector", "tauri-runtime-blitz/hybrid-renderer"]
+blitz-hybrid = ["blitz-inspector", "izumo/hybrid-renderer"]
 
 [build-dependencies]
 brotli = { version = "8.0.4", default-features = false, features = ["std"] }
@@ -107,8 +107,8 @@ tauri = { version = "2", default-features = false, features = ["macos-private-ap
 # 0.1.0 the runtime's own feature forwards to `tauri` and `tauri-runtime`, so
 # naming it here agrees with that rather than being the only thing holding the
 # two sides together.
-tauri-runtime-blitz = { version = "^0.4", optional = true, features = ["macos-private-api"] }
-blitz-control-protocol = { version = "^0.5", optional = true }
+izumo = { version = "^0.4.1", optional = true, features = ["macos-private-api"] }
+blitz-control-protocol = { version = "^0.5.3", optional = true }
 #
 # The engine by version, not by branch. Same move `chuzz` made, for the same
 # reasons its manifest records.

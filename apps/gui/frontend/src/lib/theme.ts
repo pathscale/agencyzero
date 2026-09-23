@@ -954,7 +954,7 @@ export function writePanelAxes(tuning: GlassTuning, root?: HTMLElement): void {
  * everything drawn and frosted the whole application, text included. That was
  * not a reason to give up the effect, it was the wrong attachment.
  *
- * `tauri-runtime-blitz` now attaches an `NSGlassEffectView` as a *sibling*
+ * `izumo` now attaches an `NSGlassEffectView` as a *sibling*
  * below the renderer's view, in the window's content view, so it blurs what is
  * behind the window and the content draws over it untouched.
  *
