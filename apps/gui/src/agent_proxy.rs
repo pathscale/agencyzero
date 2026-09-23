@@ -1755,9 +1755,7 @@ mod tests {
             std::io::Error::last_os_error(),
         );
 
-        watcher
-            .join()
-            .expect("watcher finishes");
+        watcher.join().expect("watcher finishes");
 
         assert_eq!(
             ConnectionState::from_raw(state.load(Ordering::Acquire)),
