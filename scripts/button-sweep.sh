@@ -39,9 +39,18 @@ fi
 # Never kill by executable name: another build or the owner's stable instance
 # may use the same name. A pre-existing lock means this disposable profile is
 # already owned, so stop before deleting anything under that process.
+#
+# A lock whose owner has exited is stale, not owned: az-gui leaves it behind
+# even after a clean SIGTERM drain, so refusing on existence alone blocked every
+# second run.
 if [ -e "$LIVE.lock" ]; then
-  echo "$LIVE.lock already exists; stop its exact owner before running the sweep" >&2
-  exit 1
+  owner=$(sed -nE 's/^pid=([0-9]+).*/\1/p' "$LIVE.lock")
+  if [ -n "$owner" ] && ! kill -0 "$owner" 2>/dev/null; then
+    rm -f "$LIVE.lock"
+  else
+    echo "$LIVE.lock is held by live pid ${owner:-unknown}; stop that exact process first" >&2
+    exit 1
+  fi
 fi
 
 # From the committed archive, not from whatever is left in /tmp. The sweep used
