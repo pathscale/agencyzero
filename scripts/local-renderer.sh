@@ -28,7 +28,7 @@ MSG
     exit 1
 fi
 
-for checkout in ps-anyrender ps-blitz tauri-runtime-blitz; do
+for checkout in ps-anyrender ps-blitz izumo; do
     if [ ! -d "$root/../$checkout" ]; then
         echo "missing checkout: $root/../$checkout" >&2
         echo "the redirect needs all three beside this repository" >&2
