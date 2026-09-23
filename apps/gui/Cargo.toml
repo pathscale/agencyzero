@@ -64,7 +64,7 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 # Carries the store forward when a column changes; see crates/wt-migrate.
 wt-migrate = { path = "../../crates/wt-migrate" }
-agent-abstraction = "0.4.21"
+agent-abstraction = "^0.5"
 agency-proxy-client.workspace = true
 agency-proxy-protocol.workspace = true
 agent-experimental = { version = "^0.1", default-features = false, optional = true }
@@ -87,7 +87,9 @@ eyre = "0.6"
 rkyv = { version = "0.8.9", features = ["uuid-1"] }
 derive_more = { version = "2.0.1", features = ["from", "error", "display", "debug", "into"] }
 futures = "0.3"
-nagoya = "^0.1"
+# `reactor` for the one `Reactor` the app owns and hands to agent-abstraction,
+# which registers the provider CLIs it spawns on it.
+nagoya = { version = "^0.1", features = ["reactor"] }
 backon = { version = "1.6.0", default-features = false }
 libc = "0.2"
 dirs = "6"

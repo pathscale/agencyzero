@@ -5,6 +5,7 @@
 //! normalized event vocabulary while the rest of the GUI is migrated.
 
 use agency_proxy_client::Client;
+use agency_proxy_client::broadcast;
 use agency_proxy_protocol::{
     ApprovalDecision, ClientMessage, ErrorCode, ProviderAccountUsage, ProviderStatus, RunEvent,
     RunId, RunRequest, RunSnapshot, ServerFrame, ServerResponse, ShutdownMode,
@@ -21,7 +22,7 @@ use std::{
     },
     time::Duration,
 };
-use tokio::sync::{Mutex, broadcast};
+use tokio::sync::Mutex;
 
 static RUN_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 
@@ -52,6 +53,8 @@ impl ConnectionState {
 #[derive(Debug)]
 pub struct AgencyProxy {
     socket_path: PathBuf,
+    /// The reactor the client's socket is registered on, owned by the app.
+    reactor: nagoya::reactor::Handle,
     configured_binary: std::sync::RwLock<Option<PathBuf>>,
     start_gate: Mutex<()>,
     connection_state: Arc<AtomicU8>,
@@ -71,9 +74,14 @@ pub struct Status {
 
 impl AgencyProxy {
     #[must_use]
-    pub fn new(config_dir: &Path, configured_binary: Option<PathBuf>) -> Self {
+    pub fn new(
+        config_dir: &Path,
+        configured_binary: Option<PathBuf>,
+        reactor: nagoya::reactor::Handle,
+    ) -> Self {
         Self {
             socket_path: proxy_socket_path(config_dir),
+            reactor,
             configured_binary: std::sync::RwLock::new(configured_binary),
             start_gate: Mutex::new(()),
             connection_state: Arc::new(AtomicU8::new(ConnectionState::Cold as u8)),
@@ -516,7 +524,7 @@ impl AgencyProxy {
             }
             ConnectionState::Cold | ConnectionState::Live => {}
         }
-        if let Ok(client) = Client::connect(&self.socket_path).await {
+        if let Ok(client) = Client::connect(&self.socket_path, &self.reactor).await {
             self.clear_failure();
             self.set_connection_state(ConnectionState::Live);
             return Ok(client);
@@ -535,7 +543,7 @@ impl AgencyProxy {
         // Another caller may have connected or completed the initial spawn
         // while this one waited for the gate. Re-probe before deciding a
         // previously live daemon has really disappeared.
-        if let Ok(client) = Client::connect(&self.socket_path).await {
+        if let Ok(client) = Client::connect(&self.socket_path, &self.reactor).await {
             self.clear_failure();
             self.set_connection_state(ConnectionState::Live);
             return Ok(client);
@@ -640,7 +648,7 @@ impl AgencyProxy {
         // the dropped handle got wrong.
         let _ = watch_proxy_child(child, self.connection_state.clone());
         for _ in 0..50 {
-            match Client::connect(&self.socket_path).await {
+            match Client::connect(&self.socket_path, &self.reactor).await {
                 Ok(client) => {
                     self.clear_failure();
                     self.set_connection_state(ConnectionState::Live);
@@ -1109,7 +1117,7 @@ impl ProxyRun {
         loop {
             let frame = match self.events.recv().await {
                 Ok(frame) => frame,
-                Err(broadcast::error::RecvError::Lagged(_)) => {
+                Err(broadcast::RecvError::Lagged(_)) => {
                     let _ = self
                         .client
                         .request(ClientMessage::AttachRun {
@@ -1119,7 +1127,7 @@ impl ProxyRun {
                         .await;
                     continue;
                 }
-                Err(broadcast::error::RecvError::Closed) => {
+                Err(broadcast::RecvError::Closed) => {
                     self.connection_state
                         .store(ConnectionState::Crashed as u8, Ordering::Release);
                     self.terminal = Some(Err("AgencyProxy connection closed".into()));
@@ -1429,7 +1437,12 @@ mod tests {
 
     #[test]
     fn a_crash_keeps_the_specific_failure_for_settings_and_later_calls() {
-        let proxy = AgencyProxy::new(Path::new("/tmp/agency-proxy-failure-detail"), None);
+        let reactor = nagoya::reactor::Reactor::start().expect("reactor");
+        let proxy = AgencyProxy::new(
+            Path::new("/tmp/agency-proxy-failure-detail"),
+            None,
+            reactor.handle(),
+        );
         proxy.record_failure("socket bind failed: operation not permitted".into());
         assert_eq!(
             proxy.failure_message(),
@@ -1453,7 +1466,8 @@ mod tests {
             uuid::Uuid::now_v7()
         ));
         std::fs::create_dir_all(&dir).expect("create temp directory");
-        let proxy = AgencyProxy::new(&dir, None);
+        let reactor = nagoya::reactor::Reactor::start().expect("reactor");
+        let proxy = AgencyProxy::new(&dir, None, reactor.handle());
 
         proxy.record_failure("could not start /nonexistent/agency-proxy".into());
         assert_eq!(proxy.connection_state(), ConnectionState::Crashed);
@@ -1496,7 +1510,8 @@ mod tests {
             uuid::Uuid::now_v7()
         ));
         std::fs::create_dir_all(&dir).expect("create temp directory");
-        let proxy = AgencyProxy::new(&dir, None);
+        let reactor = nagoya::reactor::Reactor::start().expect("reactor");
+        let proxy = AgencyProxy::new(&dir, None, reactor.handle());
 
         // A crash first, which is the state the owner was actually in: the
         // daemon had been running and died.
@@ -1530,7 +1545,8 @@ mod tests {
             uuid::Uuid::now_v7()
         ));
         std::fs::create_dir_all(&dir).expect("create temp directory");
-        let proxy = AgencyProxy::new(&dir, None);
+        let reactor = nagoya::reactor::Reactor::start().expect("reactor");
+        let proxy = AgencyProxy::new(&dir, None, reactor.handle());
 
         let status = proxy
             .terminate()
