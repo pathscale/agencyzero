@@ -7,6 +7,7 @@ use blitz_script::{DefaultScriptFetcher, FetchError, ScriptDocument, ScriptFetch
 #[cfg(all(not(test), feature = "capture"))]
 use blitz_traits::shell::{ColorScheme, Viewport};
 use brotli::Decompressor;
+use izumo::{builder, set_document_factory, set_runtime_trace};
 #[cfg(not(test))]
 use std::fs::{self, OpenOptions};
 use std::io::Read;
@@ -16,7 +17,6 @@ use std::io::Write;
 use std::time::{SystemTime, UNIX_EPOCH};
 // `Manager` brings `get_webview_window`, for the offscreen move below.
 use tauri::Manager;
-use tauri_runtime_blitz::{builder, set_document_factory, set_runtime_trace};
 use url::Url;
 
 include!(concat!(env!("OUT_DIR"), "/embedded.rs"));
@@ -301,9 +301,11 @@ fn capture_preview(output: &std::path::Path) -> Result<(), String> {
      *
      * It is the same tree the inspector serves over the control socket
      * (`build_accessibility_tree`), so a headless run and a windowed run answer
-     * from one source. The socket itself is `pub(crate)` in
-     * `tauri-runtime-blitz` and so cannot be hosted from here, which is why
-     * this path writes the tree to a file instead of serving it.
+     * from one source. The socket used to be `pub(crate)` inside the runtime,
+     * which is why this path writes the tree to a file instead of serving it.
+     * It is public now, as `blitz-control-protocol`'s `server` module rather
+     * than anything in `izumo`, but serving a headless document is
+     * `qa-headless-host`'s job, so this path still writes a file.
      */
     if let Some(tree_path) = std::env::var_os("AGENCYZERO_BLITZ_TREE") {
         let update = document.inner().build_accessibility_tree();
@@ -484,8 +486,8 @@ fn main() {
      * can be published without depending on native app activation.
      */
     if std::env::args().any(|argument| argument == "--blitz-control") {
-        tauri_runtime_blitz::apply_runtime_debug_options(
-            tauri_runtime_blitz::RuntimeDebugOptions {
+        izumo::apply_runtime_debug_options(
+            izumo::RuntimeDebugOptions {
                 inspection_and_agent_control: true,
                 deep_intrusive_profiling: false,
             },
