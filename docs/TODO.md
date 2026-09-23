@@ -58,7 +58,7 @@ started.
 So one of these is true, and which one decides whether there is any work here:
 
 1. The control-server fix
-   ([tauri-runtime-blitz 6173d83](https://github.com/pathscale/tauri-runtime-blitz))
+   ([izumo 6173d83](https://github.com/pathscale/izumo))
    closed it after all. A hung-up peer returned the same transport error
    forever and every client that ever disconnected left a task spinning. The
    note that "with the fix in, the 8.04s stands" was written from a binary
@@ -629,7 +629,7 @@ lived in another process, so habits carried over from that build are mispriced.
 | 15 | **Pass Stylo a thread pool** (`main.rs:95`, `StyleThreading::Parallel`). We link Firefox's parallel style traversal and run it sequentially, because `DocumentConfig` defaults to `Sequential` and its own doc comment says the opposite. The multi-document hazard the comment warns about does not apply: one document, no iframes, one resolving thread. | 14 | [concurrency-todo.md](concurrency-todo.md) A2 |
 | 16 | **Partial.** `blitz-dom/parallel-construct` is enabled in `apps/gui/Cargo.toml`, so the existing rayon fan-out ships. Still open: a 0.6.4 on/off A/B for tab switching, shaping time, and RSS; item 19 also records the missing Genet pre-pass work rather than treating the feature flip as the complete optimization. | 14 | [concurrency-todo.md](concurrency-todo.md) A3 |
 | 17 | **Move the heavy read-only Tauri commands off the window thread** with `#[tauri::command(async)]`. 34 of 97 commands are non-async and therefore execute between two frames of the UI they serve, including `list_messages`, `list_task_log` and a filesystem walk in `list_table_sizes`. Audit call-order dependence first; leave the cheap ones and the writers sync. | none, but audit before edit | [concurrency-todo.md](concurrency-todo.md) C1, C2 |
-| 18 | **Decide whether the renderer moves to its own thread**, fastrender's model: UI thread does OS events and message passing, renderer worker does the pipeline. Needs a `Send` audit and interacts with the main-thread id checks in `tauri-runtime-blitz`. Compositor-style scroll is the item after it and composes with item 12. | 14, 17 measured | [concurrency-todo.md](concurrency-todo.md) D1, D2 |
+| 18 | **Decide whether the renderer moves to its own thread**, fastrender's model: UI thread does OS events and message passing, renderer worker does the pipeline. Needs a `Send` audit and interacts with the main-thread id checks in `izumo`. Compositor-style scroll is the item after it and composes with item 12. | 14, 17 measured | [concurrency-todo.md](concurrency-todo.md) D1, D2 |
 
 **Not on the list, with the reason:** parallel layout (no engine worth copying does it, and
 our cost is cache behaviour, which is item 7); moving DOM teardown to a worker (Boa and
@@ -660,7 +660,7 @@ feature flip, and item 12 gains a prerequisite.
 **Items 22 to 26 are one class, not five unrelated checks.** We have hit "the build graph is
 not what we believed" four times and recorded each separately: `blitz-dom/incremental` absent
 and costing a measured 13x, `log-phase-times` shipping in release while being used to measure
-it, `ps-anyrender-vello` reaching the app through `tauri-runtime-blitz` rather than where it
+it, `ps-anyrender-vello` reaching the app through `izumo` rather than where it
 was looked for, and Genet's own fontconfig failure seen from outside. Genet asserts its
 architecture mechanically instead, and its wasm target check would have replaced the entire
 audit above with one command. The class, the prior art and the five traps are in

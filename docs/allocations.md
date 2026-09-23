@@ -60,7 +60,7 @@ short-lived, single-threaded, LIFO-ish allocations per frame.
 
 ### There is no custom global allocator
 
-Grepped across `agencyzero`, `ps-blitz`, `ps-anyrender` and `tauri-runtime-blitz`:
+Grepped across `agencyzero`, `ps-blitz`, `ps-anyrender` and `izumo`:
 no `#[global_allocator]`, no mimalloc, no jemalloc. All of the churn above goes through
 macOS system malloc, which is the least favourable allocator for that exact pattern.
 

@@ -6,7 +6,7 @@
 
 | # | Repo | Kind | Why |
 |---|---|---|---|
-| 1 | `tauri-runtime-blitz` | **new** (this one) | Implements Tauri's `Runtime` trait over Blitz. Standalone crate, sibling to `tauri-runtime-wry`. |
+| 1 | `izumo` | **new** (this one) | Implements Tauri's `Runtime` trait over Blitz. Standalone crate, sibling to `tauri-runtime-wry`. |
 | 2 | `blitz-rust` | **fork** of DioxusLabs/blitz | Carries `blitz-script` (the Boa integration, PR #491) which is an unmerged draft. Also where we fix DOM gaps. Cloned at `~/code/blitz-rust`, branch `js-engine`. |
 | 3 | `agencyzero` | existing, modified | Gains a cargo feature to select the runtime. No frontend changes expected. |
 | 4 | `@pathscale/ui` | existing, modified | Blitz-compatible variants for the CSS features Blitz lacks (see `03-gaps.md`). |
@@ -27,7 +27,7 @@ tauri (2.11.5)                     upstream, unmodified
   |
   +-- tauri-runtime (2.11.3)       upstream, trait definitions
         |
-        +-- tauri-runtime-blitz    WE WRITE THIS
+        +-- izumo    WE WRITE THIS
               |
               +-- blitz-dom        fork: rendering
               +-- blitz-paint      fork
@@ -43,7 +43,7 @@ It owns the loopback WebDriver-compatible server described in `06-debug-control.
 talk to the renderer through a serialized command channel; the server thread must never touch
 Boa, the DOM, layout, or paint state directly.
 
-## What tauri-runtime-blitz must implement
+## What izumo must implement
 
 Against `tauri_runtime`'s traits (`Runtime`, `RuntimeHandle`, `WindowDispatch`,
 `WebviewDispatch`, `EventLoopProxy`):

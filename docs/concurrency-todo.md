@@ -2,7 +2,7 @@
 
 Written 2026-08-12. **Nothing here was measured.** It is a source review of this
 application against the engine checkouts it actually builds (`ps-blitz`,
-`ps-taffy`, `ps-anyrender`, and the local `tauri-runtime-blitz`), read alongside Chromium,
+`ps-taffy`, `ps-anyrender`, and the local `izumo`), read alongside Chromium,
 Gecko/WebRender, Stylo and fastrender. Where a number appears it is quoted from
 [performance.md](performance.md) or [HANDOVER.md](HANDOVER.md), which are the measured
 documents, and it says so.
@@ -235,7 +235,7 @@ thread. In both, a slow frame is a late frame, not a frozen input queue.
 
 ### 2.7 The IPC boundary: 34 of 97 commands run inside the frame
 
-`tauri-runtime-blitz/crates/tauri-runtime-blitz/src/ipc.rs:15` states the rule: "JavaScript
+`izumo/crates/izumo/src/ipc.rs:15` states the rule: "JavaScript
 invokes the handler on the document's owning thread." The handler is installed at `:26` and
 calls Tauri's IPC handler inline.
 
@@ -340,7 +340,7 @@ are not concurrency and belong to TODO items 8, 9 and the DOM list.
 
 **The honest answer to "can a worker do the cleanup".** No, not as stated, and not for a
 reason that a better design would fix cheaply. Boa and `blitz-dom` are deliberately
-single-threaded (`tauri-runtime-blitz/.../script_queue.rs:10`: "`ScriptDocument` is
+single-threaded (`izumo/.../script_queue.rs:10`: "`ScriptDocument` is
 intentionally single-threaded"). The JS heap, the DOM and the layout tree are one thread's
 data, so there is nothing separable to hand to a worker.
 `ScriptQueue::enqueue_task` (`script_queue.rs:67`) is the seam, and everything it accepts
@@ -476,7 +476,7 @@ guesses. Measure with three unpaced runs and discard the first, per
   (`script_queue.rs:67`) is already a thread-safe ingress to the document thread.
 - **Why it is a decision and not a task:** it needs a `Send` audit of everything `View`
   owns, it interacts with `run_on_main_thread` in
-  `tauri-runtime-blitz/.../runtime.rs:274` and the main-thread id checks at `:278` and
+  `izumo/.../runtime.rs:274` and the main-thread id checks at `:278` and
   `:311`, and macOS window and accessibility APIs are main-thread only, so the split is not
   where a naive reading puts it.
 - **Depends on:** A and C being measured, so the decision is made against a real remaining

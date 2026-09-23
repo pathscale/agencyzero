@@ -20,7 +20,7 @@ of anything:
 |---|---|---|---|
 | 1 | `blitz-dom`'s `incremental` feature was not in the build graph, so every `resolve` rebuilt the box tree and cleared the Taffy cache | a profile, weeks later | **13x**, measured. [performance.md](performance.md) calls it "the most fragile win here" |
 | 2 | `log-phase-times` sat on the base `blitz-dom` dependency line, so per-frame instrumentation shipped in release and sat inside every number taken with it | reading the manifest while writing [allocations.md](allocations.md) | every measurement to that date had the instrument in the baseline |
-| 3 | `ps-anyrender-vello` reaches the app through `tauri-runtime-blitz`, not through `ps-blitz-shell`, so a feature added where it was expected was never consulted | a feature that "did not work" | [HANDOVER.md](HANDOVER.md) records `cargo tree -e features -i <crate>` as the rule learned from it |
+| 3 | `ps-anyrender-vello` reaches the app through `izumo`, not through `ps-blitz-shell`, so a feature added where it was expected was never consulted | a feature that "did not work" | [HANDOVER.md](HANDOVER.md) records `cargo tree -e features -i <crate>` as the rule learned from it |
 | 4 | Two copies of one crate from two sources (path versus git, or git versus crates.io) | a wall of type errors inside a dependency nobody edited | the root `Cargo.toml` and `.cargo/config.toml` comments describe "eleven unrelated type errors" and "sixty type errors, all of them that" |
 
 Instance 4 is the only one that fails loudly, and even then it fails in the wrong place:

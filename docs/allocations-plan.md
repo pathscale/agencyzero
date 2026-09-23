@@ -272,7 +272,7 @@ allocator cannot move the frame numbers much. But 78M of empty-but-resident
 malloc regions is a direct claim on the 855MB.
 
 There is no `#[global_allocator]` in `agencyzero`, `ps-blitz`,
-`ps-anyrender` or `tauri-runtime-blitz`, so every allocation goes through macOS
+`ps-anyrender` or `izumo`, so every allocation goes through macOS
 system malloc — the least favourable allocator for thousands of small,
 short-lived, single-threaded, LIFO-ish allocations per frame, which is exactly
 the shape `blitz-paint` produces.
@@ -382,7 +382,7 @@ opaque number: `render()` minus paint.
 No new instrumentation was needed. `anyrender_vello`'s `render()` already
 contains a `debug_timer!` splitting the phases, behind a `log_frame_times`
 feature nothing enabled. Enabling it took one non-obvious step: the renderer
-reaches the app through `tauri-runtime-blitz`, not through `ps-blitz-shell`, so
+reaches the app through `izumo`, not through `ps-blitz-shell`, so
 a feature added anywhere in the ps-blitz workspace is never consulted. Naming
 `ps-anyrender-vello` directly in `apps/gui/Cargo.toml` under `blitz-inspector`
 is what reaches the copy actually built, because cargo unifies features across

@@ -81,7 +81,7 @@ Each of these produced a confident, wrong conclusion before it was caught.
    Three different builds produced byte-identical PNGs with the same SHA256. Do
    not use it to judge visual correctness.
 5. **`cargo fmt --check` gates the bundle build.** Unformatted code in any local
-   path checkout (`ps-blitz`, `tauri-runtime-blitz`, `ps-anyrender`)
+   path checkout (`ps-blitz`, `izumo`, `ps-anyrender`)
    fails the app build with a diff that looks unrelated to what you changed.
 6. **Piping the build through `tail` discards its exit status.** The honest
    check is the binary's mtime, not the exit code you think you saw.
@@ -408,7 +408,7 @@ the section above for the measurements.
 
 None of the above was visible before this work. Layout reported the cost of
 taking a snapshot as though it were the cost of a frame, with `scene`, `submit`
-and `present` hardcoded to zero (`tauri-runtime-blitz/src/runtime.rs:689`), and
+and `present` hardcoded to zero (`izumo/src/runtime.rs:689`), and
 script execution had no timing at all.
 
 - `blitz-shell/src/frame_stats.rs` publishes real per-frame timings with p95 and

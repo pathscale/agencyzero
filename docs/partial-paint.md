@@ -33,7 +33,7 @@ in [performance.md](performance.md). This document is what that would mean concr
 | **GPU backend and present** | **`anyrender_vello` -> vello -> wgpu -> Metal** | **no** |
 | Frame loop, redraw cadence | `blitz-shell` | n/a, decides when |
 | Windowing, events | winit | n/a |
-| Tauri runtime shim | `tauri-runtime-blitz` | n/a |
+| Tauri runtime shim | `izumo` | n/a |
 
 Three consecutive layers own the whole-window property:
 

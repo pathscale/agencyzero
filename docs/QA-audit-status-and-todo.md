@@ -9,7 +9,7 @@ Updated 2026-08-30. The repeatable procedure is
 - AgencyZero PR 201 unmounts every inactive top-level surface. It also keeps
   the legacy frontend unit suite manual and preserves typecheck, lint and the
   production frontend build as automatic CI.
-- tauri-runtime-blitz 0.1.17 carries the node-addressed control protocol,
+- tauri-runtime-blitz 0.1.17 (now izumo) carries the node-addressed control protocol,
   reusable glass support and the macOS availability fallback. Click activation
   targets the selected semantic node directly; coordinates do not select or
   retarget a control.

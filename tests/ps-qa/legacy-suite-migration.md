@@ -81,7 +81,7 @@ physical-pointer dismissal, owner-change dismissal, and restore outcomes.
 
 The piece that would close it is a component identity in the semantic tree. A
 PathScale/UI component already names its parts in a recipe and emits them as
-`data-slot`, but the tree TRB hands to ps-qa carries only `id`, `role`, `name`,
+`data-slot`, but the tree izumo hands to ps-qa carries only `id`, `role`, `name`,
 `bounds`, `visible` and `value` - `data-slot` is dropped, and `ps-qa dom`'s
 `attrs:` column is the node's value, not its attributes. Verified against the
 running app: every node in the rename subtree reports `attrs: (none)`.

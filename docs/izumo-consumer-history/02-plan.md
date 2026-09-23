@@ -60,7 +60,7 @@ already runs headless). No Tauri, no IPC. Fix DOM gaps found in `03-gaps.md`.
 
 **Pass:** the app renders and is interactive against mock data.
 
-## Stage 4 -- tauri-runtime-blitz
+## Stage 4 -- izumo
 
 Only now write the runtime. IPC bridge first (unblocks everything), then windowing, then
 overlay title bar hit-testing, then menu passthrough.
@@ -69,7 +69,7 @@ overlay title bar hit-testing, then menu passthrough.
 
 ## Stage 5 -- Ship behind a flag
 
-Cargo feature selects `tauri-runtime-wry` (default) or `tauri-runtime-blitz`. Both ship. Flip
+Cargo feature selects `tauri-runtime-wry` (default) or `izumo`. Both ship. Flip
 per-platform when Blitz is good enough. No big bang, no rollback risk.
 
 ## Non-goals
