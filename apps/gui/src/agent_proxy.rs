@@ -1711,18 +1711,51 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn watching_an_intentionally_signaled_exit_leaves_stopped() {
-        let state = Arc::new(AtomicU8::new(ConnectionState::Live as u8));
-        let child = Command::new("/bin/sh")
-            .arg("-c")
-            .arg("kill -INT $$")
+        use std::os::unix::process::CommandExt;
+
+        // Not `sh -c 'kill -INT $$'`. A shell run with `-c` installs its own
+        // SIGINT catcher and only acts on it at its next checkpoint, so when
+        // `kill` is the last command it can reach exit first and end with a
+        // status instead of the signal. A shell that inherits SIGINT as
+        // ignored cannot un-ignore it at all. Either way the watcher saw an
+        // ordinary exit, left the state `Live`, and this failed about one run
+        // in seven while the code under test was right.
+        //
+        // So the signal comes from here, to a program that never handles it,
+        // with its disposition forced to default across the exec. `spawn`
+        // returns only after the exec succeeded, so the signal cannot land in
+        // the fork before the reset. The ten seconds bound a signal that was
+        // somehow lost: the test then fails on a status exit, it does not hang.
+        let mut command = Command::new("/bin/sleep");
+        command
+            .arg("10")
             .stdin(Stdio::null())
             .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
-            .expect("spawn a shell");
+            .stderr(Stdio::null());
+        // SAFETY: `signal` is async-signal-safe, and nothing else runs between
+        // fork and exec.
+        unsafe {
+            command.pre_exec(|| {
+                if libc::signal(libc::SIGINT, libc::SIG_DFL) == libc::SIG_ERR {
+                    return Err(std::io::Error::last_os_error());
+                }
+                Ok(())
+            });
+        }
+        let child = command.spawn().expect("spawn a sleeper");
+        let pid = libc::pid_t::try_from(child.id()).expect("pid fits pid_t");
+        let state = Arc::new(AtomicU8::new(ConnectionState::Live as u8));
+        let watcher = watch_proxy_child(child, state.clone()).expect("spawn watcher");
+        // SAFETY: `pid` is our own unreaped child, held by the watcher's
+        // `wait`, so it cannot have been recycled for another process.
+        assert_eq!(
+            unsafe { libc::kill(pid, libc::SIGINT) },
+            0,
+            "signal the child: {}",
+            std::io::Error::last_os_error(),
+        );
 
-        watch_proxy_child(child, state.clone())
-            .expect("spawn watcher")
+        watcher
             .join()
             .expect("watcher finishes");
 
