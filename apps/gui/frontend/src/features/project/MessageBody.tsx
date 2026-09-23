@@ -1,12 +1,12 @@
 import type { JSX } from "@solidjs/web";
 import { createMemo, createSignal, For, Show } from "solid-js";
-import { softWrapToSpaces } from "./softWrap";
 import { Button } from "~/components/Button";
 import { Icon } from "~/components/Icon";
 import { isPromptSyntaxDirectiveLine } from "~/features/project/promptSyntax";
 import { isItemId, itemReferenceLabel, revealItemReference } from "~/lib/itemReference";
 import { describeError, log } from "~/lib/log";
 import { tx } from "~/stores/i18n";
+import { softWrapToSpaces } from "./softWrap";
 
 /**
  * Put text on the clipboard, by whichever route works here.
