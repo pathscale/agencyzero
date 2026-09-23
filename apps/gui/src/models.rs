@@ -98,14 +98,23 @@ pub fn verified_against(agent: Agent) -> String {
 /// the difference is visible in Settings. Failing the whole call instead would
 /// leave the picker with nothing over one agent's bad output.
 #[tauri::command]
-pub async fn list_models(discover: bool) -> Vec<AgentModelsDto> {
+pub async fn list_models(
+    state: tauri::State<'_, crate::AppState>,
+    discover: bool,
+) -> Result<Vec<AgentModelsDto>, String> {
+    let handle = state.reactor.handle();
+    Ok(catalogues(discover.then_some(&handle)).await)
+}
+
+/// The catalogues, asking each agent that can be asked when `discover` names
+/// the reactor to spawn it on, and reporting the verified list otherwise.
+pub(crate) async fn catalogues(discover: Option<&nagoya::reactor::Handle>) -> Vec<AgentModelsDto> {
     let mut catalogues = Vec::with_capacity(AGENTS.len());
     for agent in AGENTS {
         let verified = agent.models_verified();
-        let discovered = if discover {
-            agent.discover_models().await.ok()
-        } else {
-            None
+        let discovered = match discover {
+            Some(handle) => agent.discover_models(handle).await.ok(),
+            None => None,
         };
         let has_discovered = discovered.is_some();
         catalogues.push(AgentModelsDto {
@@ -129,7 +138,7 @@ mod tests {
     /// silently reverted would leave every model reading as not-default.
     #[tokio::test]
     async fn catalogues_serialize_in_the_shape_the_webview_expects() {
-        let catalogues = list_models(false).await;
+        let catalogues = catalogues(None).await;
         assert_eq!(catalogues.len(), AGENTS.len());
 
         let json = serde_json::to_value(&catalogues).expect("should serialize");
@@ -155,7 +164,7 @@ mod tests {
     /// and naming the weaker evidence behind the compiled list.
     #[tokio::test]
     async fn a_compiled_catalogue_never_claims_to_have_been_discovered() {
-        for catalogue in list_models(false).await {
+        for catalogue in catalogues(None).await {
             assert!(
                 !catalogue.discovered,
                 "{:?} claimed discovery without being asked",
@@ -167,7 +176,7 @@ mod tests {
     /// Exactly one preselection per agent, or the picker opens on nothing.
     #[tokio::test]
     async fn every_agent_offers_one_default() {
-        for catalogue in list_models(false).await {
+        for catalogue in catalogues(None).await {
             let defaults = catalogue.models.iter().filter(|m| m.is_default).count();
             assert_eq!(defaults, 1, "{:?} should mark one default", catalogue.agent);
         }
@@ -175,7 +184,7 @@ mod tests {
 
     #[tokio::test]
     async fn claude_opus_4_8_is_independently_selectable() {
-        let catalogues = list_models(false).await;
+        let catalogues = catalogues(None).await;
         let claude = catalogues
             .iter()
             .find(|catalogue| catalogue.agent == Agent::Claude)

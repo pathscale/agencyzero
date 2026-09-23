@@ -309,6 +309,14 @@ const IMPLEMENTED: &[&str] = &[
 /// What the GUI carries for the life of the process.
 pub(crate) struct AppState {
     tables: Arc<Tables>,
+    /// The one nagoya reactor this process owns, with a thread of its own.
+    ///
+    /// agent-abstraction registers the provider CLIs it spawns on a reactor
+    /// the caller passes in rather than one it starts for itself, so it lives
+    /// here, for the life of the app, and its handle goes to each call.
+    /// Dropping it would stop the thread that reports those children's pipes
+    /// and exits.
+    reactor: nagoya::reactor::Reactor,
     /// The threads az's own synchronous work runs on, owned rather than
     /// borrowed from tokio's process-wide blocking pool. See [`runtime::Pool`].
     ///
@@ -3043,7 +3051,16 @@ fn main() {
                 },
             )
             .map_err(|error| format!("could not apply local Blitz debugging: {error}"))?;
-            let proxy = Arc::new(agent_proxy::AgencyProxy::new(&config_dir, configured_proxy));
+            // The one reactor the app owns: the proxy client's socket and every
+            // CLI agent-abstraction spawns register on it. Kept in `AppState`
+            // below for the life of the process.
+            let reactor = nagoya::reactor::Reactor::start()
+                .map_err(|error| format!("could not start the nagoya reactor: {error}"))?;
+            let proxy = Arc::new(agent_proxy::AgencyProxy::new(
+                &config_dir,
+                configured_proxy,
+                reactor.handle(),
+            ));
             // A checkpoint backed by a still-live proxy run remains a live
             // draft. Only orphaned checkpoints become `interrupted` rows.
             let live_proxy_runs = tauri::async_runtime::block_on(proxy.list_runs())
@@ -3057,6 +3074,7 @@ fn main() {
             ));
             let restart_resume = take_restart_resume(&config_dir);
             app.manage(AppState {
+                reactor,
                 tables: Arc::new(tables),
                 pool: Arc::new(runtime::Pool::new()),
                 proxy,
