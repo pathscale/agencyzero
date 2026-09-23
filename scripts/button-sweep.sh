@@ -23,7 +23,12 @@ set -eu
 cd "$(dirname "$0")/.."
 readonly ROOT="$PWD"
 readonly LIVE=/tmp/qa-profile-db
-readonly DESCRIPTOR="$ROOT/target/blitz-control.json"
+# The control server advertises itself as `<pid>-<instance>.json` in a
+# directory under $TMPDIR. Nothing writes `target/blitz-control.json` any more,
+# and waiting for it made every run fail to attach. The directory is matched by
+# wildcard because its name is due to lose `tauri`; the pid of the child
+# launched below is what keeps this from attaching to another instance.
+readonly DESCRIPTOR_ROOT="${TMPDIR:-/tmp}"
 
 surface=${1:-}
 if [ "$#" -gt 1 ]; then
@@ -99,8 +104,12 @@ cd "$ROOT"
 
 attached=0
 attach_attempt=0
+DESCRIPTOR=
 while [ "$attach_attempt" -lt 40 ]; do
-  if "$qa" nodes --descriptor "$DESCRIPTOR" >/dev/null 2>&1; then
+  for candidate in "${DESCRIPTOR_ROOT%/}"/*/"$APP"-*.json; do
+    [ -e "$candidate" ] && DESCRIPTOR=$candidate
+  done
+  if [ -n "$DESCRIPTOR" ] && "$qa" nodes --descriptor "$DESCRIPTOR" >/dev/null 2>&1; then
     attached=1
     break
   fi
