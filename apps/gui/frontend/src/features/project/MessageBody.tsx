@@ -1,5 +1,6 @@
 import type { JSX } from "@solidjs/web";
 import { createMemo, createSignal, For, Show } from "solid-js";
+import { softWrapToSpaces } from "./softWrap";
 import { Button } from "~/components/Button";
 import { Icon } from "~/components/Icon";
 import { isPromptSyntaxDirectiveLine } from "~/features/project/promptSyntax";
@@ -670,7 +671,8 @@ function renderItemReferences(text: string, id: string): JSX.Element {
     );
 }
 
-function renderInline(text: string, id: string): JSX.Element[] {
+function renderInline(rawText: string, id: string): JSX.Element[] {
+  const text = softWrapToSpaces(rawText);
   // One text node is the correct rendered structure for plain prose. The old
   // path still built two mapped arrays and nested fragments for it, multiplying
   // Solid/Blitz clone work across every visible paragraph on every tab mount.
