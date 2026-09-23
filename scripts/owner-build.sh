@@ -80,7 +80,7 @@ if grep -q '^\[patch\.crates-io\]' Cargo.toml; then
   grep -A6 '^\[patch\.crates-io\]' Cargo.toml | sed 's/^/    /'
 fi
 
-for crate in ps-blitz-script ps-boa-engine tauri-runtime-blitz; do
+for crate in ps-blitz-script ps-boa-engine izumo; do
   line="$(cargo tree -i "$crate" --depth 0 2>/dev/null | grep -v '^warning' | head -1 || true)"
   [ -n "$line" ] || fail "$crate is not in the dependency graph"
   printf '  %s\n' "$line"

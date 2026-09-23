@@ -57,7 +57,7 @@ use tauri_plugin_dialog::DialogExt;
 use worktable::prelude::SelectQueryExecutor;
 
 #[cfg(feature = "blitz-runtime")]
-pub(crate) type AppHandle = tauri::AppHandle<tauri_runtime_blitz::BlitzRuntime>;
+pub(crate) type AppHandle = tauri::AppHandle<izumo::BlitzRuntime>;
 #[cfg(not(feature = "blitz-runtime"))]
 pub(crate) type AppHandle = tauri::AppHandle<tauri::Wry>;
 
@@ -997,7 +997,7 @@ fn resolved_highlights() -> String {
     let wanted = [
         "ps-blitz-script",
         "ps-boa-engine",
-        "tauri-runtime-blitz",
+        "izumo",
         "@pathscale/ui",
     ];
     // `cargo tree` marks a crate it has already expanded with a trailing
@@ -1793,8 +1793,8 @@ pub(crate) async fn apply_settings_patch(
         || previous.blitz_deep_profiling_enabled != parsed.blitz_deep_profiling_enabled;
     #[cfg(feature = "blitz-runtime")]
     if runtime_debug_changed {
-        tauri_runtime_blitz::apply_runtime_debug_options(
-            tauri_runtime_blitz::RuntimeDebugOptions {
+        izumo::apply_runtime_debug_options(
+            izumo::RuntimeDebugOptions {
                 inspection_and_agent_control: parsed.blitz_control_enabled,
                 deep_intrusive_profiling: parsed.blitz_deep_profiling_enabled,
             },
@@ -1805,8 +1805,8 @@ pub(crate) async fn apply_settings_patch(
     if let Err(error) = state.tables.kv_put(settings::KEY, merged.to_string()).await {
         #[cfg(feature = "blitz-runtime")]
         if runtime_debug_changed {
-            let _ = tauri_runtime_blitz::apply_runtime_debug_options(
-                tauri_runtime_blitz::RuntimeDebugOptions {
+            let _ = izumo::apply_runtime_debug_options(
+                izumo::RuntimeDebugOptions {
                     inspection_and_agent_control: previous.blitz_control_enabled,
                     deep_intrusive_profiling: previous.blitz_deep_profiling_enabled,
                 },
@@ -2062,7 +2062,7 @@ fn ephemeral_location() -> location::DataLocation {
 #[cfg(all(feature = "blitz-runtime", target_os = "macos"))]
 #[tauri::command]
 fn set_window_chrome(tint: Option<[u8; 4]>, radius: Option<f64>, enabled: bool) {
-    tauri_runtime_blitz::set_window_glass(tint.map(|[r, g, b, a]| (r, g, b, a)), radius, enabled);
+    izumo::set_window_glass(tint.map(|[r, g, b, a]| (r, g, b, a)), radius, enabled);
 }
 
 /// Not macOS, or not the Blitz runtime: nothing to carry across.
@@ -2463,12 +2463,41 @@ fn main() {
      * into a library for one tool's sake.
      */
     if let Ok(spec) = std::env::var(qa_profile::ENV) {
-        let Some((source, destination)) = spec.rsplit_once(':') else {
-            eprintln!("{}: expected <source-db>:<destination>", qa_profile::ENV);
-            std::process::exit(2);
+        // `<source-db>:<destination>` still works, and both halves now have a
+        // default so the common case needs neither.
+        //
+        // Naming them by hand is the step that goes wrong: this build knows
+        // which identifier it uses and where its store is, and a caller typing
+        // the other one scrubs the wrong profile or writes a QA fixture over a
+        // real store. `AZ_BUILD_QA_PROFILE=1` takes this build's own store and
+        // writes the committed fixture path.
+        let (source, destination) = match spec.rsplit_once(':') {
+            Some((source, destination)) => (
+                std::path::PathBuf::from(source),
+                std::path::PathBuf::from(destination),
+            ),
+            None => {
+                let identifier = if cfg!(feature = "experimental") {
+                    "com.pathscale.agencyzero.experimental"
+                } else {
+                    "com.pathscale.agencyzero"
+                };
+                let Some(data_dir) = dirs::data_dir() else {
+                    eprintln!("{}: no data directory for the default store", qa_profile::ENV);
+                    std::process::exit(2);
+                };
+                let source = data_dir.join(identifier).join("db");
+                let destination = std::path::PathBuf::from(
+                    concat!(env!("CARGO_MANIFEST_DIR"), "/../../target/qa-profile"),
+                );
+                println!(
+                    "building from {} into {}",
+                    source.display(),
+                    destination.display()
+                );
+                (source, destination)
+            }
         };
-        let source = std::path::PathBuf::from(source);
-        let destination = std::path::PathBuf::from(destination);
         match nagoya::block_on(qa_profile::build(&source, &destination)) {
             Ok(rows) => {
                 println!("scrubbed {rows} rows into {}", destination.display());
@@ -2496,7 +2525,7 @@ fn main() {
     // the native window actually did — whether a glass backdrop was applied, or
     // refused, and why.
     #[cfg(feature = "blitz-runtime")]
-    tauri_runtime_blitz::set_runtime_trace(|message| {
+    izumo::set_runtime_trace(|message| {
         crate::log!(log::Level::Info, "blitz", "{message}");
     });
 
@@ -2536,7 +2565,7 @@ fn main() {
     }));
 
     #[cfg(feature = "blitz-runtime")]
-    tauri_runtime_blitz::set_document_factory(create_blitz_document);
+    izumo::set_document_factory(create_blitz_document);
 
     // The CLI switch is the rescue path for QA when the Settings toggle is
     // off. Read it before the app is built so control can start before the
@@ -2548,7 +2577,7 @@ fn main() {
         std::env::args().any(|arg| arg == "--blitz-deep-profiling");
 
     #[cfg(feature = "blitz-runtime")]
-    let builder = tauri_runtime_blitz::builder();
+    let builder = izumo::builder();
     #[cfg(not(feature = "blitz-runtime"))]
     let builder = tauri::Builder::default();
 
@@ -3012,8 +3041,8 @@ fn main() {
                     .as_ref()
                     .is_some_and(|settings| settings.blitz_deep_profiling_enabled);
             #[cfg(feature = "blitz-runtime")]
-            tauri_runtime_blitz::apply_runtime_debug_options(
-                tauri_runtime_blitz::RuntimeDebugOptions {
+            izumo::apply_runtime_debug_options(
+                izumo::RuntimeDebugOptions {
                     inspection_and_agent_control: blitz_control_enabled,
                     deep_intrusive_profiling: blitz_deep_profiling_enabled,
                 },
@@ -3300,8 +3329,8 @@ fn main() {
     // ps-qa gets a discovery descriptor even if native app activation stalls.
     #[cfg(feature = "blitz-runtime")]
     if cli_blitz_control_enabled || cli_blitz_deep_profiling_enabled {
-        tauri_runtime_blitz::apply_runtime_debug_options(
-            tauri_runtime_blitz::RuntimeDebugOptions {
+        izumo::apply_runtime_debug_options(
+            izumo::RuntimeDebugOptions {
                 inspection_and_agent_control: cli_blitz_control_enabled,
                 deep_intrusive_profiling: cli_blitz_deep_profiling_enabled,
             },
