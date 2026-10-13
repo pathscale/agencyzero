@@ -34,6 +34,8 @@ jobs:
         working-directory: apps/gui/frontend
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       # `press` and `prepare_press` still resolve an exact semantic node; they
       # only ask ps-qa to use a person's physical pointer path. Click-away and
@@ -73,6 +75,8 @@ jobs:
       CARGO_INCREMENTAL: 1
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Check portable shell scripts
         run: /bin/sh tests/shell-scripts.sh
