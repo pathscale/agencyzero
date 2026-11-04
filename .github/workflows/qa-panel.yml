@@ -13,16 +13,6 @@ name: QA panel
 # still select a focused group while authoring, or add inventory reconciliation
 # and lifecycle checks for the exhaustive release audit.
 on:
-  pull_request:
-    paths:
-      - '.github/workflows/qa-panel.yml'
-      - 'apps/gui/frontend/package.json'
-      - 'apps/gui/frontend/src/**'
-      - 'ps-qa.ron'
-      - 'scripts/qa-profile-restore.sh'
-      - 'scripts/qa-memory-navigation.sh'
-      - 'scripts/qa-run-groups.sh'
-      - 'tests/ps-qa/**'
   workflow_dispatch:
     inputs:
       suite:

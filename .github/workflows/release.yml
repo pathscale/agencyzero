@@ -32,9 +32,6 @@ name: Release
 # fronted by this same zone purges the zone on every one of its own deploys.
 
 on:
-  push:
-    branches:
-      - master
   workflow_dispatch:
     inputs:
       force:
