@@ -1993,6 +1993,24 @@ async fn set_settings(
     patch: serde_json::Value,
     state: State<'_, AppState>,
 ) -> Result<GlobalSettings, String> {
+    let object = patch
+        .as_object()
+        .ok_or_else(|| "settings patch must be an object".to_string())?;
+    const PROTECTED: &[&str] = &[
+        "agentProxyBinary",
+        "defaultPermission",
+        "envPolicy",
+        "forwardProxyVars",
+        "blitzControlEnabled",
+        "agent_proxy_binary",
+        "default_permission",
+        "env_policy",
+        "forward_proxy_vars",
+        "blitz_control_enabled",
+    ];
+    if object.keys().any(|key| PROTECTED.contains(&key.as_str())) {
+        return Err("security settings require a native owner-authorized path".to_string());
+    }
     apply_settings_patch(patch, &state).await
 }
 
