@@ -1,7 +1,7 @@
 [package]
 name = "agencyzero-blitz-preview"
 description = "Native Blitz and Boa preview shell for the AgencyZero frontend"
-version = "0.5.0"
+version = "0.5.1"
 edition = "2024"
 publish = false
 build = "build.rs"
@@ -17,14 +17,17 @@ anyrender_vello_cpu = { package = "ps-anyrender-vello-cpu", version = "^0.16.0",
 # The ps-blitz line has to match izumo's: `izumo::set_document_factory` takes
 # a factory returning its own `ps-blitz-script` `ScriptDocument`, and a second
 # release line here would be a second, incompatible `ScriptDocument` type.
-blitz-dom = { package = "ps-blitz-dom", version = "^0.4", features = ["system-fonts"] }
-blitz-paint = { package = "ps-blitz-paint", version = "^0.4", features = ["scrollbars"] }
-blitz-script = { package = "ps-blitz-script", version = "^0.4", features = ["system-fonts"] }
-blitz-traits = { package = "ps-blitz-traits", version = "^0.4" }
+blitz-dom = { package = "ps-blitz-dom", version = "^0.6.5", features = ["system-fonts"] }
+blitz-paint = { package = "ps-blitz-paint", version = "^0.6.5", features = ["scrollbars"] }
+blitz-script = { package = "ps-blitz-script", version = "^0.6.5", features = ["system-fonts"] }
+blitz-script-ekojit = { package = "ps-blitz-script-ekojit", version = "^0.1.0", path = "../../../ekojit/crates/blitz-script-ekojit", features = ["system-fonts"] }
+blitz-traits = { package = "ps-blitz-traits", version = "^0.6.5" }
 brotli = { version = "^8.0.4", default-features = false, features = ["std"] }
 png = { version = "^0.18.1", optional = true }
 tauri = { version = "^2.11.5", default-features = false, features = ["compression"] }
-izumo = "^0.4"
+izumo = "^0.6.5"
+blitz-control-protocol = "^0.7.2"
+serde_json = "1"
 url = "^2.5.8"
 
 # For `--offscreen`: the activation policy has to be set before any window
@@ -50,7 +53,7 @@ capture = ["dep:anyrender_vello_cpu", "dep:png"]
 # `diagnosticsUnavailable`, which reads as a broken harness rather than a
 # missing feature. It is idle-cheap: the runtime flag still gates the work.
 default = ["diagnostics"]
-diagnostics = ["izumo/diagnostics"]
+diagnostics = ["izumo/diagnostics", "blitz-script-ekojit/debug-control"]
 
 [profile.release]
 codegen-units = 1

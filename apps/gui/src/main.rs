@@ -181,15 +181,305 @@ fn decompress_blitz_asset(
 }
 
 #[cfg(feature = "blitz-runtime")]
-fn create_blitz_document(url: &str) -> Result<blitz_script::ScriptDocument, String> {
+struct AgencyBlitzDocument {
+    document: blitz_script_ekojit::EkojitDocument,
+    poll_hooks: Vec<izumo::DocumentPollHook>,
+}
+
+#[cfg(feature = "blitz-runtime")]
+impl AgencyBlitzDocument {
+    fn run_poll_hooks(&mut self, context: Option<&std::task::Context<'_>>) -> bool {
+        let mut hooks = std::mem::take(&mut self.poll_hooks);
+        let mut work = false;
+        for hook in &mut hooks {
+            work |= hook(self, context);
+        }
+        hooks.append(&mut self.poll_hooks);
+        self.poll_hooks = hooks;
+        work
+    }
+}
+
+#[cfg(feature = "blitz-runtime")]
+impl blitz_dom::Document for AgencyBlitzDocument {
+    fn inner(&self) -> blitz_dom::DocGuard<'_> {
+        blitz_dom::Document::inner(&self.document)
+    }
+
+    fn inner_mut(&mut self) -> blitz_dom::DocGuardMut<'_> {
+        blitz_dom::Document::inner_mut(&mut self.document)
+    }
+
+    fn handle_ui_event(&mut self, event: blitz_traits::events::UiEvent) {
+        blitz_dom::Document::handle_ui_event(&mut self.document, event)
+    }
+
+    fn poll(&mut self, context: Option<std::task::Context<'_>>) -> bool {
+        let mut work = blitz_dom::Document::poll(&mut self.document, context.as_ref().map(|cx| {
+            std::task::Context::from_waker(cx.waker())
+        }));
+        work |= self.run_poll_hooks(context.as_ref());
+        work
+    }
+
+    fn poll_for_settle(
+        &mut self,
+        context: Option<std::task::Context<'_>>,
+        run_timers: bool,
+    ) -> bool {
+        let mut work = blitz_dom::Document::poll_for_settle(
+            &mut self.document,
+            context.as_ref().map(|cx| std::task::Context::from_waker(cx.waker())),
+            run_timers,
+        );
+        work |= self.run_poll_hooks(context.as_ref());
+        work
+    }
+
+    fn prepare_teardown(&mut self) {
+        blitz_dom::Document::prepare_teardown(&mut self.document)
+    }
+
+    fn dispose(self: Box<Self>) -> Arc<blitz_dom::release::Teardown> {
+        let Self { document, .. } = *self;
+        blitz_dom::Document::dispose(Box::new(document))
+    }
+
+    fn set_page_visible(&mut self, visible: bool) {
+        blitz_dom::Document::set_page_visible(&mut self.document, visible)
+    }
+
+    fn freeze(&mut self) {
+        blitz_dom::Document::freeze(&mut self.document)
+    }
+
+    fn finish_restore(&mut self) {
+        blitz_dom::Document::finish_restore(&mut self.document)
+    }
+
+    fn resume(&mut self) {
+        blitz_dom::Document::resume(&mut self.document)
+    }
+}
+
+#[cfg(all(feature = "blitz-runtime", feature = "blitz-inspector", unix))]
+impl blitz_control_protocol::ControlScriptBackend for AgencyBlitzDocument {
+    fn dispatch_dom_event(&mut self, event: blitz_traits::events::DomEvent) {
+        self.document.handle_dom_event(event);
+    }
+
+    fn handle_pointer_move_to_node(
+        &mut self,
+        event: blitz_traits::events::BlitzPointerEvent,
+        node: blitz_dom::NodeId,
+    ) {
+        self.document.handle_pointer_move_to_node(event, node);
+    }
+
+    fn handle_ui_event_to_node(
+        &mut self,
+        event: blitz_traits::events::UiEvent,
+        node: blitz_dom::NodeId,
+    ) {
+        self.document.handle_ui_event_to_node(event, node);
+    }
+}
+
+#[cfg(feature = "blitz-runtime")]
+struct AgencyDocumentHost;
+
+#[cfg(feature = "blitz-runtime")]
+fn agency_document(document: &dyn blitz_dom::Document) -> Option<&AgencyBlitzDocument> {
+    (document as &dyn std::any::Any).downcast_ref()
+}
+
+#[cfg(feature = "blitz-runtime")]
+fn agency_document_mut(document: &mut dyn blitz_dom::Document) -> Option<&mut AgencyBlitzDocument> {
+    (document as &mut dyn std::any::Any).downcast_mut()
+}
+
+#[cfg(feature = "blitz-runtime")]
+impl izumo::DocumentHost for AgencyDocumentHost {
+    fn current_url(&self, document: &dyn blitz_dom::Document) -> Option<url::Url> {
+        Some(blitz_dom::Document::inner(agency_document(document)?).url().clone())
+    }
+
+    fn eval(&self, document: &mut dyn blitz_dom::Document, source: &str) {
+        if let Some(doc) = agency_document_mut(document) {
+            let _ = doc.document.eval_source(Arc::new(blitz_script_ekojit::PageSource {
+                text: Arc::from(source),
+                url: Arc::from("agencyzero:eval"),
+            }));
+        }
+    }
+
+    fn eval_json(
+        &self,
+        document: &mut dyn blitz_dom::Document,
+        source: &str,
+    ) -> Result<serde_json::Value, String> {
+        agency_document_mut(document)
+            .ok_or_else(|| String::from("document is not owned by AgencyZero"))?
+            .document
+            .with_embedder_host(|host| host.eval_json(source))
+    }
+
+    fn set_ipc_handler(
+        &self,
+        document: &mut dyn blitz_dom::Document,
+        handler: Box<dyn Fn(String)>,
+    ) {
+        struct IpcHandler(Box<dyn Fn(String)>);
+        fn ipc_post_message(
+            realm: &mut blitz_script_ekojit::embedder::RealmHost<'_>,
+            args: &[blitz_script_ekojit::embedder::HostValue],
+        ) -> Result<
+            blitz_script_ekojit::embedder::HostValue,
+            blitz_script_ekojit::embedder::NativeFailure,
+        > {
+            if let Some(handler) = realm.state::<IpcHandler>("agencyzero.ipc")
+                && let Some(blitz_script_ekojit::embedder::HostValue::Utf16(units)) = args.first()
+            {
+                (handler.0)(String::from_utf16_lossy(units));
+            }
+            Ok(blitz_script_ekojit::embedder::HostValue::Undefined)
+        }
+        if let Some(doc) = agency_document_mut(document) {
+            let _ = doc.document.with_realm_host(|realm| {
+                realm.set_state("agencyzero.ipc", std::rc::Rc::new(IpcHandler(handler)))?;
+                realm.register_intrinsic("__azIpcPostMessage", 1, ipc_post_message)
+            });
+            let _ = doc.document.eval_source(Arc::new(blitz_script_ekojit::PageSource {
+                text: Arc::from(
+                    "globalThis.ipc = { postMessage: function(msg) { __azIpcPostMessage(String(msg)); } };",
+                ),
+                url: Arc::from("agencyzero:ipc-install"),
+            }));
+        }
+    }
+
+    fn add_poll_hook(&self, document: &mut dyn blitz_dom::Document, hook: izumo::DocumentPollHook) {
+        if let Some(doc) = agency_document_mut(document) {
+            doc.poll_hooks.push(hook);
+        }
+    }
+
+    #[cfg(feature = "blitz-inspector")]
+    fn service_debug_controller(
+        &self,
+        _document: &mut dyn blitz_dom::Document,
+        _controller: &mut blitz_script::DebugController,
+        _animation_time: f64,
+    ) -> bool {
+        false
+    }
+
+    #[cfg(all(feature = "blitz-inspector", unix))]
+    fn agent(
+        &self,
+        document: &mut dyn blitz_dom::Document,
+        control: &mut blitz_control_protocol::in_process::DocumentControl,
+        request: blitz_control_protocol::AgentControlRequest,
+    ) -> blitz_control_protocol::DebugResponse {
+        match agency_document_mut(document) {
+            Some(doc) => control.agent(doc, request),
+            None => blitz_control_protocol::DebugResponse::Error(blitz_control_protocol::DebugError {
+                code: "unsupportedDocument".into(),
+                message: "document is not owned by AgencyZero".into(),
+            }),
+        }
+    }
+
+    #[cfg(all(feature = "blitz-inspector", unix))]
+    fn diagnostics(
+        &self,
+        _document: &mut dyn blitz_dom::Document,
+        _control: &mut blitz_control_protocol::in_process::DocumentControl,
+        _request: blitz_control_protocol::DiagnosticsRequest,
+    ) -> blitz_control_protocol::DebugResponse {
+        blitz_control_protocol::DebugResponse::Error(blitz_control_protocol::DebugError {
+            code: "unsupportedRequest".into(),
+            message: "AgencyZero's native page host does not implement diagnostics requests".into(),
+        })
+    }
+
+    #[cfg(all(feature = "blitz-inspector", unix))]
+    fn diagnostic_batch(
+        &self,
+        document: &dyn blitz_dom::Document,
+        console_after: u64,
+        errors_after: u64,
+        limit: usize,
+    ) -> blitz_script::DiagnosticBatch {
+        let empty = |next_sequence| blitz_script::DiagnosticStreamBatch {
+            entries: Vec::new(),
+            lost: 0,
+            next_sequence,
+        };
+        let Some(doc) = agency_document(document) else {
+            return blitz_script::DiagnosticBatch {
+                console: empty(console_after),
+                errors: empty(errors_after),
+            };
+        };
+        let stream = |entries: Vec<blitz_script::DiagnosticEntry>, after| {
+            let entries = entries.into_iter()
+                .filter(|entry| entry.sequence > after)
+                .take(limit.clamp(1, 1000))
+                .collect::<Vec<_>>();
+            let next_sequence = entries.last().map_or(after, |entry| entry.sequence);
+            blitz_script::DiagnosticStreamBatch { entries, lost: 0, next_sequence }
+        };
+        blitz_script::DiagnosticBatch {
+            console: stream(doc.document.console_entries(), console_after),
+            errors: stream(doc.document.runtime_errors(), errors_after),
+        }
+    }
+}
+
+#[cfg(feature = "blitz-runtime")]
+fn create_blitz_document(url: &str) -> Result<izumo::ApplicationDocument, String> {
     let css = decompress_blitz_asset(BLITZ_CSS_BROTLI, BLITZ_CSS_LEN, "CSS")?;
     let html = BLITZ_SHELL_HTML.replacen(BLITZ_CSS_MARKER, &css, 1);
     let config = blitz_dom::DocumentConfig {
         base_url: Some(url.into()),
         ..Default::default()
     };
-    Ok(blitz_script::ScriptDocument::from_html(&html, config)
-        .with_fetcher(EmbeddedBlitzScriptFetcher))
+    let mut document = blitz_script_ekojit::EkojitDocument::from_html(
+        Arc::from(html),
+        config,
+        blitz_script_ekojit::NativePageDefect::None,
+    ).map_err(|error| error.to_string())?;
+    let _ = document.set_initial_script_budget(std::time::Duration::from_secs(60));
+    let prelude = r#"
+        globalThis.setInterval = globalThis.setInterval || ((callback, delay, ...args) => {
+          const run = () => { callback(...args); timer = setTimeout(run, delay); };
+          let timer = setTimeout(run, delay); return timer;
+        });
+        globalThis.clearInterval = globalThis.clearInterval || globalThis.clearTimeout;
+        globalThis.requestIdleCallback = globalThis.requestIdleCallback || (callback => setTimeout(() => callback({didTimeout:false,timeRemaining:()=>0}), 1));
+        globalThis.cancelIdleCallback = globalThis.cancelIdleCallback || globalThis.clearTimeout;
+        globalThis.ResizeObserver = globalThis.ResizeObserver || class { observe() {} unobserve() {} disconnect() {} };
+        globalThis.IntersectionObserver = globalThis.IntersectionObserver || class { observe() {} unobserve() {} disconnect() {} takeRecords() { return []; } };
+        globalThis.PerformanceObserver = globalThis.PerformanceObserver || class { observe() {} disconnect() {} takeRecords() { return []; } };
+        globalThis.performance = globalThis.performance || (() => { const t0 = Date.now(); return { timeOrigin: t0, now: () => Date.now() - t0, mark: () => {}, measure: () => {}, getEntries: () => [], getEntriesByType: () => [], getEntriesByName: () => [], clearMarks: () => {}, clearMeasures: () => {} }; })();
+        globalThis.CSS = globalThis.CSS || {}; globalThis.CSS.supports = globalThis.CSS.supports || (() => false);
+        globalThis.btoa = globalThis.btoa || (value => globalThis.Buffer ? Buffer.from(value, 'binary').toString('base64') : '');
+        globalThis.atob = globalThis.atob || (value => globalThis.Buffer ? Buffer.from(value, 'base64').toString('binary') : '');
+        globalThis.encodeURIComponent = globalThis.encodeURIComponent || encodeURI;
+        globalThis.decodeURIComponent = globalThis.decodeURIComponent || decodeURI;
+        globalThis.encodeURI = globalThis.encodeURI || (value => String(value));
+        globalThis.decodeURI = globalThis.decodeURI || (value => String(value));
+    "#;
+    let _ = document.eval_source(Arc::new(blitz_script_ekojit::PageSource {
+        text: Arc::from(prelude),
+        url: Arc::from("agencyzero:compatibility"),
+    }));
+    document.set_script_fetcher(EmbeddedBlitzScriptFetcher);
+    Ok(izumo::ApplicationDocument::new(
+        Box::new(AgencyBlitzDocument { document, poll_hooks: Vec::new() }),
+        Arc::new(AgencyDocumentHost),
+    ))
 }
 
 /// Commands this build actually implements.
@@ -1002,7 +1292,7 @@ const BUILD: BuildInfo = BuildInfo {
 /// that decide whether a rendering fix is present, so they go in the log where
 /// they are read without asking the app anything.
 fn resolved_highlights() -> String {
-    let wanted = ["ps-blitz-script", "ps-boa-engine", "izumo", "@pathscale/ui"];
+    let wanted = ["ps-blitz-script", "ps-blitz-script-ekojit", "izumo", "@pathscale/ui"];
     // `cargo tree` marks a crate it has already expanded with a trailing
     // `(*)`, so every package appears twice. Same version, no extra
     // information, and it makes the line read as though the graph were

@@ -167,10 +167,14 @@ jobs:
           STORAGE_API_KEY: ${{ secrets.BUNNYCDN_STORAGE_API_KEY }}
           STORAGE_NAME: ${{ secrets.BUNNYCDN_STORAGE_NAME }}
         run: |
+          set +x
+          storage_request() {
+            { printf 'AccessKey: %s\n' "$STORAGE_API_KEY"; } | curl -H @- "$@"
+          }
           gunzip -t "$TARBALL"
-          curl -sS -X DELETE -H "AccessKey: $STORAGE_API_KEY" \
+          storage_request -sS -X DELETE \
             "https://storage.bunnycdn.com/$STORAGE_NAME/$CDN_DIR/AgencyZeroExperimental.app.tar.gz" || true
-          curl -sS --fail-with-body -X PUT -H "AccessKey: $STORAGE_API_KEY" \
+          storage_request -sS --fail-with-body -X PUT \
             -T "$TARBALL" \
             "https://storage.bunnycdn.com/$STORAGE_NAME/$CDN_DIR/AgencyZeroExperimental.app.tar.gz"
 
@@ -179,7 +183,11 @@ jobs:
           ZONE_API_KEY: ${{ secrets.BUNNYCDN_ZONE_API_KEY }}
           ZONE_ID: ${{ secrets.BUNNYCDN_ZONE_ID }}
         run: |
-          curl -sS --fail-with-body -X POST -H "AccessKey: $ZONE_API_KEY" \
+          set +x
+          zone_request() {
+            { printf 'AccessKey: %s\n' "$ZONE_API_KEY"; } | curl -H @- "$@"
+          }
+          zone_request -sS --fail-with-body -X POST \
             "https://bunnycdn.com/api/pullzone/$ZONE_ID/purgeCache"
           LOCAL=$(shasum -a 256 "$TARBALL" | cut -d' ' -f1)
           for attempt in 1 2 3 4 5 6; do
@@ -201,12 +209,19 @@ jobs:
           ZONE_API_KEY: ${{ secrets.BUNNYCDN_ZONE_API_KEY }}
           ZONE_ID: ${{ secrets.BUNNYCDN_ZONE_ID }}
         run: |
-          curl -sS -X DELETE -H "AccessKey: $STORAGE_API_KEY" \
+          set +x
+          storage_request() {
+            { printf 'AccessKey: %s\n' "$STORAGE_API_KEY"; } | curl -H @- "$@"
+          }
+          zone_request() {
+            { printf 'AccessKey: %s\n' "$ZONE_API_KEY"; } | curl -H @- "$@"
+          }
+          storage_request -sS -X DELETE \
             "https://storage.bunnycdn.com/$STORAGE_NAME/$CDN_DIR/latest.json" || true
-          curl -sS --fail-with-body -X PUT -H "AccessKey: $STORAGE_API_KEY" \
+          storage_request -sS --fail-with-body -X PUT \
             -T latest-experimental.json \
             "https://storage.bunnycdn.com/$STORAGE_NAME/$CDN_DIR/latest.json"
-          curl -sS --fail-with-body -X POST -H "AccessKey: $ZONE_API_KEY" \
+          zone_request -sS --fail-with-body -X POST \
             "https://bunnycdn.com/api/pullzone/$ZONE_ID/purgeCache"
 
           for attempt in 1 2 3 4 5 6; do

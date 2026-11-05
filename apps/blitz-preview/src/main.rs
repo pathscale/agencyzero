@@ -3,7 +3,8 @@
 // configuration now.
 use blitz_dom::Document;
 use blitz_dom::DocumentConfig;
-use blitz_script::{DefaultScriptFetcher, FetchError, ScriptDocument, ScriptFetcher};
+use blitz_script::{DefaultScriptFetcher, FetchError, ScriptFetcher};
+use blitz_script_ekojit::{EkojitDocument, NativePageDefect, PageSource, TypedNativeGuest};
 #[cfg(all(not(test), feature = "capture"))]
 use blitz_traits::shell::{ColorScheme, Viewport};
 use brotli::Decompressor;
@@ -11,6 +12,7 @@ use izumo::{builder, set_document_factory, set_runtime_trace};
 #[cfg(not(test))]
 use std::fs::{self, OpenOptions};
 use std::io::Read;
+use std::sync::Arc;
 #[cfg(not(test))]
 use std::io::Write;
 #[cfg(not(test))]
@@ -95,22 +97,186 @@ fn decompress_utf8(compressed: &[u8], label: &str) -> Result<String, String> {
     Ok(decoded)
 }
 
-fn create_document(url: &str) -> Result<ScriptDocument, String> {
+struct PreviewBlitzDocument {
+    document: EkojitDocument,
+    poll_hooks: Vec<izumo::DocumentPollHook>,
+}
+
+impl PreviewBlitzDocument {
+    fn execute_scripts(&mut self) {
+        let _ = TypedNativeGuest::execute_scripts(&mut self.document);
+    }
+
+    fn eval(&mut self, source: &str) {
+        let _ = self.document.eval_source(Arc::new(PageSource {
+            text: Arc::from(source),
+            url: Arc::from("preview:eval"),
+        }));
+    }
+
+    fn eval_json(&mut self, source: &str) -> Result<serde_json::Value, String> {
+        self.document.with_embedder_host(|host| host.eval_json(source))
+    }
+
+    fn external_script_urls(&self) -> Vec<Url> {
+        let inner = self.document.inner();
+        inner.query_selector_all("script[src]").unwrap_or_default().into_iter()
+            .filter_map(|id| inner.get_node(id))
+            .filter_map(|node| node.element_data())
+            .filter_map(|element| element.attr(blitz_dom::LocalName::from("src")))
+            .filter_map(|src| inner.url().join(src).ok())
+            .collect()
+    }
+
+    fn run_poll_hooks(&mut self, context: Option<&std::task::Context<'_>>) -> bool {
+        let mut hooks = std::mem::take(&mut self.poll_hooks);
+        let mut work = false;
+        for hook in &mut hooks { work |= hook(self, context); }
+        hooks.append(&mut self.poll_hooks);
+        self.poll_hooks = hooks;
+        work
+    }
+}
+
+impl Document for PreviewBlitzDocument {
+    fn inner(&self) -> blitz_dom::DocGuard<'_> { Document::inner(&self.document) }
+    fn inner_mut(&mut self) -> blitz_dom::DocGuardMut<'_> { Document::inner_mut(&mut self.document) }
+    fn handle_ui_event(&mut self, event: blitz_traits::events::UiEvent) {
+        Document::handle_ui_event(&mut self.document, event)
+    }
+    fn poll(&mut self, context: Option<std::task::Context<'_>>) -> bool {
+        let mut work = Document::poll(&mut self.document, context.as_ref().map(|cx| std::task::Context::from_waker(cx.waker())));
+        work |= self.run_poll_hooks(context.as_ref()); work
+    }
+    fn poll_for_settle(&mut self, context: Option<std::task::Context<'_>>, run_timers: bool) -> bool {
+        let mut work = Document::poll_for_settle(&mut self.document, context.as_ref().map(|cx| std::task::Context::from_waker(cx.waker())), run_timers);
+        work |= self.run_poll_hooks(context.as_ref()); work
+    }
+    fn prepare_teardown(&mut self) { Document::prepare_teardown(&mut self.document) }
+    fn dispose(self: Box<Self>) -> Arc<blitz_dom::release::Teardown> {
+        let Self { document, .. } = *self; Box::new(document).dispose()
+    }
+    fn set_page_visible(&mut self, visible: bool) { Document::set_page_visible(&mut self.document, visible) }
+    fn freeze(&mut self) { Document::freeze(&mut self.document) }
+    fn finish_restore(&mut self) { Document::finish_restore(&mut self.document) }
+    fn resume(&mut self) { Document::resume(&mut self.document) }
+}
+
+impl blitz_control_protocol::ControlScriptBackend for PreviewBlitzDocument {
+    fn dispatch_dom_event(&mut self, event: blitz_traits::events::DomEvent) { self.document.handle_dom_event(event); }
+    fn handle_pointer_move_to_node(&mut self, event: blitz_traits::events::BlitzPointerEvent, node: blitz_dom::NodeId) {
+        self.document.handle_pointer_move_to_node(event, node);
+    }
+    fn handle_ui_event_to_node(&mut self, event: blitz_traits::events::UiEvent, node: blitz_dom::NodeId) {
+        self.document.handle_ui_event_to_node(event, node);
+    }
+}
+
+struct PreviewDocumentHost;
+
+fn preview_document(document: &dyn Document) -> Option<&PreviewBlitzDocument> {
+    (document as &dyn std::any::Any).downcast_ref()
+}
+fn preview_document_mut(document: &mut dyn Document) -> Option<&mut PreviewBlitzDocument> {
+    (document as &mut dyn std::any::Any).downcast_mut()
+}
+
+impl izumo::DocumentHost for PreviewDocumentHost {
+    fn current_url(&self, document: &dyn Document) -> Option<Url> { Some(preview_document(document)?.inner().url().clone()) }
+    fn eval(&self, document: &mut dyn Document, source: &str) {
+        if let Some(doc) = preview_document_mut(document) { doc.eval(source); }
+    }
+    fn eval_json(&self, document: &mut dyn Document, source: &str) -> Result<serde_json::Value, String> {
+        preview_document_mut(document).ok_or_else(|| String::from("unsupported preview document"))?.eval_json(source)
+    }
+    fn set_ipc_handler(&self, document: &mut dyn Document, handler: Box<dyn Fn(String)>) {
+        struct IpcHandler(Box<dyn Fn(String)>);
+        fn ipc_post_message(
+            realm: &mut blitz_script_ekojit::embedder::RealmHost<'_>,
+            args: &[blitz_script_ekojit::embedder::HostValue],
+        ) -> Result<
+            blitz_script_ekojit::embedder::HostValue,
+            blitz_script_ekojit::embedder::NativeFailure,
+        > {
+            if let Some(handler) = realm.state::<IpcHandler>("preview.ipc")
+                && let Some(blitz_script_ekojit::embedder::HostValue::Utf16(units)) = args.first()
+            {
+                (handler.0)(String::from_utf16_lossy(units));
+            }
+            Ok(blitz_script_ekojit::embedder::HostValue::Undefined)
+        }
+        if let Some(doc) = preview_document_mut(document) {
+            let _ = doc.document.with_realm_host(|realm| {
+                realm.set_state("preview.ipc", std::rc::Rc::new(IpcHandler(handler)))?;
+                realm.register_intrinsic("__previewIpcPostMessage", 1, ipc_post_message)
+            });
+            doc.eval("globalThis.ipc = { postMessage: function(msg) { __previewIpcPostMessage(String(msg)); } };");
+        }
+    }
+    fn add_poll_hook(&self, document: &mut dyn Document, hook: izumo::DocumentPollHook) {
+        if let Some(doc) = preview_document_mut(document) { doc.poll_hooks.push(hook); }
+    }
+    fn service_debug_controller(&self, _document: &mut dyn Document, _controller: &mut blitz_script::DebugController, _animation_time: f64) -> bool { false }
+    fn agent(&self, document: &mut dyn Document, control: &mut blitz_control_protocol::in_process::DocumentControl, request: blitz_control_protocol::AgentControlRequest) -> blitz_control_protocol::DebugResponse {
+        match preview_document_mut(document) {
+            Some(doc) => control.agent(doc, request),
+            None => blitz_control_protocol::DebugResponse::Error(blitz_control_protocol::DebugError { code: "unsupportedDocument".into(), message: "document is not owned by the preview".into() }),
+        }
+    }
+    fn diagnostics(&self, _document: &mut dyn Document, _control: &mut blitz_control_protocol::in_process::DocumentControl, _request: blitz_control_protocol::DiagnosticsRequest) -> blitz_control_protocol::DebugResponse {
+        blitz_control_protocol::DebugResponse::Error(blitz_control_protocol::DebugError { code: "unsupportedRequest".into(), message: "preview diagnostics requests are unsupported".into() })
+    }
+    fn diagnostic_batch(&self, document: &dyn Document, console_after: u64, errors_after: u64, limit: usize) -> blitz_script::DiagnosticBatch {
+        let empty = |next_sequence| blitz_script::DiagnosticStreamBatch { entries: Vec::new(), lost: 0, next_sequence };
+        let Some(doc) = preview_document(document) else { return blitz_script::DiagnosticBatch { console: empty(console_after), errors: empty(errors_after) }; };
+        let stream = |entries: Vec<blitz_script::DiagnosticEntry>, after| {
+            let entries = entries.into_iter().filter(|entry| entry.sequence > after).take(limit.clamp(1, 1000)).collect::<Vec<_>>();
+            let next_sequence = entries.last().map_or(after, |entry| entry.sequence);
+            blitz_script::DiagnosticStreamBatch { entries, lost: 0, next_sequence }
+        };
+        blitz_script::DiagnosticBatch { console: stream(doc.document.console_entries(), console_after), errors: stream(doc.document.runtime_errors(), errors_after) }
+    }
+}
+
+fn create_document(url: &str) -> Result<PreviewBlitzDocument, String> {
     trace("document factory entered");
     let css = decompress_utf8(EMBEDDED_CSS_BROTLI, "CSS")?;
     trace("CSS Brotli decompression completed");
     let html = EMBEDDED_SHELL_HTML.replacen(EMBEDDED_CSS_MARKER, &css, 1);
-    let config = DocumentConfig {
-        base_url: Some(url.into()),
-        ..DocumentConfig::default()
-    };
-    let document = ScriptDocument::from_html(&html, config).with_fetcher(EmbeddedScriptFetcher);
+    let config = DocumentConfig { base_url: Some(url.into()), ..DocumentConfig::default() };
+    let mut document = EkojitDocument::from_html(Arc::from(html), config, NativePageDefect::None).map_err(|error| error.to_string())?;
+    let _ = document.set_initial_script_budget(std::time::Duration::from_secs(60));
+    let prelude = r#"
+        globalThis.setInterval = globalThis.setInterval || ((callback, delay, ...args) => {
+          const run = () => { callback(...args); timer = setTimeout(run, delay); };
+          let timer = setTimeout(run, delay); return timer;
+        });
+        globalThis.clearInterval = globalThis.clearInterval || globalThis.clearTimeout;
+        globalThis.requestIdleCallback = globalThis.requestIdleCallback || (callback => setTimeout(() => callback({didTimeout:false,timeRemaining:()=>0}), 1));
+        globalThis.cancelIdleCallback = globalThis.cancelIdleCallback || globalThis.clearTimeout;
+        globalThis.ResizeObserver = globalThis.ResizeObserver || class { observe() {} unobserve() {} disconnect() {} };
+        globalThis.IntersectionObserver = globalThis.IntersectionObserver || class { observe() {} unobserve() {} disconnect() {} takeRecords() { return []; } };
+        globalThis.PerformanceObserver = globalThis.PerformanceObserver || class { observe() {} disconnect() {} takeRecords() { return []; } };
+        globalThis.performance = globalThis.performance || (() => { const t0 = Date.now(); return { timeOrigin: t0, now: () => Date.now() - t0, mark: () => {}, measure: () => {}, getEntries: () => [], getEntriesByType: () => [], getEntriesByName: () => [], clearMarks: () => {}, clearMeasures: () => {} }; })();
+        globalThis.CSS = globalThis.CSS || {}; globalThis.CSS.supports = globalThis.CSS.supports || (() => false);
+        globalThis.btoa = globalThis.btoa || (value => globalThis.Buffer ? Buffer.from(value, 'binary').toString('base64') : '');
+        globalThis.atob = globalThis.atob || (value => globalThis.Buffer ? Buffer.from(value, 'base64').toString('binary') : '');
+        globalThis.encodeURIComponent = globalThis.encodeURIComponent || encodeURI;
+        globalThis.decodeURIComponent = globalThis.decodeURIComponent || decodeURI;
+        globalThis.encodeURI = globalThis.encodeURI || (value => String(value));
+        globalThis.decodeURI = globalThis.decodeURI || (value => String(value));
+    "#;
+    let _ = document.eval_source(Arc::new(PageSource {
+        text: Arc::from(prelude),
+        url: Arc::from("preview:compatibility"),
+    }));
+    document.set_script_fetcher(EmbeddedScriptFetcher);
     trace("document parsing completed");
-    Ok(document)
+    Ok(PreviewBlitzDocument { document, poll_hooks: Vec::new() })
 }
 
 #[cfg(not(test))]
-fn create_dist_document(dist: &std::path::Path, url: &str) -> Result<ScriptDocument, String> {
+fn create_dist_document(dist: &std::path::Path, url: &str) -> Result<PreviewBlitzDocument, String> {
     fn asset_url<'a>(html: &'a str, attribute: &str) -> Result<&'a str, String> {
         let marker = format!("{attribute}=\"");
         let start = html
@@ -181,12 +347,10 @@ fn create_dist_document(dist: &std::path::Path, url: &str) -> Result<ScriptDocum
         base_url: Some(url.into()),
         ..DocumentConfig::default()
     };
-    Ok(
-        ScriptDocument::from_html(&html, config).with_fetcher(CapturedScriptFetcher {
-            url: script_url,
-            javascript,
-        }),
-    )
+    let mut document = EkojitDocument::from_html(Arc::from(html), config, NativePageDefect::None)
+        .map_err(|error| error.to_string())?;
+    document.set_script_fetcher(CapturedScriptFetcher { url: script_url, javascript });
+    Ok(PreviewBlitzDocument { document, poll_hooks: Vec::new() })
 }
 
 #[cfg(all(not(test), feature = "capture"))]
@@ -462,12 +626,12 @@ fn main() {
         Some(dist) => {
             let dist = std::path::PathBuf::from(dist);
             trace(&format!("preview dist: {}", dist.display()));
-            set_document_factory(move |url| create_dist_document(&dist, url));
+            set_document_factory(move |url| create_dist_document(&dist, url).map(|doc| izumo::ApplicationDocument::new(Box::new(doc), Arc::new(PreviewDocumentHost))));
         }
-        None => set_document_factory(create_document),
+        None => set_document_factory(|url| create_document(url).map(|doc| izumo::ApplicationDocument::new(Box::new(doc), Arc::new(PreviewDocumentHost)))),
     }
     #[cfg(test)]
-    set_document_factory(create_document);
+    set_document_factory(|url| create_document(url).map(|doc| izumo::ApplicationDocument::new(Box::new(doc), Arc::new(PreviewDocumentHost))));
     trace("document factory configured");
 
     let context = tauri::generate_context!("tauri.conf.json");
@@ -593,6 +757,11 @@ mod tests {
             document.eval("void 0");
             document.poll(None);
         }
+        assert!(
+            document.document.runtime_errors().is_empty(),
+            "production workspace emitted runtime errors: {:?}",
+            document.document.runtime_errors()
+        );
         document.inner_mut().resolve(0.0);
 
         let doc = document.inner();

@@ -26,6 +26,8 @@ blitz-runtime = [
     "dep:blitz-control-protocol",
     "dep:blitz-dom",
     "dep:blitz-script",
+    "dep:blitz-script-ekojit",
+    "dep:blitz-traits",
     "dep:brotli",
     "dep:izumo",
     "dep:url",
@@ -53,6 +55,8 @@ blitz-inspector = [
     # on crates.io. chuzz never hit either, because it does not enable this.
     "blitz-dom/log-phase-times",
     "izumo/diagnostics",
+    "blitz-script-ekojit/system-fonts",
+    "blitz-script-ekojit/debug-control",
 ]
 # The lighter render pipeline, for measuring against the default Vello one.
 blitz-hybrid = ["blitz-inspector", "izumo/hybrid-renderer"]
@@ -109,8 +113,8 @@ tauri = { version = "2", default-features = false, features = ["macos-private-ap
 # 0.1.0 the runtime's own feature forwards to `tauri` and `tauri-runtime`, so
 # naming it here agrees with that rather than being the only thing holding the
 # two sides together.
-izumo = { version = "^0.4", optional = true, features = ["macos-private-api"] }
-blitz-control-protocol = { version = "^0.5", optional = true }
+izumo = { version = "^0.6.5", optional = true, features = ["macos-private-api"] }
+blitz-control-protocol = { version = "^0.7.2", optional = true }
 #
 # The engine by version, not by branch. Same move `chuzz` made, for the same
 # reasons its manifest records.
@@ -129,8 +133,10 @@ blitz-control-protocol = { version = "^0.5", optional = true }
 # that reads as `expected ScriptDocument, found ScriptDocument` with both types
 # naming one file. Local renderer work uses `.cargo/local-renderer.toml` through
 # `scripts/local-renderer.sh`, so the default exercises the published graph.
-blitz-dom = { package = "ps-blitz-dom", version = "^0.4", features = ["system-fonts", "parallel-construct"], optional = true }
-blitz-script = { package = "ps-blitz-script", version = "^0.4", features = ["system-fonts"], optional = true }
+blitz-dom = { package = "ps-blitz-dom", version = "^0.6.5", features = ["system-fonts", "parallel-construct"], optional = true }
+blitz-script = { package = "ps-blitz-script", version = "^0.6.5", features = ["system-fonts"], optional = true }
+blitz-script-ekojit = { package = "ps-blitz-script-ekojit", version = "^0.1.0", path = "../../../ekojit/crates/blitz-script-ekojit", optional = true }
+blitz-traits = { package = "ps-blitz-traits", version = "^0.6.5", optional = true }
 brotli = { version = "8.0.4", default-features = false, features = ["std"], optional = true }
 url = { version = "2.5.8", optional = true }
 tauri-plugin-updater = "2"

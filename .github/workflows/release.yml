@@ -267,6 +267,10 @@ jobs:
           STORAGE_API_KEY: ${{ secrets.BUNNYCDN_STORAGE_API_KEY }}
           STORAGE_NAME: ${{ secrets.BUNNYCDN_STORAGE_NAME }}
         run: |
+          set +x
+          storage_request() {
+            { printf 'AccessKey: %s\n' "$STORAGE_API_KEY"; } | curl -H @- "$@"
+          }
           # A truncated or corrupt local build must never reach storage; after
           # this gate, any corruption seen at the edge is the CDN's doing.
           gunzip -t "$BUNDLE_DIR/AgencyZero.app.tar.gz" || {
@@ -274,10 +278,10 @@ jobs:
           }
           upload() {
             local file="$1" dest="$2" attempt=1 code
-            curl -sS -X DELETE -H "AccessKey: $STORAGE_API_KEY" \
+            storage_request -sS -X DELETE \
               "https://storage.bunnycdn.com/$STORAGE_NAME/$dest" || true
             while [ "$attempt" -le 4 ]; do
-              code=$(curl -sS -X PUT -H "AccessKey: $STORAGE_API_KEY" \
+              code=$(storage_request -sS -X PUT \
                 -T "$file" -o /dev/null -w '%{http_code}' \
                 "https://storage.bunnycdn.com/$STORAGE_NAME/$dest")
               case "$code" in
@@ -301,11 +305,15 @@ jobs:
           ZONE_API_KEY: ${{ secrets.BUNNYCDN_ZONE_API_KEY }}
           ZONE_ID: ${{ secrets.BUNNYCDN_ZONE_ID }}
         run: |
+          set +x
+          zone_request() {
+            { printf 'AccessKey: %s\n' "$ZONE_API_KEY"; } | curl -H @- "$@"
+          }
           if [ -z "$ZONE_API_KEY" ] || [ -z "$ZONE_ID" ]; then
             echo "::error::BUNNYCDN_ZONE_API_KEY and BUNNYCDN_ZONE_ID are required: a versionless URL that is not purged serves the previous release forever."
             exit 1
           fi
-          curl -sS --fail-with-body -X POST -H "AccessKey: $ZONE_API_KEY" \
+          zone_request -sS --fail-with-body -X POST \
             "https://bunnycdn.com/api/pullzone/$ZONE_ID/purgeCache"
           echo "purged pull zone $ZONE_ID"
 
@@ -314,6 +322,10 @@ jobs:
           ZONE_API_KEY: ${{ secrets.BUNNYCDN_ZONE_API_KEY }}
           ZONE_ID: ${{ secrets.BUNNYCDN_ZONE_ID }}
         run: |
+          set +x
+          zone_request() {
+            { printf 'AccessKey: %s\n' "$ZONE_API_KEY"; } | curl -H @- "$@"
+          }
           LOCAL=$(shasum -a 256 "$BUNDLE_DIR/AgencyZero.app.tar.gz" | cut -d' ' -f1)
           for attempt in 1 2 3 4 5 6; do
             curl -sS -L -o edge.tar.gz "$CDN_BASE/AgencyZero.app.tar.gz" || true
@@ -327,7 +339,7 @@ jobs:
             echo "attempt $attempt: edge has $REMOTE, want $LOCAL"
             if [ "$attempt" = 3 ]; then
               echo "::warning::edge still stale after purge; purging the zone again"
-              curl -sS --fail-with-body -X POST -H "AccessKey: $ZONE_API_KEY" \
+              zone_request -sS --fail-with-body -X POST \
                 "https://bunnycdn.com/api/pullzone/$ZONE_ID/purgeCache" || true
             fi
             sleep 10
@@ -343,11 +355,18 @@ jobs:
           ZONE_API_KEY: ${{ secrets.BUNNYCDN_ZONE_API_KEY }}
           ZONE_ID: ${{ secrets.BUNNYCDN_ZONE_ID }}
         run: |
-          curl -sS -X DELETE -H "AccessKey: $STORAGE_API_KEY" \
+          set +x
+          storage_request() {
+            { printf 'AccessKey: %s\n' "$STORAGE_API_KEY"; } | curl -H @- "$@"
+          }
+          zone_request() {
+            { printf 'AccessKey: %s\n' "$ZONE_API_KEY"; } | curl -H @- "$@"
+          }
+          storage_request -sS -X DELETE \
             "https://storage.bunnycdn.com/$STORAGE_NAME/$CDN_DIR/latest.json" || true
-          curl -sS --fail-with-body -X PUT -H "AccessKey: $STORAGE_API_KEY" \
+          storage_request -sS --fail-with-body -X PUT \
             -T latest.json "https://storage.bunnycdn.com/$STORAGE_NAME/$CDN_DIR/latest.json"
-          curl -sS --fail-with-body -X POST -H "AccessKey: $ZONE_API_KEY" \
+          zone_request -sS --fail-with-body -X POST \
             "https://bunnycdn.com/api/pullzone/$ZONE_ID/purgeCache"
 
           # latest.json is the version record, so a stale edge copy here means
@@ -363,7 +382,7 @@ jobs:
             echo "attempt $attempt: edge serves '$LIVE', want '$VERSION'"
             if [ "$attempt" = 3 ]; then
               echo "::warning::edge still stale after purge; purging the zone again"
-              curl -sS --fail-with-body -X POST -H "AccessKey: $ZONE_API_KEY" \
+              zone_request -sS --fail-with-body -X POST \
                 "https://bunnycdn.com/api/pullzone/$ZONE_ID/purgeCache" || true
             fi
             sleep 10
