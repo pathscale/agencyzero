@@ -6239,33 +6239,8 @@ fn approval_signature(tool: &str, input: &serde_json::Value) -> String {
     };
 
     if tool.eq_ignore_ascii_case("bash") {
-        // Sign on the real command, not the shell wrapper. Codex runs every
-        // command as `/bin/zsh -c "<cmd>"`, so signing on the raw first word
-        // made it always `/bin/zsh`: one remembered "always allow" grant then
-        // matched *every* later command, including git push and git commit, and
-        // the owner was never prompted again. Unwrap the `-c` payload first, and
-        // tokenize with a real shell word-splitter (`shlex`) rather than
-        // whitespace, so a quoted argument does not split into a wrong word.
-        let raw = text("command");
-        let words = shlex::split(raw)
-            .unwrap_or_else(|| raw.split_whitespace().map(str::to_string).collect());
-        let words = unwrap_shell_words(words);
-        let program = words.first().map(String::as_str).unwrap_or("");
-        let subcommand = words
-            .get(1)
-            .map(String::as_str)
-            .filter(|word| {
-                !word.starts_with('-')
-                    && word
-                        .chars()
-                        .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
-            })
-            .unwrap_or("");
-        return if subcommand.is_empty() {
-            format!("{tool}: {program}")
-        } else {
-            format!("{tool}: {program} {subcommand}")
-        };
+        // Shell approval must remain per request until a grammar-aware matcher exists.
+        return String::new();
     }
 
     if tool.eq_ignore_ascii_case("permissions") {
@@ -7853,7 +7828,7 @@ pub async fn resolve_approval(
      * Only an *allow* is ever remembered — a remembered denial would turn
      * one misclick into a run that can never do its job again, silently.
      */
-    if allow && remember == Some(true) {
+    if allow && remember == Some(true) && !ask.signature.is_empty() {
         let rules = load_rules(&state.tables, &project_id);
         // Uniqueness is the writer's job; the single writer makes that safe.
         if !rules.iter().any(|rule| rule == &ask.signature) {
@@ -11489,6 +11464,28 @@ pub async fn review_pull_request(
     url: String,
     agent: String,
 ) -> Result<(), String> {
+    let path = url
+        .strip_prefix("https://github.com/")
+        .ok_or_else(|| "review URL must be an HTTPS GitHub pull request".to_string())?;
+    let parts: Vec<&str> = path.split('/').collect();
+    let valid_name = |value: &str| {
+        !value.is_empty()
+            && value != "."
+            && value != ".."
+            && value
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
+    };
+    if parts.len() != 4
+        || !valid_name(parts[0])
+        || !valid_name(parts[1])
+        || parts[2] != "pull"
+        || parts[3].is_empty()
+        || !parts[3].bytes().all(|byte| byte.is_ascii_digit())
+        || !parts[3].parse::<u64>().is_ok_and(|number| number > 0)
+    {
+        return Err("review URL must name one GitHub pull request".to_string());
+    }
     let agent = parse_review_agent(Some(&agent))?;
     let settings = state
         .tables
@@ -12843,7 +12840,7 @@ async fn drive_run(
                  * here — audited in the I/O panel, never silently.
                  */
                 let signature = approval_signature(&approval.tool, &approval.input);
-                let by_rule = load_rules(&tables, &project_id)
+                let by_rule = !signature.is_empty() && load_rules(&tables, &project_id)
                     .iter()
                     .any(|rule| rule == &signature);
                 // Auto answers its own questions. The channel is open precisely
@@ -13105,7 +13102,10 @@ async fn drive_run(
                      */
                     if ping_outstanding
                         && matches!(
-                            authored_directive_line(&line, &mut directive_state.fenced)
+                            authored_directive_line(
+                                &line,
+                                &mut FenceState(directive_state.fenced.0),
+                            )
                                 .and_then(crate::directives::parse_authored),
                             Some(crate::directives::Authored::Directive(
                                 crate::directives::Directive::Pong
@@ -13144,7 +13144,10 @@ async fn drive_run(
                      */
                     if let Some(crate::directives::Authored::Directive(
                         crate::directives::Directive::ExtendWatchdog { what, seconds },
-                    )) = authored_directive_line(&line, &mut directive_state.fenced)
+                    )) = authored_directive_line(
+                        &line,
+                        &mut FenceState(directive_state.fenced.0),
+                    )
                         .and_then(crate::directives::parse_authored)
                     {
                         let granted = seconds

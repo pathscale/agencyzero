@@ -13,11 +13,11 @@ use agency_proxy_protocol::{
 use agent_abstraction::{Decision, Event, Outcome};
 use serde::Serialize;
 use std::{
-    fs::OpenOptions,
+    io::Read,
     path::{Path, PathBuf},
     process::{Command, Stdio},
     sync::{
-        Arc,
+        Arc, Mutex as StdMutex,
         atomic::{AtomicU8, AtomicU64, Ordering},
     },
     time::Duration,
@@ -25,6 +25,7 @@ use std::{
 use tokio::sync::Mutex;
 
 static RUN_SEQUENCE: AtomicU64 = AtomicU64::new(1);
+const MAX_PROXY_OUTPUT_BYTES: usize = 16 * 1024;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u8)]
@@ -600,32 +601,17 @@ impl AgencyProxy {
                 )?;
             }
         }
-        let output_path = self.socket_path.with_file_name("agency-proxy.log");
-        let captured = OpenOptions::new()
-            .create(true)
-            .write(true)
-            .truncate(true)
-            .open(&output_path)
-            .ok();
         let mut command = Command::new(&binary);
         command
             .arg("--socket")
             .arg(&self.socket_path)
-            .stdin(Stdio::null());
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
         if let Some(path) = std::env::var_os("PATH") {
             command.env("PATH", path);
         }
-        if let Some(stderr) = captured {
-            command.stdout(
-                stderr
-                    .try_clone()
-                    .map_or_else(|_| Stdio::null(), Stdio::from),
-            );
-            command.stderr(Stdio::from(stderr));
-        } else {
-            command.stdout(Stdio::null()).stderr(Stdio::null());
-        }
-        let child = match command.spawn() {
+        let mut child = match command.spawn() {
             Ok(child) => child,
             Err(error) => {
                 return Err(
@@ -633,6 +619,13 @@ impl AgencyProxy {
                 );
             }
         };
+        let captured_output = Arc::new(StdMutex::new(Vec::new()));
+        if let Some(stdout) = child.stdout.take() {
+            drain_proxy_output(stdout, captured_output.clone());
+        }
+        if let Some(stderr) = child.stderr.take() {
+            drain_proxy_output(stderr, captured_output.clone());
+        }
         // Watch the child so its death is *observed* rather than inferred.
         //
         // The handle used to be dropped right here. Nothing could then wait on
@@ -657,7 +650,7 @@ impl AgencyProxy {
                 Err(_) => nagoya::sleep(Duration::from_millis(50)).await,
             }
         }
-        Err(self.record_failure(proxy_startup_failure(&output_path, &self.socket_path)))
+        Err(self.record_failure(proxy_startup_failure(&captured_output, &self.socket_path)))
     }
 
     fn connection_state(&self) -> ConnectionState {
@@ -869,14 +862,39 @@ fn watch_proxy_child(
         .ok()
 }
 
-fn proxy_startup_failure(output_path: &Path, socket_path: &Path) -> String {
+fn drain_proxy_output<R>(mut stream: R, output: Arc<StdMutex<Vec<u8>>>)
+where
+    R: Read + Send + 'static,
+{
+    let _ = std::thread::Builder::new()
+        .name("agency-proxy-output".into())
+        .spawn(move || {
+            let mut chunk = [0_u8; 1024];
+            loop {
+                let Ok(read) = stream.read(&mut chunk) else {
+                    break;
+                };
+                if read == 0 {
+                    break;
+                }
+                let Ok(mut output) = output.lock() else {
+                    break;
+                };
+                let remaining = MAX_PROXY_OUTPUT_BYTES.saturating_sub(output.len());
+                output.extend_from_slice(&chunk[..read.min(remaining)]);
+            }
+        });
+}
+
+fn proxy_startup_failure(output: &StdMutex<Vec<u8>>, socket_path: &Path) -> String {
     let base = format!(
         "AgencyProxy did not become ready at {}",
         socket_path.display()
     );
-    let Ok(output) = std::fs::read_to_string(output_path) else {
+    let Ok(output) = output.lock() else {
         return base;
     };
+    let output = String::from_utf8_lossy(&output);
     let output = output.trim();
     if output.is_empty() {
         base
@@ -1384,7 +1402,7 @@ mod tests {
     use std::collections::BTreeMap;
     use std::path::Path;
     use std::process::{Command, Stdio};
-    use std::sync::Arc;
+    use std::sync::{Arc, Mutex as StdMutex};
     use std::sync::atomic::{AtomicU8, Ordering};
 
     #[test]
@@ -1561,14 +1579,9 @@ mod tests {
 
     #[test]
     fn startup_failure_includes_the_sidecars_captured_error() {
-        let dir =
-            std::env::temp_dir().join(format!("agency-proxy-startup-error-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).expect("create temp directory");
-        let output = dir.join("agency-proxy.log");
-        std::fs::write(&output, "could not bind socket: operation not permitted\n")
-            .expect("write captured output");
+        let output = StdMutex::new(b"could not bind socket: operation not permitted\n".to_vec());
 
-        let message = proxy_startup_failure(&output, &dir.join("runtime.sock"));
+        let message = proxy_startup_failure(&output, Path::new("runtime.sock"));
         assert!(message.contains("did not become ready"));
         assert!(message.contains("operation not permitted"));
     }

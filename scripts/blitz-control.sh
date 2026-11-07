@@ -1,6 +1,7 @@
 #!/usr/bin/env sh
 
 set -eu
+set +x
 
 if [ "$(uname -s)" != "Darwin" ]; then
   echo "blitz-control.sh currently supports macOS only (it reads the descriptor with plutil)" >&2
@@ -70,10 +71,11 @@ case "$command" in
 esac
 
 driver_token=$(json_field "$descriptor" token)
-session_response=$(/usr/bin/curl --silent --show-error --fail --max-time 5 \
+session_response=$(printf '%s' "{\"capabilities\":{\"alwaysMatch\":{\"blitz:token\":\"$driver_token\"}}}" \
+  | /usr/bin/curl --silent --show-error --fail --max-time 5 \
   -X POST "http://$driver_address/session" \
   -H 'Content-Type: application/json' \
-  --data "{\"capabilities\":{\"alwaysMatch\":{\"blitz:token\":\"$driver_token\"}}}")
+  --data-binary @-)
 session_id=$(/usr/bin/printf '%s' "$session_response" \
   | /usr/bin/sed -n 's/.*"sessionId":"\([^"]*\)".*/\1/p')
 if [ -z "$session_id" ]; then
